@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.openfinova</groupId>
+		<artifactId>loan</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>..</relativePath>
+	</parent>
+	<artifactId>loan-api</artifactId>
+	<name>loan-api</name>
+	<description>Loan API Module — interfaces, DTOs, enums, and event contracts</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.openfinova</groupId>
+			<artifactId>banking-common-lib</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.swagger.core.v3</groupId>
+			<artifactId>swagger-annotations-jakarta</artifactId>
+		</dependency>
+	</dependencies>
+
+</project>

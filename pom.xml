@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.0.2</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	
+    <groupId>com.openfinova</groupId>
+	<artifactId>openfinova-banking-parent</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>openfinova-banking-parent</name>
+	<description>Openfinova Core-Banking Application - Parent POM</description>
+	
+    <url/>
+	
+    <licenses>
+		<license/>
+	</licenses>
+	
+    <developers>
+		<developer/>
+	</developers>
+	
+    <scm>
+		<connection/>
+		<developerConnection/>
+		<tag/>
+		<url/>
+	</scm>
+	
+    <properties>
+		<java.version>25</java.version>
+		<swagger-annotations.version>2.2.28</swagger-annotations.version>
+		<jspecify.version>1.0.0</jspecify.version>
+	</properties>
+
+	<modules>
+		<module>banking-app</module>
+		<module>common</module>
+		<module>identity</module>
+		<module>general-ledger</module>
+		<module>exchange-rate</module>
+		<module>customer</module>
+		<module>customer-account</module>
+		<module>transaction-processing</module>
+		<module>loan</module>
+	</modules>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- Spring Boot BOM for dependency version management -->
+			<dependency>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-dependencies</artifactId>
+				<version>4.0.2</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Internal module dependencies -->
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>banking-common-lib</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>setup-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>setup-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>general-ledger-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>general-ledger-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>exchange-rate-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>exchange-rate-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>customer-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>customer-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>customer-account-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>customer-account-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>transaction-processing-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>transaction-processing-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>loan-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>loan-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+		<dependency>
+			<groupId>org.jspecify</groupId>
+			<artifactId>jspecify</artifactId>
+			<version>${jspecify.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.swagger.core.v3</groupId>
+			<artifactId>swagger-annotations-jakarta</artifactId>
+			<version>${swagger-annotations.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.openfinova</groupId>
+			<artifactId>identity-api</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.openfinova</groupId>
+			<artifactId>identity-service</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+	</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>net.revelc.code.formatter</groupId>
+				<artifactId>formatter-maven-plugin</artifactId>
+				<version>2.22.0</version>
+				<configuration>
+					<configFile>${maven.multiModuleProjectDirectory}/java-formatter.xml</configFile>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

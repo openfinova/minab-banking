@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.openfinova</groupId>
+		<artifactId>openfinova-banking-parent</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>..</relativePath>
+	</parent>
+	<artifactId>customer-account</artifactId>
+	<packaging>pom</packaging>
+	<name>customer-account</name>
+	<description>Customer Account modules for Banking Application</description>
+
+	<modules>
+		<module>customer-account-api</module>
+		<module>customer-account-service</module>
+	</modules>
+
+</project>
