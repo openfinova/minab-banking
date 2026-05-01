@@ -1,0 +1,49 @@
+# =============================================================================
+# OpenFinova Minab Banking — Security vulnerability scanning
+# =============================================================================
+# Runs GitHub CodeQL static analysis on pushes, pull requests, and weekly
+# on a schedule. Detects security vulnerabilities and coding errors in Java
+# source code before they reach production.
+# =============================================================================
+
+name: CodeQL Security Scan
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  schedule:
+    - cron: '0 3 * * 1'   # every Monday at 3am
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: CodeQL Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+
+      - name: Build for CodeQL
+        run: ./mvnw --batch-mode --no-transfer-progress compile
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
