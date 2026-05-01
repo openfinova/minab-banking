@@ -13,7 +13,7 @@ public interface TransactionRequestRepository extends JpaRepository<TransactionR
 
     /**
      * Find a transaction request by its idempotency key.
-     * 
+     *
      * @param idempotencyKey the unique key
      * @return an optional containing the request if found
      */

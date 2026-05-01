@@ -20,7 +20,7 @@ public interface OperationalGLConfigRepository extends JpaRepository<Operational
 
     /**
      * Finds an active operational GL configuration by type.
-     * 
+     *
      * @param configType the operational account type
      * @return Optional containing the configuration if found
      */
@@ -28,7 +28,7 @@ public interface OperationalGLConfigRepository extends JpaRepository<Operational
 
     /**
      * Checks if a configuration exists for the given type.
-     * 
+     *
      * @param configType the operational account type
      * @return true if configuration exists
      */
@@ -36,14 +36,14 @@ public interface OperationalGLConfigRepository extends JpaRepository<Operational
 
     /**
      * Finds all active configurations.
-     * 
+     *
      * @return list of all active configurations
      */
     List<OperationalGLConfig> findByIsActiveTrue();
 
     /**
      * Finds all configurations that reference a specific GL account.
-     * 
+     *
      * @param glAccountId the GL account ID
      * @return list of configurations using this GL account
      */
@@ -51,7 +51,7 @@ public interface OperationalGLConfigRepository extends JpaRepository<Operational
 
     /**
      * Counts active configurations for a specific type.
-     * 
+     *
      * @param configType the operational account type
      * @return count of active configurations
      */
