@@ -17,7 +17,7 @@ public enum DisbursementMethod {
     /** Payment made directly to vendor (e.g., car dealer, property seller) */
     DIRECT_TO_VENDOR,
 
-    /** 
+    /**
      * Disbursement via mobile money service (e.g., M-Pesa, MTN Mobile Money, Airtel Money, GCash, PayTM).
      * Mobile money allows users to store, send, and receive money using their mobile phone.
      * Common in regions with limited traditional banking infrastructure.

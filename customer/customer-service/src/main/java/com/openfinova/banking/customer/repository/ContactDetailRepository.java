@@ -12,7 +12,7 @@ public interface ContactDetailRepository extends JpaRepository<ContactDetail, UU
 
     /**
      * Find all contact details for a customer.
-     * 
+     *
      * @param customerId the customer ID
      * @return list of contact details
      */
@@ -24,7 +24,7 @@ public interface ContactDetailRepository extends JpaRepository<ContactDetail, UU
 
     /**
      * Find contact details by customer ID and type.
-     * 
+     *
      * @param customerId the customer ID
      * @param type the contact type
      * @return list of contact details matching the criteria
@@ -33,7 +33,7 @@ public interface ContactDetailRepository extends JpaRepository<ContactDetail, UU
 
     /**
      * Find primary contact detail by customer ID and type.
-     * 
+     *
      * @param customerId the customer ID
      * @param type the contact type
      * @return list of primary contact details
@@ -42,7 +42,7 @@ public interface ContactDetailRepository extends JpaRepository<ContactDetail, UU
 
     /**
      * Find verified contact details for a customer.
-     * 
+     *
      * @param customerId the customer ID
      * @return list of verified contact details
      */

@@ -5,23 +5,23 @@ package com.openfinova.banking.identity.entity;
  */
 public enum AccountProvisioningStatus {
 
-    /** 
-     * Awaiting maker–checker or HR approval before the account may be used. 
+    /**
+     * Awaiting maker–checker or HR approval before the account may be used.
      */
     PENDING_APPROVAL,
 
-    /** 
-     * Approved and eligible for authentication (subject to enable/suspend/lock rules). 
+    /**
+     * Approved and eligible for authentication (subject to enable/suspend/lock rules).
      */
     ACTIVE,
 
-    /** 
-     * Provisioning was rejected; the record remains for audit but cannot authenticate. 
+    /**
+     * Provisioning was rejected; the record remains for audit but cannot authenticate.
      */
     REJECTED,
 
-    /** 
-     * Account was deprovisioned; credentials and entitlements were cleared. 
+    /**
+     * Account was deprovisioned; credentials and entitlements were cleared.
      */
     DEPROVISIONED
 }

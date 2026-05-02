@@ -1,0 +1,35 @@
+# =============================================================================
+# OpenFinova Minab Banking — Code Quality
+# =============================================================================
+# Validates code formatting and static checks on pull requests.
+# Uses the formatter-maven-plugin already configured in the parent POM.
+# =============================================================================
+
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+
+permissions:
+  contents: read
+
+jobs:
+  format-check:
+    name: Formatting & Style
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Validate code formatting
+        run: ./mvnw --batch-mode --no-transfer-progress formatter:validate

@@ -13,7 +13,7 @@ public interface TransactionEventRepository extends JpaRepository<TransactionEve
 
     /**
      * Find all events for a transaction ordered by creation time.
-     * 
+     *
      * @param transactionId the UUID of the transaction
      * @return list of transaction events
      */
