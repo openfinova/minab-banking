@@ -39,6 +39,8 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
+        env:
+          SPRING_PROFILES_ACTIVE: test
         run: ./mvnw --batch-mode --no-transfer-progress verify
 
       - name: Upload test reports
