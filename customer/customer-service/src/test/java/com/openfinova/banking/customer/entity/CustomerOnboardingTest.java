@@ -1,15 +1,15 @@
 package com.openfinova.banking.customer.entity;
 
-import com.openfinova.banking.customer.api.entity.CustomerStatus;
-import com.openfinova.banking.customer.api.entity.CustomerType;
-import com.openfinova.banking.customer.api.entity.OnboardingStatus;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import com.openfinova.banking.customer.api.entity.CustomerStatus;
+import com.openfinova.banking.customer.api.entity.CustomerType;
+import com.openfinova.banking.customer.api.entity.OnboardingStatus;
 
 class CustomerOnboardingTest {
 
@@ -58,5 +58,27 @@ class CustomerOnboardingTest {
         assertThatThrownBy(() -> onboarding.advanceTo(OnboardingStatus.KYC_COMPLETED))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Can only advance to KYC_COMPLETED from KYC_IN_PROGRESS");
+    }
+
+    @Test
+    void isCompleted_andTerminalFlags() {
+        onboarding.advanceTo(OnboardingStatus.KYC_IN_PROGRESS);
+
+        assertThat(onboarding.isCompleted()).isFalse();
+        assertThat(onboarding.isTerminal()).isFalse();
+
+        onboarding.advanceTo(OnboardingStatus.ABANDONED, "timeout");
+        assertThat(onboarding.isTerminal()).isTrue();
+    }
+
+    @Test
+    void advanceTo_canCompleteFromAccountSetupShortPath() {
+        onboarding.advanceTo(OnboardingStatus.KYC_IN_PROGRESS);
+        onboarding.advanceTo(OnboardingStatus.KYC_COMPLETED);
+        onboarding.advanceTo(OnboardingStatus.ACCOUNT_SETUP);
+        onboarding.advanceTo(OnboardingStatus.COMPLETED);
+
+        assertThat(onboarding.isCompleted()).isTrue();
+        assertThat(onboarding.getCompletedAt()).isNotNull();
     }
 }
