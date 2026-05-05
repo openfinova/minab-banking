@@ -1,0 +1,38 @@
+# .github/dependabot.yml
+version: 2
+updates:
+  # Maven dependencies
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    groups:
+      spring-framework:
+        patterns:
+          - "org.springframework*"
+      spring-boot:
+        patterns:
+          - "org.springframework.boot*"
+      spring-security:
+        patterns:
+          - "org.springframework.security*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
