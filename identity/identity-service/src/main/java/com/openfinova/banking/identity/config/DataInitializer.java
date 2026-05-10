@@ -11,8 +11,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.openfinova.banking.identity.api.permission.BankingPermission;
 import com.openfinova.banking.identity.api.model.UserType;
+import com.openfinova.banking.identity.api.permission.BankingPermission;
 import com.openfinova.banking.identity.entity.BankingRole;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.repository.RoleRepository;
@@ -283,6 +283,7 @@ public class DataInitializer implements ApplicationRunner {
 
     private void seedDefaultUsers() {
         if (userRepository.existsByUsername("admin")) {
+            log.info("Default admin user already exists.");
             return;
         }
 

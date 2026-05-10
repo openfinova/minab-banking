@@ -104,7 +104,7 @@ public class MeController {
         BankingPrincipal principal = BankingPrincipal.from(auth);
         UUID userId = principal.userId();
         if (userId == null) {
-            throw new IllegalStateException("Cannot resolve user ID from token");
+            userId = resolveUser(auth).getId();
         }
         AuditActor actor = AuditActor.fromPrincipal(principal);
         userService.changeOwnPassword(userId, request.getCurrentPassword(), request.getNewPassword(), actor);

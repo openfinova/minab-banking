@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -19,6 +20,9 @@ import org.springframework.security.oauth2.server.resource.web.authentication.Be
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 
@@ -44,7 +48,9 @@ public class SecurityConfiguration {
             PasswordManagementEnforcementFilter passwordManagementFilter,
             AuthenticationEntryPoint bankingBearerAuthenticationEntryPoint,
             AccessDeniedHandler bankingApiAccessDeniedHandler) throws Exception {
-        http.csrf(AbstractHttpConfigurer::disable)
+        http.cors(
+                Customizer.withDefaults()).csrf(
+                        AbstractHttpConfigurer::disable)
                 .exceptionHandling(
                         ex -> ex.authenticationEntryPoint(bankingBearerAuthenticationEntryPoint)
                                 .accessDeniedHandler(bankingApiAccessDeniedHandler))
@@ -59,6 +65,9 @@ public class SecurityConfiguration {
                                 "/connect/**",
                                 "/.well-known/**",
                                 "/login",
+                                "/logged-out",
+                                "/css/**",
+                                "/favicon.ico",
                                 "/error").permitAll().anyRequest().authenticated())
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
@@ -91,5 +100,28 @@ public class SecurityConfiguration {
             return Collections.emptyList();
         }
         return permissions.stream().map(p -> (GrantedAuthority) new SimpleGrantedAuthority(p)).toList();
+    }
+
+    /**
+     * CORS for browser SPAs (e.g. management portal on {@code http://localhost:3000}) calling this API
+     * and OAuth2 endpoints on {@code http://localhost:8080}.
+     *
+     * <p>
+     * Without this, post-login {@code fetch} to {@code /oauth2/token} and authenticated API calls fail
+     * in the browser with a generic network error ("Failed to fetch").
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowCredentials(true);
+        config.setAllowedOrigins(List.of("http://localhost:3000", "http://127.0.0.1:3000"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("WWW-Authenticate"));
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 }

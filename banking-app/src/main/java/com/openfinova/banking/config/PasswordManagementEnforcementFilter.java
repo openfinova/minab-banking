@@ -1,6 +1,7 @@
 package com.openfinova.banking.config;
 
 import java.io.IOException;
+import java.util.UUID;
 
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -11,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.openfinova.banking.identity.api.principal.BankingPrincipal;
+import com.openfinova.banking.identity.entity.BankingUser;
+import com.openfinova.banking.identity.repository.UserRepository;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -24,6 +27,12 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class PasswordManagementEnforcementFilter extends OncePerRequestFilter {
 
+    private final UserRepository userRepository;
+
+    public PasswordManagementEnforcementFilter(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -33,7 +42,7 @@ public class PasswordManagementEnforcementFilter extends OncePerRequestFilter {
             return;
         }
         Jwt jwt = jwtAuth.getToken();
-        if (!Boolean.TRUE.equals(jwt.getClaim(BankingPrincipal.CLAIM_FORCE_PASSWORD_CHANGE))) {
+        if (!isForcePasswordChangeStillRequired(jwt)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -45,6 +54,35 @@ public class PasswordManagementEnforcementFilter extends OncePerRequestFilter {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(
                 "{\"title\":\"Password change required\",\"detail\":\"Change your password before using this API.\"}");
+    }
+
+    private boolean isForcePasswordChangeStillRequired(Jwt jwt) {
+        if (!Boolean.TRUE.equals(jwt.getClaim(BankingPrincipal.CLAIM_FORCE_PASSWORD_CHANGE))) {
+            return false;
+        }
+        BankingUser user = resolveUser(jwt);
+        if (user == null) {
+            // Fallback to token claim when user cannot be resolved.
+            return true;
+        }
+        return user.isForcePasswordChange();
+    }
+
+    private BankingUser resolveUser(Jwt jwt) {
+        String sub = jwt.getSubject();
+        if (sub != null && !sub.isBlank()) {
+            try {
+                UUID userId = UUID.fromString(sub);
+                return userRepository.findById(userId).orElse(null);
+            } catch (IllegalArgumentException ignored) {
+                // Older tokens may still have username in sub.
+            }
+        }
+        String username = jwt.getClaimAsString("preferred_username");
+        if (username != null && !username.isBlank()) {
+            return userRepository.findByUsername(username).orElse(null);
+        }
+        return null;
     }
 
     private static boolean isAllowedWhileForcedPasswordChange(HttpServletRequest request) {

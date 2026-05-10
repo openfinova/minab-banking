@@ -9,20 +9,20 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.openfinova.banking.customer.api.CustomerInfoService;
 import com.openfinova.banking.customer.api.entity.KYCStatus;
-import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.identity.api.model.UserType;
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.security.BankingUserDetails;
@@ -120,6 +120,8 @@ public class TokenCustomizerConfig {
             }
 
             claims.claim("preferred_username", details.getUsername());
+            // BankingPrincipal and several APIs expect `sub` to be the persistent user id (UUID), not the login name.
+            claims.subject(details.getUserId().toString());
 
             claims.claim(BankingPrincipal.CLAIM_USER_TYPE, details.getUserType().name());
 
@@ -142,7 +144,7 @@ public class TokenCustomizerConfig {
 
             OAuth2Authorization authorization = context.getAuthorization();
             if (authorization != null) {
-                claims.claim(BankingPrincipal.CLAIM_SID, authorization.getId());
+                claims.claim(BankingPrincipal.CLAIM_AUTHZ_ID, authorization.getId());
             }
 
             if (tokenPolicy.isIncludeClientIpClaim()) {

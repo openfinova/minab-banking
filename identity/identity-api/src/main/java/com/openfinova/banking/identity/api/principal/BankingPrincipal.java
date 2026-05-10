@@ -32,7 +32,11 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
          * KYC status name from customer module (JWT), e.g. VERIFIED; null for staff/system or
          * absent claim.
          */
-        String kycStatus, /** OAuth2 authorization id from JWT {@code sid} (token session); null if absent. */
+        String kycStatus,
+
+        /** 
+         * OAuth2 authorization id from JWT {@link #CLAIM_AUTHZ_ID}; null if absent. 
+         */
         String authSessionId, List<String> permissions) {
 
     private static final Logger LOG = Logger.getLogger(BankingPrincipal.class.getName());
@@ -45,8 +49,19 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
     public static final String CLAIM_GL_APPROVAL_ROLE = "gl_approval_role";
     public static final String CLAIM_KYC_STATUS = "kyc_status";
     public static final String CLAIM_PERMISSIONS = "permissions";
-    /** OIDC-style session id — here the OAuth2 authorization id for audit correlation. */
-    public static final String CLAIM_SID = "sid";
+
+    /**
+     * OAuth2 authorization id for audit correlation. Must not use the standard OIDC {@code sid}
+     * claim name — Spring Authorization Server hashes the servlet session into {@code sid} for
+     * RP-initiated logout validation.
+     */
+    public static final String CLAIM_AUTHZ_ID = "openfinova_authz_id";
+
+    /** 
+     * Pre-authz-id tokens mistakenly stored the OAuth2 authorization id under the OIDC {@code sid} claim name. 
+     */
+    private static final String LEGACY_AUTHZ_ID_CLAIM = "sid";
+    
     public static final String CLAIM_CLIENT_IP = "client_ip";
     /**
      * When true, the user must change password before using banking APIs (resource-server filter).
@@ -90,6 +105,11 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
 
             List<String> permissions = jwt.getClaimAsStringList(CLAIM_PERMISSIONS);
 
+            String authzId = jwt.getClaimAsString(CLAIM_AUTHZ_ID);
+            if (authzId == null) {
+                authzId = jwt.getClaimAsString(LEGACY_AUTHZ_ID_CLAIM);
+            }
+
             return new BankingPrincipal(
                     userId,
                     jwt.getClaimAsString("preferred_username") != null ? jwt.getClaimAsString("preferred_username")
@@ -100,7 +120,7 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
                     customerPartyId,
                     jwt.getClaimAsString(CLAIM_GL_APPROVAL_ROLE),
                     jwt.getClaimAsString(CLAIM_KYC_STATUS),
-                    jwt.getClaimAsString(CLAIM_SID),
+                    authzId,
                     permissions);
         }
 

@@ -1,5 +1,7 @@
 package com.openfinova.banking.identity.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,10 +10,12 @@ import jakarta.validation.constraints.Size;
 public class ChangePasswordRequest {
 
     @NotBlank
+    @JsonAlias({ "current_password", "password", "oldPassword", "old_password" })
     private String currentPassword;
 
     @NotBlank
     @Size(min = 8, max = 128)
+    @JsonAlias("new_password")
     private String newPassword;
 
     public String getCurrentPassword() {

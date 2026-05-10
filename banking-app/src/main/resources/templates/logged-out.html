@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+  <title>Signed out — OpenFinova Banking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" th:href="@{/css/auth-portal.css}"/>
+</head>
+<body class="auth-portal">
+  <div class="auth-portal__bg" aria-hidden="true"></div>
+  <div class="auth-portal__grid" aria-hidden="true"></div>
+  <div class="auth-portal__wrap">
+    <main class="auth-card auth-card--narrow" role="main">
+      <header class="auth-brand" style="justify-content: center; margin-bottom: 1.25rem;">
+        <div class="auth-brand__mark" aria-hidden="true">OF</div>
+        <div class="auth-brand__text" style="text-align: left;">
+          <span class="auth-brand__title">OpenFinova</span>
+          <span class="auth-brand__sub">Banking platform</span>
+        </div>
+      </header>
+
+      <div class="auth-icon-circle" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+      </div>
+
+      <h1 class="auth-heading">You’re signed out</h1>
+      <p class="auth-desc">Your session ended securely. Sign in again when you’re ready to continue.</p>
+
+      <a class="auth-link-btn" th:href="@{/login}">Sign in again</a>
+
+      <p class="auth-footnote">If you did not sign out intentionally, contact your administrator.</p>
+    </main>
+  </div>
+</body>
+</html>

@@ -5,7 +5,6 @@ import java.time.Instant;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -16,6 +15,16 @@ import jakarta.persistence.Table;
  * {@code JdbcOAuth2AuthorizationService} which uses plain JDBC. The entity exists so that
  * Hibernate's {@code ddl-auto} creates the table alongside every other entity-managed table,
  * keeping the schema strategy consistent and eliminating the need for a separate {@code schema.sql}.
+ *
+ * <p><b>PostgreSQL:</b> Spring's JDBC service maps serialized token/attribute payloads as strings.
+ * {@code @Lob byte[]} becomes {@code bytea} in PostgreSQL, whose JDBC type is <i>not</i>
+ * {@link java.sql.Types#BLOB}, so {@code JdbcOAuth2AuthorizationService} binds those parameters with the
+ * wrong SQL type and inserts fail. Use {@code TEXT} columns instead — consistent with Spring's own
+ * schema note: replace {@code blob} with {@code text} for PostgreSQL
+ * ({@code oauth2-authorization-schema.sql} in {@code spring-security-oauth2-authorization-server}).
+ *
+ * <p>If you already created this table with {@code bytea} columns, drop {@code oauth2_authorization}
+ * (or alter those columns to {@code text}) so Hibernate can recreate the correct DDL.
  *
  * <p>TODO: Once a database migration tool (Liquibase/Flyway) is introduced and a versioned
  * changeset for the {@code oauth2_authorization} table exists, switch {@code ddl-auto} to
@@ -45,16 +54,14 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "authorized_scopes", length = 1000)
     private String authorizedScopes;
 
-    @Lob
-    @Column(name = "attributes")
-    private byte[] attributes;
+    @Column(name = "attributes", columnDefinition = "TEXT")
+    private String attributes;
 
     @Column(name = "state", length = 500)
     private String state;
 
-    @Lob
-    @Column(name = "authorization_code_value")
-    private byte[] authorizationCodeValue;
+    @Column(name = "authorization_code_value", columnDefinition = "TEXT")
+    private String authorizationCodeValue;
 
     @Column(name = "authorization_code_issued_at")
     private Instant authorizationCodeIssuedAt;
@@ -62,13 +69,11 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "authorization_code_expires_at")
     private Instant authorizationCodeExpiresAt;
 
-    @Lob
-    @Column(name = "authorization_code_metadata")
-    private byte[] authorizationCodeMetadata;
+    @Column(name = "authorization_code_metadata", columnDefinition = "TEXT")
+    private String authorizationCodeMetadata;
 
-    @Lob
-    @Column(name = "access_token_value")
-    private byte[] accessTokenValue;
+    @Column(name = "access_token_value", columnDefinition = "TEXT")
+    private String accessTokenValue;
 
     @Column(name = "access_token_issued_at")
     private Instant accessTokenIssuedAt;
@@ -76,9 +81,8 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "access_token_expires_at")
     private Instant accessTokenExpiresAt;
 
-    @Lob
-    @Column(name = "access_token_metadata")
-    private byte[] accessTokenMetadata;
+    @Column(name = "access_token_metadata", columnDefinition = "TEXT")
+    private String accessTokenMetadata;
 
     @Column(name = "access_token_type", length = 100)
     private String accessTokenType;
@@ -86,9 +90,8 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "access_token_scopes", length = 1000)
     private String accessTokenScopes;
 
-    @Lob
-    @Column(name = "oidc_id_token_value")
-    private byte[] oidcIdTokenValue;
+    @Column(name = "oidc_id_token_value", columnDefinition = "TEXT")
+    private String oidcIdTokenValue;
 
     @Column(name = "oidc_id_token_issued_at")
     private Instant oidcIdTokenIssuedAt;
@@ -96,13 +99,11 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "oidc_id_token_expires_at")
     private Instant oidcIdTokenExpiresAt;
 
-    @Lob
-    @Column(name = "oidc_id_token_metadata")
-    private byte[] oidcIdTokenMetadata;
+    @Column(name = "oidc_id_token_metadata", columnDefinition = "TEXT")
+    private String oidcIdTokenMetadata;
 
-    @Lob
-    @Column(name = "refresh_token_value")
-    private byte[] refreshTokenValue;
+    @Column(name = "refresh_token_value", columnDefinition = "TEXT")
+    private String refreshTokenValue;
 
     @Column(name = "refresh_token_issued_at")
     private Instant refreshTokenIssuedAt;
@@ -110,13 +111,11 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "refresh_token_expires_at")
     private Instant refreshTokenExpiresAt;
 
-    @Lob
-    @Column(name = "refresh_token_metadata")
-    private byte[] refreshTokenMetadata;
+    @Column(name = "refresh_token_metadata", columnDefinition = "TEXT")
+    private String refreshTokenMetadata;
 
-    @Lob
-    @Column(name = "user_code_value")
-    private byte[] userCodeValue;
+    @Column(name = "user_code_value", columnDefinition = "TEXT")
+    private String userCodeValue;
 
     @Column(name = "user_code_issued_at")
     private Instant userCodeIssuedAt;
@@ -124,13 +123,11 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "user_code_expires_at")
     private Instant userCodeExpiresAt;
 
-    @Lob
-    @Column(name = "user_code_metadata")
-    private byte[] userCodeMetadata;
+    @Column(name = "user_code_metadata", columnDefinition = "TEXT")
+    private String userCodeMetadata;
 
-    @Lob
-    @Column(name = "device_code_value")
-    private byte[] deviceCodeValue;
+    @Column(name = "device_code_value", columnDefinition = "TEXT")
+    private String deviceCodeValue;
 
     @Column(name = "device_code_issued_at")
     private Instant deviceCodeIssuedAt;
@@ -138,7 +135,6 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "device_code_expires_at")
     private Instant deviceCodeExpiresAt;
 
-    @Lob
-    @Column(name = "device_code_metadata")
-    private byte[] deviceCodeMetadata;
+    @Column(name = "device_code_metadata", columnDefinition = "TEXT")
+    private String deviceCodeMetadata;
 }

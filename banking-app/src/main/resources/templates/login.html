@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+  <title>Sign in — OpenFinova Banking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" th:href="@{/css/auth-portal.css}"/>
+</head>
+<body class="auth-portal">
+  <div class="auth-portal__bg" aria-hidden="true"></div>
+  <div class="auth-portal__grid" aria-hidden="true"></div>
+  <div class="auth-portal__wrap">
+    <main class="auth-card" role="main">
+      <header class="auth-brand">
+        <div class="auth-brand__mark" aria-hidden="true">OF</div>
+        <div class="auth-brand__text">
+          <span class="auth-brand__title">OpenFinova</span>
+          <span class="auth-brand__sub">Banking platform</span>
+        </div>
+      </header>
+      <h1 class="auth-heading">Welcome back</h1>
+      <p class="auth-desc">Sign in with your staff credentials to continue to the authorization server and APIs.</p>
+
+      <div th:if="${param.error}" class="auth-alert" role="alert">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+        <span>Invalid username or password. Please try again.</span>
+      </div>
+
+      <form class="auth-form" th:action="@{/login}" method="post">
+        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+        <div class="auth-field">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username" required autofocus placeholder="Enter your username"/>
+        </div>
+        <div class="auth-field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password"/>
+        </div>
+        <button class="auth-submit" type="submit">Sign in</button>
+      </form>
+
+      <p class="auth-footnote">Protected access. Unauthorized use is prohibited.</p>
+    </main>
+  </div>
+</body>
+</html>
