@@ -32,8 +32,11 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatchers;
@@ -75,8 +78,20 @@ public class AuthorizationServerConfig {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(AuthorizationServerConfig.class);
 
     @Bean
+    public RequestCache requestCache() {
+        return new HttpSessionRequestCache();
+    }
+
+    @Bean
+    public MfaChallengeFilter mfaChallengeFilter(MfaService mfaService, SecurityAuditService auditService,
+            UserRepository userRepository, RequestCache requestCache) {
+        return new MfaChallengeFilter(mfaService, auditService, userRepository, requestCache);
+    }
+
+    @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http, MfaChallengeFilter mfaChallengeFilter)
+            throws Exception {
         http.cors(Customizer.withDefaults());
         http.oauth2AuthorizationServer(authServer -> {
             http.securityMatcher(authServer.getEndpointsMatcher());
@@ -87,14 +102,14 @@ public class AuthorizationServerConfig {
                 ex -> ex.defaultAuthenticationEntryPointFor(
                         new LoginUrlAuthenticationEntryPoint("/login"),
                         new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
+        http.addFilterBefore(mfaChallengeFilter, AuthorizationFilter.class);
         return http.build();
     }
 
     @Bean
     @Order(2)
     public SecurityFilterChain loginFormFilterChain(HttpSecurity http, LoginEventHandlers loginEventHandlers,
-            LoginRateLimitFilter loginRateLimitFilter, MfaService mfaService, SecurityAuditService auditService,
-            UserRepository userRepository) throws Exception {
+            LoginRateLimitFilter loginRateLimitFilter, MfaChallengeFilter mfaChallengeFilter) throws Exception {
         http.cors(Customizer.withDefaults());
         http.authorizeHttpRequests(
                 auth -> auth.requestMatchers(
@@ -115,12 +130,8 @@ public class AuthorizationServerConfig {
                         logout -> logout.logoutSuccessUrl("/logged-out") // redirect here after logout
                                 .permitAll())
                 .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(
-                        new MfaChallengeFilter(mfaService, auditService, userRepository),
-                        UsernamePasswordAuthenticationFilter.class)
-                // Apply after formLogin: Spring Security 7 otherwise leaves this chain matching any
-                // request
-                // (UnreachableFilterChainException vs. the resource-server chain).
+                .addFilterBefore(mfaChallengeFilter, AuthorizationFilter.class)
+                // Narrow matcher avoids clashing with the resource-server chain (Order 3).
                 .securityMatcher(
                         RequestMatchers.anyOf(
                                 PathPatternRequestMatcher.pathPattern("/login"),

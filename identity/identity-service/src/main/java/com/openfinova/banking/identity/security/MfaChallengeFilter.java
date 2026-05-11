@@ -4,7 +4,12 @@ import java.io.IOException;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.DefaultRedirectStrategy;
+import org.springframework.security.web.RedirectStrategy;
+import org.springframework.security.web.savedrequest.RequestCache;
+import org.springframework.security.web.savedrequest.SavedRequest;
 import org.springframework.web.filter.OncePerRequestFilter;
+
 import com.openfinova.banking.identity.audit.AuditEventDetail;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
@@ -31,8 +36,9 @@ import jakarta.servlet.http.HttpSession;
  *   session flag and redirects to the saved request.
  * - Subsequent requests pass through because the session flag is present.
  *
- * In a pure REST / bearer-token architecture, MFA is instead enforced
- * at the token-exchange level. This filter provides the form-login path.
+ * Interactive login uses the OAuth2 authorization_code flow after password verification; that step
+ * is served by {@code /oauth2/authorize} on the authorization-server chain, so MFA must run there —
+ * successful form-login does not invoke filters registered after {@code UsernamePasswordAuthenticationFilter}.
  */
 public class MfaChallengeFilter extends OncePerRequestFilter {
 
@@ -43,11 +49,15 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
     private final MfaService mfaService;
     private final SecurityAuditService auditService;
     private final UserRepository userRepository;
+    private final RequestCache requestCache;
+    private final RedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
 
-    public MfaChallengeFilter(MfaService mfaService, SecurityAuditService auditService, UserRepository userRepository) {
+    public MfaChallengeFilter(MfaService mfaService, SecurityAuditService auditService, UserRepository userRepository,
+            RequestCache requestCache) {
         this.mfaService = mfaService;
         this.auditService = auditService;
         this.userRepository = userRepository;
+        this.requestCache = requestCache;
     }
 
     @Override
@@ -57,6 +67,12 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         if (path.equals(MFA_CHALLENGE_URL) || path.startsWith("/css/") || path.startsWith("/js/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // OIDC RP-initiated logout must remain reachable even before MFA completes.
+        if (path.startsWith("/connect/logout")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -89,6 +105,8 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Persist the intercepted URL so we can resume the OAuth authorize flow after MFA.
+        requestCache.saveRequest(request, response);
         response.sendRedirect(MFA_CHALLENGE_URL);
     }
 
@@ -139,7 +157,7 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
                         ua,
                         "Recovery code consumed; " + remaining + " remaining",
                         AuditEventDetail.mfaRecoveryCodeUsed(remaining));
-                response.sendRedirect("/");
+                redirectAfterSuccessfulMfa(request, response);
             } else {
                 auditService.record(
                         SecurityAuditEventType.MFA_FAILURE,
@@ -165,7 +183,7 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
                     ua,
                     null,
                     AuditEventDetail.mfaSuccess("TOTP"));
-            response.sendRedirect("/");
+            redirectAfterSuccessfulMfa(request, response);
         } else if (code.length() == 6 && code.chars().allMatch(Character::isDigit)) {
             auditService.record(
                     SecurityAuditEventType.MFA_FAILURE,
@@ -187,6 +205,18 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
                     AuditEventDetail.mfaFailure("Invalid MFA code format"));
             response.sendRedirect(MFA_CHALLENGE_URL + "?error");
         }
+    }
+
+    private void redirectAfterSuccessfulMfa(HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        SavedRequest savedRequest = requestCache.getRequest(request, response);
+        if (savedRequest == null) {
+            redirectStrategy.sendRedirect(request, response, "/");
+            return;
+        }
+        String redirectUrl = savedRequest.getRedirectUrl();
+        requestCache.removeRequest(request, response);
+        redirectStrategy.sendRedirect(request, response, redirectUrl);
     }
 
     private static String resolveIp(HttpServletRequest request) {
