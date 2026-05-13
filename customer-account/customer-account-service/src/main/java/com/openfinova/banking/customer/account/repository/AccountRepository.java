@@ -1,6 +1,6 @@
 package com.openfinova.banking.customer.account.repository;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -241,7 +241,7 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
             WHERE a.status = 'ACTIVE'
             AND a.updatedAt < :cutoffDate
             """)
-    Page<Account> findDormantAccounts(@Param("cutoffDate") LocalDateTime cutoffDate, Pageable pageable);
+    Page<Account> findDormantAccounts(@Param("cutoffDate") Instant cutoffDate, Pageable pageable);
 
     /**
      * Find accounts created within a date range.
@@ -255,8 +255,8 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
             SELECT a FROM Account a
             WHERE a.createdAt BETWEEN :startDate AND :endDate
             """)
-    Page<Account> findAccountsCreatedBetween(@Param("startDate") LocalDateTime startDate,
-            @Param("endDate") LocalDateTime endDate, Pageable pageable);
+    Page<Account> findAccountsCreatedBetween(@Param("startDate") Instant startDate, @Param("endDate") Instant endDate,
+            Pageable pageable);
 
     /**
      * Count accounts by status.
@@ -311,7 +311,7 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
             WHERE a.status = 'ACTIVE'
             AND a.updatedAt < :cutoffDate
             """)
-    List<Account> findAccountsForDormancyCheck(@Param("cutoffDate") LocalDateTime cutoffDate);
+    List<Account> findAccountsForDormancyCheck(@Param("cutoffDate") Instant cutoffDate);
 
     /**
      * Find accounts by status (non-paginated).

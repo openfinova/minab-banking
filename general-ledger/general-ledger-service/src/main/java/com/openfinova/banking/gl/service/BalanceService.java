@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.exchangerate.api.ExchangeRateService;
 import com.openfinova.banking.gl.api.dto.DailyBalanceSnapshot;
 import com.openfinova.banking.gl.api.dto.GLAccountBalance;
@@ -30,8 +32,6 @@ import com.openfinova.banking.gl.repository.GLAccountRepository;
 import com.openfinova.banking.gl.repository.GLDailyBalanceRepository;
 import com.openfinova.banking.gl.repository.GLJournalEntryRepository;
 import com.openfinova.banking.gl.repository.GLTransactionRepository;
-
-import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
@@ -100,7 +100,7 @@ public class BalanceService {
 
         // Try to get the most recent daily balance before or on the target date
         Optional<GLDailyBalance> latestDailyBalance = glDailyBalanceRepository
-                .findLatestDailyBalanceByAccountBeforeDate(accountId, targetDate);
+                .findFirstByGlAccount_IdAndBalanceDateBeforeOrderByBalanceDateDesc(accountId, targetDate);
 
         if (latestDailyBalance.isPresent()) {
             LocalDate baseDate = latestDailyBalance.get().getBalanceDate();
@@ -121,7 +121,7 @@ public class BalanceService {
     }
 
     public Optional<GLDailyBalance> getAccountLatestDailyBalance(UUID accountId) {
-        return glDailyBalanceRepository.findLatestDailyBalanceByAccount(accountId);
+        return glDailyBalanceRepository.findFirstByGlAccount_IdOrderByBalanceDateDesc(accountId);
     }
 
     public void recalculateBalance(UUID accountId) {
@@ -399,6 +399,19 @@ public class BalanceService {
 
         logger.info("Snapshot synchronization completed. Total snapshots created: {}", totalCreated);
         return createdSnapshots;
+    }
+
+    /**
+     * Removes every persisted snapshot for {@code date} for all accounts, then rebuilds from journal activity.
+     * Used when snapshots may be missing or stale relative to postings (period close, operational repair).
+     */
+    public void recreateSnapshotsForDate(LocalDate date) {
+        if (date == null) {
+            throw new IllegalArgumentException("Date cannot be null");
+        }
+        int deleted = glDailyBalanceRepository.deleteByBalanceDateBetween(date, date);
+        logger.info("Cleared {} GLDailyBalance row(s) on {} — rebuilding snapshots from journals", deleted, date);
+        synchronizeDailySnapshots(date, date);
     }
 
     /**
@@ -1009,7 +1022,7 @@ public class BalanceService {
 
         // If no daily balance exists for the date, try to get the latest before that date
         Optional<GLDailyBalance> latestBefore = glDailyBalanceRepository
-                .findLatestDailyBalanceByAccountBeforeDate(accountId, date);
+                .findFirstByGlAccount_IdAndBalanceDateBeforeOrderByBalanceDateDesc(accountId, date);
 
         if (latestBefore.isPresent()) {
             return latestBefore.get().getClosingBalance();

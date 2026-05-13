@@ -1,5 +1,8 @@
 package com.openfinova.banking.customer.mapper;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import com.openfinova.banking.customer.dto.AddressResponse;
 import com.openfinova.banking.customer.dto.ContactResponse;
 import com.openfinova.banking.customer.dto.CustomerResponse;
@@ -8,9 +11,6 @@ import com.openfinova.banking.customer.entity.ContactDetail;
 import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.entity.CustomerAddress;
 import com.openfinova.banking.customer.entity.IdentificationDocument;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Mapper for converting entities to response DTOs.
@@ -38,6 +38,19 @@ public final class CustomerMapper {
         dto.setNationality(customer.getNationality());
         dto.setResidenceCountry(customer.getResidenceCountry());
         dto.setSegment(customer.getSegment());
+        dto.setGender(customer.getGender());
+        dto.setMaritalStatus(customer.getMaritalStatus());
+        dto.setPlaceOfBirth(customer.getPlaceOfBirth());
+        dto.setOccupation(customer.getOccupation());
+        dto.setAnnualIncome(customer.getAnnualIncome());
+        dto.setIncorporationDate(customer.getIncorporationDate());
+        dto.setIncorporationCountry(customer.getIncorporationCountry());
+        dto.setBusinessRegistrationNumber(customer.getBusinessRegistrationNumber());
+        dto.setLegalEntityType(customer.getLegalEntityType());
+        dto.setPepFlag(customer.isPepFlag());
+        dto.setSanctionFlag(customer.isSanctionFlag());
+        dto.setLinkedIdentityUserId(customer.getLinkedIdentityUserId());
+        dto.setLinkedIdentityUsername(customer.getLinkedIdentityUsername());
         dto.setCreatedAt(customer.getCreatedAt());
         dto.setUpdatedAt(customer.getUpdatedAt());
         return dto;

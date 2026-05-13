@@ -9,10 +9,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.openfinova.banking.gl.entity.FiscalPeriod;
 import com.openfinova.banking.gl.api.entity.FiscalPeriodStatus;
+import com.openfinova.banking.gl.entity.FiscalPeriod;
 
 public interface FiscalPeriodRepository extends JpaRepository<FiscalPeriod, UUID> {
+
+    /**
+     * All periods chronologically ({@link FiscalPeriod#getStartDate}, then fiscal year / period).
+     */
+    List<FiscalPeriod> findAllByOrderByStartDateAscFiscalYearAscPeriodNumberAsc();
 
     /**
      * Find all fiscal periods belonging to a specific fiscal year, ordered

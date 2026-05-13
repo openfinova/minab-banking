@@ -6,15 +6,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.openfinova.banking.customer.api.entity.CustomerStatus;
-import com.openfinova.banking.customer.api.entity.CustomerType;
-import com.openfinova.banking.customer.api.entity.KYCStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.openfinova.banking.customer.api.entity.CustomerStatus;
+import com.openfinova.banking.customer.api.entity.CustomerType;
+import com.openfinova.banking.customer.api.entity.KYCStatus;
 import com.openfinova.banking.customer.entity.Customer;
 
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
@@ -251,6 +251,48 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
             @Param("endDate") LocalDateTime endDate, Pageable pageable);
 
     // Search and lookup methods
+
+    /**
+     * Full-text style lookup for operator consoles: customer number, names, business name,
+     * contact values (email / phone), and exact customer UUID.
+     * Non-deleted contacts only. Combines with optional status filter.
+     *
+     * @param q token for LIKE match on textual fields (never null; use "" only when unused)
+     * @param status optional status filter
+     * @param idMatch optional parsed UUID when {@code q} is a valid UUID string
+     */
+    @Query("""
+            SELECT DISTINCT c FROM Customer c
+            LEFT JOIN c.contactDetails cd
+            LEFT JOIN c.addresses addr
+            WHERE (:status IS NULL OR c.status = :status)
+            AND (
+                LOWER(c.customerNumber) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(c.firstName) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(c.lastName) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(CONCAT(CONCAT(COALESCE(c.firstName, ''), ' '), COALESCE(c.lastName, ''))) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(c.businessName) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR (
+                    cd IS NOT NULL
+                    AND cd.deletedAt IS NULL
+                    AND LOWER(cd.value) LIKE LOWER(CONCAT('%', :q, '%'))
+                )
+                OR (
+                    addr IS NOT NULL
+                    AND (
+                        LOWER(addr.line1) LIKE LOWER(CONCAT('%', :q, '%'))
+                        OR LOWER(addr.line2) LIKE LOWER(CONCAT('%', :q, '%'))
+                        OR LOWER(addr.city) LIKE LOWER(CONCAT('%', :q, '%'))
+                        OR LOWER(addr.state) LIKE LOWER(CONCAT('%', :q, '%'))
+                        OR LOWER(addr.country) LIKE LOWER(CONCAT('%', :q, '%'))
+                        OR LOWER(addr.postalCode) LIKE LOWER(CONCAT('%', :q, '%'))
+                    )
+                )
+                OR (:idMatch IS NOT NULL AND c.id = :idMatch)
+            )
+            """)
+    Page<Customer> searchCustomers(@Param("q") String q, @Param("status") CustomerStatus status,
+            @Param("idMatch") UUID idMatch, Pageable pageable);
 
     /**
      * Search customers by name (first name, last name, or business name).

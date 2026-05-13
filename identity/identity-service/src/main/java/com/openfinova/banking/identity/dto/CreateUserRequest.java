@@ -23,7 +23,7 @@ public class CreateUserRequest {
     private String username;
 
     @NotBlank
-    @Size(min = 8, max = 100)
+    @Size(min = 12, max = 128)
     private String password;
 
     @Email
@@ -37,6 +37,8 @@ public class CreateUserRequest {
     private String branchCode;
     private String employeeId;
     private String glApprovalRole;
+
+    @Schema(description = "Optional customer party to link (must exist and be active when set).")
     private UUID customerPartyId;
 
     private Set<String> roleNames = Set.of();

@@ -11,9 +11,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.openfinova.banking.gl.entity.GLAccount;
 import com.openfinova.banking.gl.api.entity.GLAccountStatus;
 import com.openfinova.banking.gl.api.entity.GLAccountType;
+import com.openfinova.banking.gl.entity.GLAccount;
 
 public interface GLAccountRepository extends JpaRepository<GLAccount, UUID> {
 
@@ -250,29 +250,37 @@ public interface GLAccountRepository extends JpaRepository<GLAccount, UUID> {
     Page<GLAccount> findByCurrencyOrderByCode(String currency, Pageable pageable);
 
     /**
-     * Search accounts by name or code (case-insensitive).
+     * Search accounts by name or code.
      *
-     * @param searchTerm the search term
+     * <p>{@code searchPattern} must already be upper-cased and wrapped with {@code %} wildcards
+     * by the caller (see {@code GLAccountService}). Case-normalisation is done in Java so the
+     * JPQL stays a plain {@code UPPER(column) LIKE :pattern} and avoids the PostgreSQL
+     * parameter-type inference that bit us with {@code CONCAT('%', ?, '%')}.
+     *
+     * @param searchPattern upper-cased LIKE pattern, e.g. {@code "%CASH%"}
      * @param pageable pagination information
-     * @return page of accounts matching the search term
+     * @return page of accounts matching the search pattern
      */
     @Query("""
             SELECT a FROM GLAccount a
-            WHERE LOWER(a.name) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
-            OR LOWER(a.code) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+            WHERE UPPER(a.name) LIKE :searchPattern
+               OR UPPER(a.code) LIKE :searchPattern
             ORDER BY a.code
             """)
-    Page<GLAccount> searchByNameOrCode(@Param("searchTerm") String searchTerm, Pageable pageable);
+    Page<GLAccount> searchByNameOrCode(@Param("searchPattern") String searchPattern, Pageable pageable);
 
     /**
      * Combined filter query for the chart-of-accounts browsing UI.
      * Every parameter is optional: pass {@code null} to skip that filter.
      *
-     * @param type       account type filter, {@code null} = any
-     * @param status     account status filter, {@code null} = any
-     * @param currency   currency code filter, {@code null} = any
-     * @param searchTerm case-insensitive substring match on name or code, {@code null} = any
-     * @param pageable   pagination and sort
+     * <p>{@code searchPattern} must already be upper-cased and wrapped with {@code %} wildcards
+     * by the service layer; pass {@code null} to skip the search clause entirely.
+     *
+     * @param type          account type filter, {@code null} = any
+     * @param status        account status filter, {@code null} = any
+     * @param currency      currency code filter, {@code null} = any
+     * @param searchPattern upper-cased LIKE pattern (e.g. {@code "%CASH%"}), {@code null} = any
+     * @param pageable      pagination and sort
      * @return page of matching accounts
      */
     @Query("""
@@ -280,12 +288,12 @@ public interface GLAccountRepository extends JpaRepository<GLAccount, UUID> {
             WHERE (:type     IS NULL OR a.type     = :type)
             AND   (:status   IS NULL OR a.status   = :status)
             AND   (:currency IS NULL OR a.currency = :currency)
-            AND   (:searchTerm IS NULL
-                   OR LOWER(a.name) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
-                   OR LOWER(a.code) LIKE LOWER(CONCAT('%', :searchTerm, '%')))
+            AND   (:searchPattern IS NULL
+                   OR UPPER(a.name) LIKE :searchPattern
+                   OR UPPER(a.code) LIKE :searchPattern)
             """)
     Page<GLAccount> filterAccounts(@Param("type") GLAccountType type, @Param("status") GLAccountStatus status,
-            @Param("currency") String currency, @Param("searchTerm") String searchTerm, Pageable pageable);
+            @Param("currency") String currency, @Param("searchPattern") String searchPattern, Pageable pageable);
 
     /**
      * Find accounts created by a specific user.

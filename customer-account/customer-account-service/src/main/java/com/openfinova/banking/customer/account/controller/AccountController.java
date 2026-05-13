@@ -63,6 +63,7 @@ public class AccountController {
                 request.getPrimaryUserProfileId(),
                 request.getProductType(),
                 request.getCurrency(),
+                request.getAccountNumber(),
                 request.getCreatedBy());
 
         log.info("Successfully created account with ID: {}", account.getId());

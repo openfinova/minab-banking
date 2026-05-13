@@ -1,7 +1,6 @@
 package com.openfinova.banking.gl.repository;
 
 import java.time.LocalDate;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,13 +15,15 @@ import com.openfinova.banking.gl.entity.GLDailyBalance;
 public interface GLDailyBalanceRepository extends JpaRepository<GLDailyBalance, UUID> {
 
     /**
-     * Find the latest daily balance for an account.
-     *
-     * @param accountId the GL account ID
-     * @return optional containing the latest daily balance
+     * Latest snapshot for one account ({@code LIMIT 1}, {@link GLDailyBalance#getBalanceDate} desc).
      */
-    @Query("SELECT db FROM GLDailyBalance db WHERE db.glAccount.id = :accountId ORDER BY db.balanceDate DESC")
-    Optional<GLDailyBalance> findLatestDailyBalanceByAccount(@Param("accountId") UUID accountId);
+    Optional<GLDailyBalance> findFirstByGlAccount_IdOrderByBalanceDateDesc(UUID accountId);
+
+    /**
+     * Latest snapshot strictly before {@code date} ({@code balance_date &lt; date}, newest first, {@code LIMIT 1}).
+     */
+    Optional<GLDailyBalance> findFirstByGlAccount_IdAndBalanceDateBeforeOrderByBalanceDateDesc(UUID accountId,
+            LocalDate date);
 
     /**
      * Find daily balance for a specific account and date.
@@ -33,17 +34,6 @@ public interface GLDailyBalanceRepository extends JpaRepository<GLDailyBalance, 
      */
     @Query("SELECT db FROM GLDailyBalance db WHERE db.glAccount.id = :accountId AND db.balanceDate = :date")
     Optional<GLDailyBalance> findDailyBalanceByAccountAndDate(@Param("accountId") UUID accountId,
-            @Param("date") LocalDate date);
-
-    /**
-     * Find the latest daily balance for an account before a specific date.
-     *
-     * @param accountId the GL account ID
-     * @param date the cutoff date
-     * @return optional containing the latest daily balance before the date
-     */
-    @Query("SELECT db FROM GLDailyBalance db WHERE db.glAccount.id = :accountId AND db.balanceDate < :date ORDER BY db.balanceDate DESC")
-    Optional<GLDailyBalance> findLatestDailyBalanceByAccountBeforeDate(@Param("accountId") UUID accountId,
             @Param("date") LocalDate date);
 
     /**

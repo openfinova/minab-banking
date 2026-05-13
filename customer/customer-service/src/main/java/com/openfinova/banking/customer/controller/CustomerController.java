@@ -1,17 +1,8 @@
 package com.openfinova.banking.customer.controller;
 
-import com.openfinova.banking.customer.api.entity.CustomerStatus;
-import com.openfinova.banking.customer.dto.CustomerProfileUpdate;
-import com.openfinova.banking.customer.dto.CustomerResponse;
-import com.openfinova.banking.customer.entity.Customer;
-import com.openfinova.banking.customer.mapper.CustomerMapper;
-import com.openfinova.banking.customer.service.CustomerService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -21,10 +12,31 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Optional;
-import java.util.UUID;
+import com.openfinova.banking.customer.api.entity.CustomerStatus;
+import com.openfinova.banking.customer.dto.CustomerComplianceUpdate;
+import com.openfinova.banking.customer.dto.CustomerProfileUpdate;
+import com.openfinova.banking.customer.dto.CustomerResponse;
+import com.openfinova.banking.customer.entity.Customer;
+import com.openfinova.banking.customer.mapper.CustomerMapper;
+import com.openfinova.banking.customer.service.CustomerService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 
 /**
  * REST Controller for customer profile management.
@@ -137,6 +149,18 @@ public class CustomerController {
         return ResponseEntity.ok(CustomerMapper.toCustomerResponse(updated));
     }
 
+    @PatchMapping("/{id}/compliance-flags")
+    @PreAuthorize("hasAuthority('customer:write')")
+    @Operation(summary = "Update PEP / sanction flags", description = "Partial update; omit a field to leave it unchanged")
+    @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Updated successfully"),
+            @ApiResponse(responseCode = "404", description = "Customer not found") })
+    public ResponseEntity<CustomerResponse> updateComplianceFlags(@PathVariable UUID id,
+            @RequestBody CustomerComplianceUpdate body) {
+
+        Customer updated = customerService.updateComplianceFlags(id, body.getPepFlag(), body.getSanctionFlag());
+        return ResponseEntity.ok(CustomerMapper.toCustomerResponse(updated));
+    }
+
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAuthority('customer:write')")
     @Operation(summary = "Update customer status", description = "Updates customer status (e.g., PROSPECT to ACTIVE, ACTIVE to SUSPENDED)")
@@ -157,15 +181,17 @@ public class CustomerController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('customer:read')")
-    @Operation(summary = "List customers", description = "Lists customers with optional status filtering and pagination")
+    @Operation(summary = "List customers", description = "Lists customers with optional status filter, free-text search "
+            + "(customer number, names, business name, address fields, contact value such as email/phone, or full customer UUID), and pagination")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Customers retrieved successfully") })
     public ResponseEntity<Page<CustomerResponse>> listCustomers(
             @Parameter(description = "Optional status filter") @RequestParam(required = false) CustomerStatus status,
+            @Parameter(description = "Search by number, name, business name, address (lines, city, state, postal code, country), contact value (e.g. email/phone), or full customer UUID") @RequestParam(required = false) String q,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        log.info("Listing customers with status filter: {}, page: {}", status, pageable.getPageNumber());
+        log.info("Listing customers with status filter: {}, q: {}, page: {}", status, q, pageable.getPageNumber());
 
-        Page<Customer> customers = customerService.listCustomers(status, pageable);
+        Page<Customer> customers = customerService.listCustomers(status, q, pageable);
         Page<CustomerResponse> responses = customers.map(CustomerMapper::toCustomerResponse);
 
         log.info("Found {} customers (page {})", responses.getNumberOfElements(), pageable.getPageNumber());

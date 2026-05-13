@@ -91,6 +91,7 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.ACCOUNT_READ,
                         BankingPermission.GL_READ,
                         BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ,
                         BankingPermission.AUDIT_READ,
                         BankingPermission.REPORT_READ,
                         BankingPermission.REPORT_GENERATE,
@@ -108,7 +109,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_READ,
                         BankingPermission.LOAN_WRITE,
                         BankingPermission.ACCOUNT_READ,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "LOAN_SUPERVISOR",
@@ -124,7 +126,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_COLLECT_APPROVE,
                         BankingPermission.LOAN_RESTRUCTURE_APPROVE,
                         BankingPermission.ACCOUNT_READ,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "LOAN_CREDIT_SENIOR",
@@ -142,7 +145,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_DISBURSE_APPROVE,
                         BankingPermission.LOAN_COLLECT_APPROVE,
                         BankingPermission.ACCOUNT_READ,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "LOAN_OPERATIONS",
@@ -156,13 +160,18 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_COLLECT,
                         BankingPermission.ACCOUNT_READ,
                         BankingPermission.PAYMENT_INITIATE,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "GL_ACCOUNTANT",
                 "GL Accountant",
                 "Posts journal entries to the general ledger.",
-                EnumSet.of(BankingPermission.GL_READ, BankingPermission.GL_POST, BankingPermission.EXCHANGE_RATE_READ));
+                EnumSet.of(
+                        BankingPermission.GL_READ,
+                        BankingPermission.GL_POST,
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "GL_MANAGER",
@@ -172,7 +181,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.GL_READ,
                         BankingPermission.GL_POST,
                         BankingPermission.GL_APPROVE,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "BRANCH_MANAGER",
@@ -187,6 +197,7 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_READ,
                         BankingPermission.PAYMENT_INITIATE,
                         BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ,
                         BankingPermission.REPORT_READ));
 
         createSystemRole(
@@ -207,7 +218,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.ACCOUNT_READ,
                         BankingPermission.ACCOUNT_TRANSFER,
                         BankingPermission.PAYMENT_INITIATE,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "TREASURY",
@@ -219,6 +231,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.PAYMENT_INITIATE,
                         BankingPermission.EXCHANGE_RATE_READ,
                         BankingPermission.EXCHANGE_RATE_WRITE,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_WRITE,
                         BankingPermission.GL_READ));
 
         createSystemRole(

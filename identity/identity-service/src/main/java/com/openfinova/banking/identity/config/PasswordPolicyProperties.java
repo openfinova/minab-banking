@@ -22,6 +22,15 @@ public class PasswordPolicyProperties {
     private boolean requireSpecialChar = true;
     private int maxAgeDays = 90;
 
+    /**
+     * How many previous password hashes are kept and checked so a user cannot set a new password
+     * that matches any of those values (reuse prevention). The list is capped to this size in
+     * user management; see {@link com.openfinova.banking.identity.service.PasswordPolicyService#checkHistory}.
+     * <p>
+     * Default {@code 12} is a stricter banking-style choice (common enterprise ranges are often
+     * about 5–24). Tune with {@code identity.password.history-count} if policy or UX requires a
+     * smaller window.
+     */
     @Min(1)
     @Max(48)
     private int historyCount = 12;

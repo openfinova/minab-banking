@@ -1,21 +1,29 @@
 package com.openfinova.banking.identity.controller;
 
-import com.openfinova.banking.identity.dto.SecurityAuditEventResponse;
-import com.openfinova.banking.identity.entity.SecurityAuditEventType;
-import com.openfinova.banking.identity.service.SecurityAuditService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
+import com.openfinova.banking.identity.dto.SecurityAuditEventResponse;
+import com.openfinova.banking.identity.dto.UserResponse;
+import com.openfinova.banking.identity.entity.SecurityAuditEventType;
+import com.openfinova.banking.identity.service.SecurityAuditService;
+import com.openfinova.banking.identity.service.UserManagementService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/v1/identity/audit")
@@ -28,9 +36,18 @@ import java.util.UUID;
 public class SecurityAuditController {
 
     private final SecurityAuditService auditService;
+    private final UserManagementService userManagementService;
 
-    public SecurityAuditController(SecurityAuditService auditService) {
+    public SecurityAuditController(SecurityAuditService auditService, UserManagementService userManagementService) {
         this.auditService = auditService;
+        this.userManagementService = userManagementService;
+    }
+
+    @GetMapping("/suggestions/users")
+    @Operation(summary = "User typeahead for audit filters", description = "All user types; same text matching as admin user search (q). Requires audit:read.")
+    public List<UserResponse> userSuggestions(@RequestParam String q,
+            @RequestParam(required = false, defaultValue = "15") int limit) {
+        return userManagementService.suggestUsersForLookup(q, limit);
     }
 
     @GetMapping("/events")

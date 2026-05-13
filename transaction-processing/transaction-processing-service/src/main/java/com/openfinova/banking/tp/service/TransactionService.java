@@ -880,6 +880,9 @@ public class TransactionService {
                     transaction.getStatus(),
                     "GL posting completed with GL transaction ID: " + glTransactionId);
 
+            // Create customer-facing AccountTransactions after successful GL posting
+            createAccountTransactions(transaction);
+
         } catch (Exception e) {
             logger.error("GL posting failed for transaction: {}", transaction.getId(), e);
 
@@ -1746,5 +1749,183 @@ public class TransactionService {
         }
 
         return refundTransaction;
+    }
+
+    /**
+     * Creates customer-facing AccountTransactions after successful GL posting.
+     * This method is called from initiateGLPosting() after the GL transaction is created.
+     * It creates AccountTransaction records that customers see in their statements.
+     *
+     * @param transaction the TP transaction that was posted to GL
+     */
+    private void createAccountTransactions(Transaction transaction) {
+        logger.debug("Creating customer-facing AccountTransactions for transaction: {}", transaction.getId());
+
+        UUID glTransactionId = transaction.getGlTransactionId();
+        if (glTransactionId == null) {
+            logger.warn(
+                    "Cannot create AccountTransactions - GL transaction ID is null for transaction: {}",
+                    transaction.getId());
+            return;
+        }
+
+        LocalDateTime txDate = LocalDateTime.of(transaction.getTransactionDate(), java.time.LocalTime.now());
+
+        try {
+            // Create AccountTransaction for source account (debit)
+            if (transaction.getSourceAccountId() != null) {
+                String debitType = mapToAccountTransactionType(transaction.getTransactionType(), true);
+                String debitDescription = buildAccountTransactionDescription(transaction, true);
+
+                UUID sourceAccountTxId = customerAccountService.recordAndLinkAccountTransaction(
+                        transaction.getSourceAccountId(),
+                        debitType,
+                        transaction.getTotalAmount(), // Principal + fees
+                        transaction.getCurrency(),
+                        txDate,
+                        debitDescription,
+                        transaction.getIdempotencyKey(),
+                        glTransactionId);
+
+                logger.info(
+                        "Created source AccountTransaction: {} for TP transaction: {}",
+                        sourceAccountTxId,
+                        transaction.getId());
+
+                recordTransactionEvent(
+                        transaction,
+                        "ACCOUNT_TRANSACTION_CREATED",
+                        transaction.getStatus(),
+                        "Source AccountTransaction created: " + sourceAccountTxId);
+            }
+
+            // Create AccountTransaction for destination account (credit)
+            if (transaction.getDestinationAccountId() != null) {
+                String creditType = mapToAccountTransactionType(transaction.getTransactionType(), false);
+                String creditDescription = buildAccountTransactionDescription(transaction, false);
+
+                UUID destAccountTxId = customerAccountService.recordAndLinkAccountTransaction(
+                        transaction.getDestinationAccountId(),
+                        creditType,
+                        transaction.getPrincipalAmount(), // Principal only (no fees)
+                        transaction.getCurrency(),
+                        txDate,
+                        creditDescription,
+                        transaction.getIdempotencyKey(),
+                        glTransactionId);
+
+                logger.info(
+                        "Created destination AccountTransaction: {} for TP transaction: {}",
+                        destAccountTxId,
+                        transaction.getId());
+
+                recordTransactionEvent(
+                        transaction,
+                        "ACCOUNT_TRANSACTION_CREATED",
+                        transaction.getStatus(),
+                        "Destination AccountTransaction created: " + destAccountTxId);
+            }
+
+        } catch (Exception e) {
+            logger.error(
+                    "Failed to create AccountTransactions for transaction {}: {}",
+                    transaction.getId(),
+                    e.getMessage(),
+                    e);
+            // Don't fail the transaction - AccountTransactions can be created later via reconciliation
+            recordTransactionEvent(
+                    transaction,
+                    "ACCOUNT_TRANSACTION_CREATION_FAILED",
+                    transaction.getStatus(),
+                    "Failed to create AccountTransactions: " + e.getMessage(),
+                    "ACCOUNT_TX_ERROR");
+        }
+    }
+
+    /**
+     * Maps TP TransactionType to AccountTransactionType for customer-facing display.
+     *
+     * @param tpType the TP transaction type
+     * @param isSource true if this is the source account (debit), false for destination (credit)
+     * @return the AccountTransactionType as a string
+     */
+    private String mapToAccountTransactionType(TransactionType tpType, boolean isSource) {
+        if (isSource) {
+            // Debit transactions (money leaving the account)
+            return switch (tpType) {
+                case P2P, TRANSFER -> "TRANSFER_OUT";
+                case CASH_OUT -> "WITHDRAWAL";
+                case BILL_PAYMENT -> "FEE"; // Or could be a new type like BILL_PAYMENT
+                case MERCHANT_PURCHASE -> "FEE"; // Or could be a new type like PURCHASE
+                case REFUND -> "ADJUSTMENT"; // Refund source (rare case)
+                default -> "ADJUSTMENT";
+            };
+        } else {
+            // Credit transactions (money entering the account)
+            return switch (tpType) {
+                case P2P, TRANSFER -> "TRANSFER_IN";
+                case CASH_IN, DEPOSIT -> "DEPOSIT";
+                case REFUND -> "ADJUSTMENT"; // Refund destination (common case)
+                default -> "ADJUSTMENT";
+            };
+        }
+    }
+
+    /**
+     * Builds a customer-friendly description for AccountTransaction.
+     *
+     * @param transaction the TP transaction
+     * @param isSource true if this is the source account, false for destination
+     * @return customer-friendly description
+     */
+    private String buildAccountTransactionDescription(Transaction transaction, boolean isSource) {
+        TransactionType type = transaction.getTransactionType();
+        TransactionRequest request = transaction.getRequest();
+
+        if (isSource) {
+            // Descriptions for debit (money leaving)
+            return switch (type) {
+                case P2P, TRANSFER -> {
+                    String destAccountId = transaction.getDestinationAccountId() != null
+                            ? transaction.getDestinationAccountId().toString().substring(0, 8)
+                            : "unknown";
+                    yield "Transfer to account " + destAccountId;
+                }
+                case CASH_OUT -> "ATM Withdrawal";
+                case BILL_PAYMENT -> {
+                    String payee = request.getMetadata() != null && request.getMetadata().containsKey("payee")
+                            ? String.valueOf(request.getMetadata().get("payee"))
+                            : "Bill Payment";
+                    yield payee;
+                }
+                case MERCHANT_PURCHASE -> {
+                    String merchant = request.getMetadata() != null && request.getMetadata().containsKey("merchant")
+                            ? String.valueOf(request.getMetadata().get("merchant"))
+                            : "Purchase";
+                    yield merchant;
+                }
+                case REFUND -> "Refund reversal";
+                default -> "Transaction";
+            };
+        } else {
+            // Descriptions for credit (money entering)
+            return switch (type) {
+                case P2P, TRANSFER -> {
+                    String sourceAccountId = transaction.getSourceAccountId() != null
+                            ? transaction.getSourceAccountId().toString().substring(0, 8)
+                            : "unknown";
+                    yield "Transfer from account " + sourceAccountId;
+                }
+                case CASH_IN, DEPOSIT -> "Deposit";
+                case REFUND -> {
+                    String originalTxId = request.getMetadata() != null
+                            && request.getMetadata().containsKey("originalTransactionId")
+                                    ? String.valueOf(request.getMetadata().get("originalTransactionId")).substring(0, 8)
+                                    : "unknown";
+                    yield "Refund for transaction " + originalTxId;
+                }
+                default -> "Transaction";
+            };
+        }
     }
 }

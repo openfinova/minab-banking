@@ -110,6 +110,15 @@ public class StandardBankTemplateDefinition {
                 OperationalGLAccountType.EXTERNAL_CLEARING);
         addAccount(
                 accounts,
+                "1106",
+                "Suspense Account",
+                GLAccountType.ASSET,
+                currency,
+                "Temporary holding for unmatched or pending transactions awaiting investigation",
+                "1100",
+                OperationalGLAccountType.SUSPENSE);
+        addAccount(
+                accounts,
                 "1110",
                 "Consumer Loans",
                 GLAccountType.ASSET,

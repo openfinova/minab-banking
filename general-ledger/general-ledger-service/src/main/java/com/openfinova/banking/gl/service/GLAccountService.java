@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.gl.api.dto.CreateGLAccountRequest;
 import com.openfinova.banking.gl.api.dto.DailyBalanceSnapshot;
@@ -776,8 +778,33 @@ public class GLAccountService {
                 status,
                 currency,
                 searchTerm);
-        String normalizedSearch = (searchTerm != null && !searchTerm.isBlank()) ? searchTerm.trim() : null;
-        return glAccountRepository.filterAccounts(type, status, currency, normalizedSearch, pageable);
+
+        String pattern = toLikePattern(searchTerm);
+
+        // Fast path: no filters and no search — the dominant UI case (paginated chart-of-accounts
+        // grid). Skip the optional-filter query and let Spring Data emit the plain paged SELECT,
+        // which is simpler for Postgres to plan and benefits from second-level cache.
+        if (type == null && status == null && currency == null && pattern == null) {
+            return glAccountRepository.findAll(pageable);
+        }
+
+        return glAccountRepository.filterAccounts(type, status, currency, pattern, pageable);
+    }
+
+    /**
+     * Normalises a free-text search term into an upper-cased LIKE pattern suitable for the
+     * {@code UPPER(column) LIKE :pattern} queries on {@link GLAccountRepository}. Returns
+     * {@code null} when there is nothing to search for, so the SQL clause short-circuits.
+     */
+    private static String toLikePattern(String searchTerm) {
+        if (searchTerm == null) {
+            return null;
+        }
+        String trimmed = searchTerm.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return "%" + trimmed.toUpperCase() + "%";
     }
 
     /**
@@ -805,12 +832,12 @@ public class GLAccountService {
     public List<GLAccount> searchAccounts(String searchTerm) {
         logger.debug("Searching accounts with term: {}", searchTerm);
 
-        if (searchTerm == null || searchTerm.trim().isEmpty()) {
+        String pattern = toLikePattern(searchTerm);
+        if (pattern == null) {
             return Collections.emptyList();
         }
 
-        // Use repository search method with pagination, but get all results
-        return glAccountRepository.searchByNameOrCode(searchTerm.trim(), Pageable.unpaged()).getContent();
+        return glAccountRepository.searchByNameOrCode(pattern, Pageable.unpaged()).getContent();
     }
 
     /**

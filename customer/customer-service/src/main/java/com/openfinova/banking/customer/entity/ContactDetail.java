@@ -1,14 +1,28 @@
 package com.openfinova.banking.customer.entity;
 
-import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import org.hibernate.annotations.UpdateTimestamp;
+
+import com.openfinova.banking.customer.api.entity.ContactType;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.LocalDateTime;
-import java.util.UUID;
-import com.openfinova.banking.customer.api.entity.ContactType;
 
 /**
  * Entity representing contact information (Email, Phone, etc.) for a customer.
@@ -36,11 +50,14 @@ public class ContactDetail {
     @Size(max = 255, message = "Value must not exceed 255 characters")
     private String value;
 
+    /**
+     * Boxed so JSON null does not fail deserialization (e.g. clients sending {@code "primary": null}).
+     */
     @Column(name = "is_primary", nullable = false)
-    private boolean isPrimary = false;
+    private Boolean isPrimary = Boolean.FALSE;
 
     @Column(name = "is_verified", nullable = false)
-    private boolean isVerified = false;
+    private Boolean isVerified = Boolean.FALSE;
 
     @Version
     @Column(name = "version", nullable = false)
@@ -74,7 +91,7 @@ public class ContactDetail {
     public ContactDetail() {
     }
 
-    public ContactDetail(Customer customer, ContactType type, String value, boolean isPrimary) {
+    public ContactDetail(Customer customer, ContactType type, String value, Boolean isPrimary) {
         this.customer = customer;
         this.type = type;
         this.value = value;
@@ -115,19 +132,19 @@ public class ContactDetail {
     }
 
     public boolean isPrimary() {
-        return isPrimary;
+        return Boolean.TRUE.equals(isPrimary);
     }
 
-    public void setPrimary(boolean primary) {
-        isPrimary = primary;
+    public void setPrimary(Boolean primary) {
+        isPrimary = Boolean.TRUE.equals(primary);
     }
 
     public boolean isVerified() {
-        return isVerified;
+        return Boolean.TRUE.equals(isVerified);
     }
 
-    public void setVerified(boolean verified) {
-        isVerified = verified;
+    public void setVerified(Boolean verified) {
+        isVerified = Boolean.TRUE.equals(verified);
     }
 
     public Long getVersion() {

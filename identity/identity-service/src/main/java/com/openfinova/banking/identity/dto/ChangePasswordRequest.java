@@ -14,7 +14,7 @@ public class ChangePasswordRequest {
     private String currentPassword;
 
     @NotBlank
-    @Size(min = 8, max = 128)
+    @Size(min = 12, max = 128)
     @JsonAlias("new_password")
     private String newPassword;
 

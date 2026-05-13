@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
@@ -39,6 +40,7 @@ import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatchers;
 
 import com.nimbusds.jose.jwk.JWKSet;
@@ -127,7 +129,13 @@ public class AuthorizationServerConfig {
                         form -> form.loginPage("/login").successHandler(loginEventHandlers.successHandler())
                                 .failureHandler(loginEventHandlers.failureHandler()))
                 .logout(
-                        logout -> logout.logoutSuccessUrl("/logged-out") // redirect here after logout
+                        logout -> logout.logoutRequestMatcher(
+                                // GET enables SPAs to clear the IdP session when no id_token is available
+                                // (Spring's /connect/logout requires id_token_hint). Prefer POST from HTML forms.
+                                new OrRequestMatcher(
+                                        PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/logout"),
+                                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/logout")))
+                                .logoutSuccessUrl("/logged-out") // redirect here after logout
                                 .permitAll())
                 .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(mfaChallengeFilter, AuthorizationFilter.class)

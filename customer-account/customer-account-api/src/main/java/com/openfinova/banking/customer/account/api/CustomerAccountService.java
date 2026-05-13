@@ -93,4 +93,52 @@ public interface CustomerAccountService {
      * @return the GL account UUID, or null if no mapping exists
      */
     UUID getGLAccountIdForType(UUID accountId, GLAccountMappingType mappingType);
+
+    // ── Account Transaction Operations (Customer-Facing Memo Posts) ──────────
+
+    /**
+     * Records a customer-facing transaction (memo post) that appears on statements.
+     * Creates an AccountTransaction record in PENDING status.
+     * Used by: TP module (after GL posting), External systems (ATM, branch deposits)
+     *
+     * @param accountId the customer account ID
+     * @param transactionType the transaction type (DEPOSIT, WITHDRAWAL, TRANSFER_IN, etc.)
+     * @param amount the transaction amount (always positive)
+     * @param currency the currency code (e.g., "USD")
+     * @param transactionDate the business date/time when the transaction occurred
+     * @param description customer-friendly description for statements
+     * @param referenceId external reference ID for reconciliation (optional, can be null)
+     * @return the created AccountTransaction ID
+     */
+    UUID recordAccountTransaction(UUID accountId, String transactionType, BigDecimal amount, String currency,
+            java.time.LocalDateTime transactionDate, String description, String referenceId);
+
+    /**
+     * Links an AccountTransaction to its corresponding GL transaction.
+     * Updates the status from PENDING to POSTED.
+     * Used by: TP module (after GL posting), GL module (reconciliation)
+     *
+     * @param accountTransactionId the AccountTransaction ID
+     * @param glTransactionId the GL transaction ID to link
+     */
+    void linkAccountTransactionToGL(UUID accountTransactionId, UUID glTransactionId);
+
+    /**
+     * Records and immediately links an AccountTransaction to GL in a single operation.
+     * Convenience method that combines recordAccountTransaction + linkAccountTransactionToGL.
+     * The transaction is created in POSTED status directly.
+     * Used by: TP module (after GL posting completes)
+     *
+     * @param accountId the customer account ID
+     * @param transactionType the transaction type (DEPOSIT, WITHDRAWAL, etc.)
+     * @param amount the transaction amount (always positive)
+     * @param currency the currency code
+     * @param transactionDate the business date/time
+     * @param description customer-friendly description
+     * @param referenceId external reference (optional, can be null)
+     * @param glTransactionId the GL transaction ID to link
+     * @return the created AccountTransaction ID
+     */
+    UUID recordAndLinkAccountTransaction(UUID accountId, String transactionType, BigDecimal amount, String currency,
+            java.time.LocalDateTime transactionDate, String description, String referenceId, UUID glTransactionId);
 }

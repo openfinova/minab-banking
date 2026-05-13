@@ -1,11 +1,12 @@
 package com.openfinova.banking.gl.api.dto;
 
-import com.openfinova.banking.gl.api.entity.FiscalPeriodStatus;
-import io.swagger.v3.oas.annotations.media.Schema;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import com.openfinova.banking.gl.api.entity.FiscalPeriodStatus;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Fiscal Period response")
 public class FiscalPeriodResponse {
@@ -39,6 +40,16 @@ public class FiscalPeriodResponse {
 
     @Schema(description = "Sequential period number within the fiscal year (1-12 monthly, 1-4 quarterly, 13 for adjustments)", example = "1")
     private Integer periodNumber;
+
+    /**
+     * True when this period's status is {@linkplain FiscalPeriodStatus#OPEN OPEN} —
+     * new postings are accepted for posting dates falling within this window
+     * (matches {@link com.openfinova.banking.gl.service.FiscalPeriodService#isPostingAllowedForDate(java.time.LocalDate)}).
+     * False for {@link FiscalPeriodStatus#CLOSED CLOSED}, {@link FiscalPeriodStatus#LOCKED LOCKED},
+     * or {@link FiscalPeriodStatus#ADJUSTING ADJUSTING}.
+     */
+    @Schema(description = "Whether GL posting into this period is allowed (based on OPEN status)")
+    private Boolean postingAllowed;
 
     // Constructors
     public FiscalPeriodResponse() {
@@ -123,5 +134,13 @@ public class FiscalPeriodResponse {
 
     public void setPeriodNumber(Integer periodNumber) {
         this.periodNumber = periodNumber;
+    }
+
+    public Boolean getPostingAllowed() {
+        return postingAllowed;
+    }
+
+    public void setPostingAllowed(Boolean postingAllowed) {
+        this.postingAllowed = postingAllowed;
     }
 }

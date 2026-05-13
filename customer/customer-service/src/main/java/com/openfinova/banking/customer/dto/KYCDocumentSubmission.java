@@ -23,8 +23,9 @@ public class KYCDocumentSubmission {
     @Size(max = 100)
     private String documentNumber;
 
-    @Pattern(regexp = "[A-Z]{2}", message = "Issuing country must be ISO 3166-1 alpha-2")
-    @Size(max = 2)
+    @NotBlank(message = "Issuing country is required")
+    @Pattern(regexp = "[A-Za-z]{2}", message = "Issuing country must be ISO 3166-1 alpha-2 (2 letters)")
+    @Size(min = 2, max = 2, message = "Issuing country must be ISO 3166-1 alpha-2 (2 characters)")
     private String issuingCountry;
 
     @Size(max = 100)
