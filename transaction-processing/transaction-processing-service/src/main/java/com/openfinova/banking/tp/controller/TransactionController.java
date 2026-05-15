@@ -6,6 +6,7 @@ import com.openfinova.banking.tp.entity.Transaction;
 import com.openfinova.banking.tp.entity.TransactionEvent;
 import com.openfinova.banking.tp.entity.TransactionRequest;
 import com.openfinova.banking.tp.api.entity.TransactionStatus;
+import com.openfinova.banking.tp.api.entity.TransactionType;
 import com.openfinova.banking.tp.mapper.TransactionMapper;
 import com.openfinova.banking.tp.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,12 +19,18 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,6 +83,46 @@ public class TransactionController {
         log.info("Successfully initiated transaction with ID: {}", transaction.getId());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(transactionMapper.toResponse(transaction));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('transaction:read')")
+    @Operation(summary = "Search transactions", description = "Paginated admin search with optional filters (account, status, type, dates, currency, amount range, reference text)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Page of transactions", content = @Content(schema = @Schema(implementation = TransactionResponse.class))) })
+    public ResponseEntity<Page<TransactionResponse>> searchTransactions(
+            @Parameter(description = "Involves this account as source or destination") @RequestParam(required = false) UUID accountId,
+            @Parameter(description = "Transaction status") @RequestParam(required = false) TransactionStatus status,
+            @Parameter(description = "Transaction type (from request)") @RequestParam(required = false) TransactionType transactionType,
+            @Parameter(description = "Minimum transaction date (inclusive)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @Parameter(description = "Maximum transaction date (inclusive)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @Parameter(description = "ISO currency code") @RequestParam(required = false) String currency,
+            @Parameter(description = "Minimum principal amount (request amount)") @RequestParam(required = false) BigDecimal minAmount,
+            @Parameter(description = "Maximum principal amount (request amount)") @RequestParam(required = false) BigDecimal maxAmount,
+            @Parameter(description = "Substring match on idempotency key, external ref, gateway id, or client reference") @RequestParam(required = false) String reference,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        log.info(
+                "Searching transactions: accountId={}, status={}, type={}, from={}, to={}",
+                accountId,
+                status,
+                transactionType,
+                fromDate,
+                toDate);
+
+        Page<TransactionResponse> page = transactionService.searchTransactions(
+                accountId,
+                status,
+                transactionType,
+                fromDate,
+                toDate,
+                currency,
+                minAmount,
+                maxAmount,
+                reference,
+                pageable);
+
+        return ResponseEntity.ok(page);
     }
 
     @GetMapping("/{id}")

@@ -312,7 +312,8 @@ public class CustomerService {
 
     /**
      * Retrieves a paginated list of customers, optionally filtered by status and
-     * an operator search string (customer number, name, business name, email/phone via contacts, or UUID).
+     * an operator search string (customer number, name, business name, email/phone via contacts, customer UUID,
+     * or linked identity user UUID when it equals {@code idMatch}).
      *
      * @param status the customer status to filter by, or null to retrieve all customers
      * @param search free-text search; blank means no search filter

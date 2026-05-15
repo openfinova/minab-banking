@@ -306,10 +306,6 @@ public class FeeManagementService {
 
         logger.info("Creating new fee waiver: {}", waiver.getWaiverName());
 
-        // Set audit fields
-        waiver.setCreatedBy("SYSTEM"); // In real implementation, get from security context
-        waiver.setUpdatedBy("SYSTEM");
-
         FeeWaiver savedWaiver = feeWaiverRepository.save(waiver);
         logger.info("Created fee waiver with ID: {}", savedWaiver.getId());
 

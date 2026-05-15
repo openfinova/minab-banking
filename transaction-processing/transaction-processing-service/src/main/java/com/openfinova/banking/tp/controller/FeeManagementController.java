@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.tp.api.dto.CreateFeeRuleRequest;
 import com.openfinova.banking.tp.api.dto.CreateFeeWaiverRequest;
 import com.openfinova.banking.tp.api.dto.FeeRuleResponse;
@@ -26,6 +28,7 @@ import com.openfinova.banking.tp.api.entity.TransactionType;
 import com.openfinova.banking.tp.entity.FeeRule;
 import com.openfinova.banking.tp.entity.FeeWaiver;
 import com.openfinova.banking.tp.mapper.FeeRuleMapper;
+import com.openfinova.banking.tp.mapper.FeeWaiverMapper;
 import com.openfinova.banking.tp.service.FeeManagementService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,10 +59,13 @@ public class FeeManagementController {
 
     private final FeeManagementService feeManagementService;
     private final FeeRuleMapper feeRuleMapper;
+    private final FeeWaiverMapper feeWaiverMapper;
 
-    public FeeManagementController(FeeManagementService feeManagementService, FeeRuleMapper feeRuleMapper) {
+    public FeeManagementController(FeeManagementService feeManagementService, FeeRuleMapper feeRuleMapper,
+            FeeWaiverMapper feeWaiverMapper) {
         this.feeManagementService = feeManagementService;
         this.feeRuleMapper = feeRuleMapper;
+        this.feeWaiverMapper = feeWaiverMapper;
     }
 
     @GetMapping("/rules")
@@ -154,25 +160,17 @@ public class FeeManagementController {
     @Operation(summary = "Create fee waiver", description = "Creates a new fee waiver for a customer")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Fee waiver created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid waiver data") })
-    public ResponseEntity<FeeWaiverResponse> createFeeWaiver(@Valid @RequestBody CreateFeeWaiverRequest request) {
+    public ResponseEntity<FeeWaiverResponse> createFeeWaiver(@Valid @RequestBody CreateFeeWaiverRequest request,
+            Authentication authentication) {
 
         log.info("Creating fee waiver for customer: {}", request.getCustomerId());
 
-        FeeWaiver waiver = new FeeWaiver();
-        waiver.setAccountId(request.getCustomerId());
-        waiver.setWaiverName(request.getReason());
-        waiver.setCreatedBy("API");
-
-        FeeWaiver created = feeManagementService.createFeeWaiver(waiver);
+        String actor = BankingPrincipal.from(authentication).username();
+        FeeWaiver created = feeManagementService.createFeeWaiver(feeWaiverMapper.toEntity(request, actor));
 
         log.info("Successfully created fee waiver with ID: {}", created.getId());
 
-        FeeWaiverResponse response = new FeeWaiverResponse();
-        response.setId(created.getId());
-        response.setCustomerId(created.getAccountId());
-        response.setReason(created.getWaiverName());
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(feeWaiverMapper.toResponse(created));
     }
 
     @GetMapping("/waivers/customer/{customerId}")
@@ -188,13 +186,7 @@ public class FeeManagementController {
 
         log.info("Found {} active fee waivers for customer: {}", waivers.size(), customerId);
 
-        List<FeeWaiverResponse> responses = waivers.stream().map(w -> {
-            FeeWaiverResponse r = new FeeWaiverResponse();
-            r.setId(w.getId());
-            r.setCustomerId(w.getAccountId());
-            r.setReason(w.getWaiverName());
-            return r;
-        }).toList();
+        List<FeeWaiverResponse> responses = waivers.stream().map(feeWaiverMapper::toResponse).toList();
 
         return ResponseEntity.ok(responses);
     }

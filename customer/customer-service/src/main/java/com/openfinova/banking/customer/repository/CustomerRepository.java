@@ -259,7 +259,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
      *
      * @param q token for LIKE match on textual fields (never null; use "" only when unused)
      * @param status optional status filter
-     * @param idMatch optional parsed UUID when {@code q} is a valid UUID string
+     * @param idMatch optional parsed UUID when {@code q} is a valid UUID string (matches {@code Customer#id} or
+     *            {@code Customer#linkedIdentityUserId})
      */
     @Query("""
             SELECT DISTINCT c FROM Customer c
@@ -289,6 +290,7 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
                     )
                 )
                 OR (:idMatch IS NOT NULL AND c.id = :idMatch)
+                OR (:idMatch IS NOT NULL AND c.linkedIdentityUserId = :idMatch)
             )
             """)
     Page<Customer> searchCustomers(@Param("q") String q, @Param("status") CustomerStatus status,

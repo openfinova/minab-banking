@@ -98,7 +98,8 @@ public class AccountService {
     }
 
     /**
-     * Creates a new customer account.
+     * Creates a new customer account and a {@link RelationshipType#PRIMARY_HOLDER} relationship for
+     * {@code primaryUserProfileId} so holder lists stay aligned with the account record.
      *
      * @param primaryUserProfileId the unique identifier of the primary user
      * @param productType the product type of the account
@@ -127,6 +128,19 @@ public class AccountService {
 
         Account savedAccount = accountRepository.save(account);
         logger.info("Account created successfully: {}", savedAccount.getAccountNumber());
+
+        AccountRelationship primaryHolder = new AccountRelationship(
+                savedAccount,
+                primaryUserProfileId,
+                RelationshipType.PRIMARY_HOLDER,
+                createdBy);
+        primaryHolder.setStatus(RelationshipStatus.ACTIVE);
+        accountRelationshipRepository.save(primaryHolder);
+        logger.info(
+                "Created PRIMARY_HOLDER relationship for account {} and user profile {}",
+                savedAccount.getId(),
+                primaryUserProfileId);
+
         return savedAccount;
     }
 

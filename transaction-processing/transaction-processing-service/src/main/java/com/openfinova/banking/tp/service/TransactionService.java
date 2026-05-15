@@ -1,16 +1,24 @@
 package com.openfinova.banking.tp.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +47,7 @@ import com.openfinova.banking.tp.entity.TransactionRequest;
 import com.openfinova.banking.tp.mapper.TransactionMapper;
 import com.openfinova.banking.tp.repository.TransactionRepository;
 import com.openfinova.banking.tp.repository.TransactionRequestRepository;
+import com.openfinova.banking.tp.repository.TransactionSpecifications;
 
 /**
  * Implementation of TransactionService with comprehensive lifecycle management,
@@ -425,8 +434,46 @@ public class TransactionService {
         return transaction.getEvents();
     }
 
+    /**
+     * Resolves an existing transaction by idempotency key (external facade / idempotency helpers).
+     */
+    @Transactional(readOnly = true)
     public Optional<Transaction> findExistingTransaction(String idempotencyKey) {
         return transactionRepository.findByTransactionKey(idempotencyKey);
+    }
+
+    /**
+     * Paginated admin search across TP transactions with optional filters.
+     */
+    @Transactional(readOnly = true)
+    public Page<TransactionResponse> searchTransactions(UUID accountId, TransactionStatus status,
+            TransactionType transactionType, LocalDate fromTransactionDate, LocalDate toTransactionDate,
+            String currency, BigDecimal minAmount, BigDecimal maxAmount, String referenceContains, Pageable pageable) {
+
+        Specification<Transaction> spec = TransactionSpecifications.adminSearch(
+                accountId,
+                status,
+                transactionType,
+                fromTransactionDate,
+                toTransactionDate,
+                currency,
+                minAmount,
+                maxAmount,
+                referenceContains);
+
+        Page<Transaction> page = transactionRepository.findAll(spec, pageable);
+        List<UUID> ids = page.getContent().stream().map(Transaction::getId).toList();
+        if (ids.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, page.getTotalElements());
+        }
+
+        Map<UUID, Transaction> byId = transactionRepository.findByIdInWithAllRelations(ids).stream()
+                .collect(Collectors.toMap(Transaction::getId, Function.identity()));
+
+        List<TransactionResponse> content = ids.stream().map(byId::get).filter(Objects::nonNull)
+                .map(transactionMapper::toResponse).toList();
+
+        return new PageImpl<>(content, pageable, page.getTotalElements());
     }
 
     public boolean isTransactionDuplicate(TransactionRequest request) {
