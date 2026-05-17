@@ -314,11 +314,12 @@ public class AccountRelationshipService {
      *
      * @param accountId the unique identifier of the account
      * @param request the request containing beneficiary details
+     * @param createdBy the user or system establishing the relationship
      * @return the newly created beneficiary relationship entity
      * @throws EntityNotFoundException if the account is not found
      * @throws IllegalArgumentException if required parameters are missing
      */
-    public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request) {
+    public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request, String createdBy) {
         logger.debug(
                 "Adding beneficiary to account {}: userProfileId={}, percentage={}",
                 accountId,
@@ -336,7 +337,7 @@ public class AccountRelationshipService {
         if (request.getPercentage() == null) {
             throw new IllegalArgumentException("Beneficiary percentage is required");
         }
-        if (request.getCreatedBy() == null || request.getCreatedBy().isBlank()) {
+        if (createdBy == null || createdBy.isBlank()) {
             throw new IllegalArgumentException("Created by is required");
         }
 
@@ -345,7 +346,7 @@ public class AccountRelationshipService {
                 account,
                 request.getUserProfileId(),
                 RelationshipType.BENEFICIARY,
-                request.getCreatedBy());
+                createdBy);
         relationship.setStatus(RelationshipStatus.ACTIVE);
         relationship.setBeneficiary(request.getPercentage());
 

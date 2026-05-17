@@ -71,33 +71,6 @@ public class SuspenseAccountService {
         this.operationalGLAccountService = operationalGLAccountService;
     }
 
-    /**
-     * Create a new suspense item.
-     * Typically called internally from Transaction Processing module.
-     */
-    public SuspenseItemResponse createSuspenseItem(CreateSuspenseItemRequest request) {
-        logger.info("Creating suspense item for GL transaction: {}", request.getGlTransactionId());
-
-        GLTransaction glTransaction = transactionService.getTransactionById(request.getGlTransactionId()).orElseThrow(
-                () -> new IllegalArgumentException("GL Transaction not found: " + request.getGlTransactionId()));
-
-        SuspenseItem item = new SuspenseItem();
-        item.setGlTransaction(glTransaction);
-        item.setAmount(request.getAmount());
-        item.setCurrency(request.getCurrency());
-        item.setStatus(SuspenseStatus.PENDING);
-        item.setReasonCode(request.getReasonCode());
-        item.setDescription(request.getDescription());
-        item.setSourceSystem(request.getSourceSystem());
-        item.setExternalReference(request.getExternalReference());
-        item.setPostingDate(LocalDate.now());
-        item.setCreatedBy(request.getCreatedBy() != null ? request.getCreatedBy() : SYSTEM_USER);
-
-        SuspenseItem saved = suspenseItemRepository.save(item);
-        logger.info("Created suspense item: {}", saved.getId());
-
-        return mapper.toSuspenseItemResponse(saved);
-    }
 
     /**
      * Clear a suspense item to the target account.

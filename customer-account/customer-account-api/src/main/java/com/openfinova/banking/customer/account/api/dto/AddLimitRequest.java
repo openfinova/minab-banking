@@ -3,7 +3,6 @@ package com.openfinova.banking.customer.account.api.dto;
 import com.openfinova.banking.customer.account.api.entity.LimitPeriod;
 import com.openfinova.banking.customer.account.api.entity.LimitType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
@@ -24,10 +23,6 @@ public class AddLimitRequest {
 
     @Schema(description = "Maximum transaction count")
     private Integer maxCount;
-
-    @NotBlank(message = "Created by is required")
-    @Schema(description = "User creating the limit", required = true)
-    private String createdBy;
 
     // Getters and setters
     public LimitType getLimitType() {
@@ -60,13 +55,5 @@ public class AddLimitRequest {
 
     public void setMaxCount(Integer maxCount) {
         this.maxCount = maxCount;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
     }
 }

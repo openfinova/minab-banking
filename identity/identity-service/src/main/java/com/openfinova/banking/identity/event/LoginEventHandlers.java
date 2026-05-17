@@ -2,13 +2,17 @@ package com.openfinova.banking.identity.event;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
@@ -179,8 +183,17 @@ public class LoginEventHandlers {
                 userRepository.save(user);
             });
             UserDetails reloaded = userDetailsService.loadUserByUsername(username);
+            Set<GrantedAuthority> mergedAuthorities = new LinkedHashSet<>(reloaded.getAuthorities());
+            for (GrantedAuthority ga : authentication.getAuthorities()) {
+                // Preserve FactorGrantedAuthority added by DaoAuthenticationProvider; SAS 7's
+                // JwtGenerator.getAuthenticationTime reads it to populate the OIDC auth_time claim
+                // and asserts non-null, so dropping it here breaks ID token issuance.
+                if (ga instanceof FactorGrantedAuthority) {
+                    mergedAuthorities.add(ga);
+                }
+            }
             UsernamePasswordAuthenticationToken refreshed = UsernamePasswordAuthenticationToken
-                    .authenticated(reloaded, null, reloaded.getAuthorities());
+                    .authenticated(reloaded, null, mergedAuthorities);
             refreshed.setDetails(authentication.getDetails());
             SecurityContextHolder.getContext().setAuthentication(refreshed);
             return refreshed;

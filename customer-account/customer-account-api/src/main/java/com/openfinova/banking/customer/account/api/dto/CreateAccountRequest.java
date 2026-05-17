@@ -31,10 +31,6 @@ public class CreateAccountRequest {
     @Schema(description = "Domestic account number, must match account.number.regex", required = true, example = "CHK0001ABCD12")
     private String accountNumber;
 
-    @NotBlank(message = "Created by is required")
-    @Schema(description = "User creating the account", required = true)
-    private String createdBy;
-
     // Getters and setters
     public UUID getPrimaryUserProfileId() {
         return primaryUserProfileId;
@@ -66,13 +62,5 @@ public class CreateAccountRequest {
 
     public void setAccountNumber(String accountNumber) {
         this.accountNumber = accountNumber;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
     }
 }

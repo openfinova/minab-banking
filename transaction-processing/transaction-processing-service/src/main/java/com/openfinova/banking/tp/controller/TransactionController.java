@@ -9,6 +9,7 @@ import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import com.openfinova.banking.tp.api.entity.TransactionType;
 import com.openfinova.banking.tp.mapper.TransactionMapper;
 import com.openfinova.banking.tp.service.TransactionService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -27,6 +28,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -70,7 +72,10 @@ public class TransactionController {
             @ApiResponse(responseCode = "201", description = "Transaction initiated successfully", content = @Content(schema = @Schema(implementation = TransactionResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid transaction request"),
             @ApiResponse(responseCode = "409", description = "Duplicate transaction (idempotency key already exists)") })
-    public ResponseEntity<TransactionResponse> initiateTransaction(@Valid @RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> initiateTransaction(Authentication authentication,
+            @Valid @RequestBody TransactionRequest request) {
+
+        request.setCreatedBy(CallerContextResolver.resolveUsername(authentication));
 
         log.info(
                 "Initiating transaction: type={}, amount={}, idempotencyKey={}",
@@ -186,16 +191,15 @@ public class TransactionController {
             @ApiResponse(responseCode = "400", description = "Invalid refund request"),
             @ApiResponse(responseCode = "404", description = "Original transaction not found"),
             @ApiResponse(responseCode = "409", description = "Transaction already fully refunded or not refundable") })
-    public ResponseEntity<TransactionResponse> initiateFullRefund(
+    public ResponseEntity<TransactionResponse> initiateFullRefund(Authentication authentication,
             @Parameter(description = "Original transaction ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody RefundRequest request) {
 
         log.info("Initiating full refund for transaction: {}", id);
 
-        Transaction refundTransaction = transactionService.initiateFullRefund(
-                id,
-                request.getReason(),
-                request.getInitiatedBy() != null ? request.getInitiatedBy() : "CUSTOMER");
+        String initiatedBy = CallerContextResolver.resolveUsername(authentication);
+
+        Transaction refundTransaction = transactionService.initiateFullRefund(id, request.getReason(), initiatedBy);
 
         log.info("Successfully initiated full refund with transaction ID: {}", refundTransaction.getId());
 
@@ -210,7 +214,7 @@ public class TransactionController {
             @ApiResponse(responseCode = "400", description = "Invalid refund request or amount exceeds refundable amount"),
             @ApiResponse(responseCode = "404", description = "Original transaction not found"),
             @ApiResponse(responseCode = "409", description = "Transaction not refundable") })
-    public ResponseEntity<TransactionResponse> initiatePartialRefund(
+    public ResponseEntity<TransactionResponse> initiatePartialRefund(Authentication authentication,
             @Parameter(description = "Original transaction ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody RefundRequest request) {
 
@@ -220,11 +224,10 @@ public class TransactionController {
             return ResponseEntity.badRequest().build();
         }
 
-        Transaction refundTransaction = transactionService.initiatePartialRefund(
-                id,
-                request.getRefundAmount(),
-                request.getReason(),
-                request.getInitiatedBy() != null ? request.getInitiatedBy() : "CUSTOMER");
+        String initiatedBy = CallerContextResolver.resolveUsername(authentication);
+
+        Transaction refundTransaction = transactionService
+                .initiatePartialRefund(id, request.getRefundAmount(), request.getReason(), initiatedBy);
 
         log.info("Successfully initiated partial refund with transaction ID: {}", refundTransaction.getId());
 

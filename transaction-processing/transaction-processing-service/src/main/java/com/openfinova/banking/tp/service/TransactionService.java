@@ -67,7 +67,6 @@ public class TransactionService {
     private final GeneralLedgerService generalLedgerService;
     private final ExchangeRateService exchangeRateService;
     private final CustomerAccountService customerAccountService;
-    private final CustomerInfoService customerInfoService;
     private final CompensationWorkflowService compensationWorkflowService;
     private final DateTimeService dateTimeService;
     private final TransactionMapper transactionMapper;
@@ -87,7 +86,6 @@ public class TransactionService {
         this.generalLedgerService = generalLedgerService;
         this.exchangeRateService = exchangeRateService;
         this.customerAccountService = customerAccountService;
-        this.customerInfoService = customerInfoService;
         this.compensationWorkflowService = compensationWorkflowService;
         this.dateTimeService = dateTimeService;
         this.transactionMapper = transactionMapper;
@@ -1777,6 +1775,7 @@ public class TransactionService {
         metadata.put("originalAmount", originalTransaction.getTotalAmount());
         metadata.put("transactionType", "REFUND");
         refundRequest.setMetadata(metadata);
+        refundRequest.setCreatedBy(initiatedBy != null && !initiatedBy.isBlank() ? initiatedBy : "SYSTEM");
 
         // Initiate the refund transaction
         Transaction refundTransaction = initiateTransaction(refundRequest);

@@ -12,6 +12,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -30,6 +31,7 @@ import com.openfinova.banking.customer.dto.CustomerResponse;
 import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.mapper.CustomerMapper;
 import com.openfinova.banking.customer.service.CustomerService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -135,10 +137,11 @@ public class CustomerController {
     @Operation(summary = "Update customer profile", description = "Updates customer profile information with audit trail")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Profile updated successfully"),
             @ApiResponse(responseCode = "404", description = "Customer not found") })
-    public ResponseEntity<CustomerResponse> updateCustomerProfile(
+    public ResponseEntity<CustomerResponse> updateCustomerProfile(Authentication authentication,
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID id,
-            @Valid @RequestBody CustomerProfileUpdate profileUpdate,
-            @Parameter(description = "User performing the update") @RequestParam String updatedBy) {
+            @Valid @RequestBody CustomerProfileUpdate profileUpdate) {
+
+        String updatedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Updating customer profile: {}, updatedBy: {}", id, updatedBy);
 

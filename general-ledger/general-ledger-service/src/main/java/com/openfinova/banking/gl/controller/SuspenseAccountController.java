@@ -6,9 +6,9 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,12 +19,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.openfinova.banking.gl.dto.ClearSuspenseRequest;
-import com.openfinova.banking.gl.dto.CreateSuspenseItemRequest;
 import com.openfinova.banking.gl.dto.SuspenseAgingReportDTO;
 import com.openfinova.banking.gl.dto.SuspenseItemFilterDTO;
 import com.openfinova.banking.gl.dto.SuspenseItemResponse;
 import com.openfinova.banking.gl.entity.SuspenseEscalation;
 import com.openfinova.banking.gl.service.SuspenseAccountService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -77,20 +77,6 @@ public class SuspenseAccountController {
             Pageable pageable) {
         Page<SuspenseItemResponse> items = suspenseAccountService.findSuspenseItems(filter, pageable);
         return ResponseEntity.ok(items);
-    }
-
-    /**
-     * Create a new suspense item.
-     * Typically called internally from Transaction Processing module.
-     */
-    @PostMapping
-    @PreAuthorize("hasAuthority('gl:post')")
-    @Operation(summary = "Create suspense item", description = "Create a new suspense item for a GL transaction")
-    public ResponseEntity<SuspenseItemResponse> createSuspenseItem(
-            @Valid @RequestBody CreateSuspenseItemRequest request) {
-        // TODO: Add authorization check - only allow internal service calls
-        SuspenseItemResponse response = suspenseAccountService.createSuspenseItem(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
@@ -199,11 +185,10 @@ public class SuspenseAccountController {
     @PostMapping("/escalations/{escalationId}/resolve")
     @PreAuthorize("hasAuthority('gl:approve')")
     @Operation(summary = "Resolve escalation", description = "Mark an escalation as resolved")
-    public ResponseEntity<Void> resolveEscalation(
+    public ResponseEntity<Void> resolveEscalation(Authentication authentication,
             @Parameter(description = "Escalation ID") @PathVariable UUID escalationId,
-            @Parameter(description = "User resolving the escalation") @RequestParam String resolvedBy,
             @Parameter(description = "Resolution notes") @RequestParam String resolutionNotes) {
-        // TODO: Add authorization check
+        String resolvedBy = CallerContextResolver.resolveUsername(authentication);
         suspenseAccountService.resolveEscalation(escalationId, resolvedBy, resolutionNotes);
         return ResponseEntity.ok().build();
     }

@@ -313,6 +313,10 @@ public class UserManagementService {
             spec = spec.and((root, query, cb) -> cb.isNull(root.get("suspendedAt")));
         }
 
+        if (criteria.getCustomerPartyId() != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("customerPartyId"), criteria.getCustomerPartyId()));
+        }
+
         return userRepository.findAll(spec, pageable);
     }
 
@@ -1044,9 +1048,8 @@ public class UserManagementService {
                 }
                 String like = "%" + term + "%";
                 Predicate usernamePred = cb.like(cb.lower(root.get("username")), like);
-                Predicate emailPred = cb.and(
-                        cb.isNotNull(root.get("email")),
-                        cb.like(cb.lower(root.get("email")), like));
+                Predicate emailPred = cb
+                        .and(cb.isNotNull(root.get("email")), cb.like(cb.lower(root.get("email")), like));
                 return cb.or(usernamePred, emailPred);
             }
         };

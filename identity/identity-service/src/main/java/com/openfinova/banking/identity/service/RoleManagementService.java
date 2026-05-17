@@ -27,8 +27,8 @@ import com.openfinova.banking.identity.repository.RoleRepository;
  * Covers role creation, metadata updates, deletion, and fine-grained permission management
  * including full replacement, additive grant, and selective removal of BankingPermission
  * values. System roles seeded at startup are protected from deletion and from having their
- * permissions entirely replaced or removed. Permission-mutating operations additionally
- * require a pre-approved ROLE_PERMISSION_CHANGE workflow when enforcement is enabled,
+ * permissions entirely replaced or removed. Permission-mutating operations on non-system roles
+ * additionally require a pre-approved ROLE_PERMISSION_CHANGE workflow when enforcement is enabled,
  * implementing a change-management control. All state transitions are recorded through
  * SecurityAuditService.
  */
@@ -167,16 +167,12 @@ public class RoleManagementService {
     /**
      * Permanently deletes a custom role from the system.
      *
-     * System roles cannot be deleted. When workflow enforcement is enabled a pre-approved
-     * ROLE_PERMISSION_CHANGE workflow must exist for the role. A ROLE_DELETED audit event is
-     * recorded.
+     * System roles cannot be deleted. A ROLE_DELETED audit event is recorded.
      *
      * @param id     the UUID of the role to delete
      * @param actor  the authenticated actor performing the deletion, used for audit recording
      * @throws ResourceNotFoundException if no role exists with the given ID
      * @throws IllegalArgumentException  if the role is a system role
-     * @throws IllegalStateException     if workflow enforcement is active and no approved
-     *                                   workflow exists for this role
      */
     @Transactional
     public void deleteRole(UUID id, AuditActor actor) {
@@ -184,7 +180,6 @@ public class RoleManagementService {
         if (role.isSystemRole()) {
             throw new IllegalArgumentException("Cannot delete system role: " + role.getName());
         }
-        requireApprovedWorkflow(id);
         String roleName = role.getName();
         roleRepository.delete(role);
         auditService.recordParticipating(
@@ -240,21 +235,25 @@ public class RoleManagementService {
     /**
      * Grants additional permissions to a role without affecting existing ones.
      *
-     * Permissions already present on the role are left unchanged. When workflow enforcement is
-     * enabled a pre-approved workflow must exist for the role. A PERMISSION_ADDED audit event
-     * is recorded with a before-and-after snapshot.
+     * Permissions already present on the role are left unchanged. System roles cannot receive new
+     * permissions via this API. When workflow enforcement is enabled a pre-approved workflow must
+     * exist for the role. A PERMISSION_ADDED audit event is recorded with a before-and-after snapshot.
      *
      * @param id      the UUID of the role to grant permissions to
      * @param toAdd   the set of BankingPermission values to add
      * @param actor   the authenticated actor performing the operation, used for audit recording
      * @return the updated and persisted BankingRole entity
      * @throws ResourceNotFoundException if no role exists with the given ID
+     * @throws IllegalArgumentException  if the role is a system role
      * @throws IllegalStateException     if workflow enforcement is active and no approved
      *                                   workflow exists for this role
      */
     @Transactional
     public BankingRole addPermissions(UUID id, Set<BankingPermission> toAdd, AuditActor actor) {
         BankingRole role = getRole(id);
+        if (role.isSystemRole()) {
+            throw new IllegalArgumentException("Cannot add permissions to system role: " + role.getName());
+        }
         requireApprovedWorkflow(id);
         String prev = role.getPermissions().toString();
         role.getPermissions().addAll(toAdd);

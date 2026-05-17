@@ -10,6 +10,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +31,7 @@ import com.openfinova.banking.loan.api.entity.CollectionStatus;
 import com.openfinova.banking.loan.entity.CollectionActivity;
 import com.openfinova.banking.loan.mapper.CollectionActivityMapper;
 import com.openfinova.banking.loan.service.CollectionActivityService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -53,8 +55,12 @@ public class CollectionActivityController {
     @PostMapping
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Create a collection activity")
-    public ResponseEntity<CollectionActivityResponse> createCollectionActivity(@PathVariable UUID loanAccountId,
+    public ResponseEntity<CollectionActivityResponse> createCollectionActivity(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @Valid @RequestBody CollectionActivityRequest request) {
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         CollectionActivity created = collectionActivityService.createActivity(
                 loanAccountId,
@@ -62,7 +68,7 @@ public class CollectionActivityController {
                 request.getActivityDate(),
                 request.getNotes(),
                 request.getFollowUpDate(),
-                "TODO_CURRENT_USER");
+                createdBy);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(CollectionActivityMapper.toResponse(created));
     }
@@ -110,11 +116,15 @@ public class CollectionActivityController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Update collection activity")
-    public ResponseEntity<CollectionActivityResponse> updateActivity(@PathVariable UUID loanAccountId,
+    public ResponseEntity<CollectionActivityResponse> updateActivity(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody CollectionActivityUpdateRequest request) {
 
+        String updatedBy = CallerContextResolver.resolveUsername(authentication);
+
         CollectionActivity activity = collectionActivityService
-                .updateActivity(id, request.getNotes(), request.getFollowUpDate(), request.getUpdatedBy());
+                .updateActivity(id, request.getNotes(), request.getFollowUpDate(), updatedBy);
 
         return ResponseEntity.ok(CollectionActivityMapper.toResponse(activity));
     }
@@ -122,37 +132,49 @@ public class CollectionActivityController {
     @PostMapping("/{id}/status")
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Update activity status")
-    public ResponseEntity<CollectionActivityResponse> updateActivityStatus(@PathVariable UUID loanAccountId,
+    public ResponseEntity<CollectionActivityResponse> updateActivityStatus(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody CollectionActivityStatusUpdateRequest request) {
 
+        String updatedBy = CallerContextResolver.resolveUsername(authentication);
+
         CollectionActivity activity = collectionActivityService
-                .updateActivityStatusForLoanAccount(loanAccountId, id, request.getNewStatus(), request.getUpdatedBy());
+                .updateActivityStatusForLoanAccount(loanAccountId, id, request.getNewStatus(), updatedBy);
         return ResponseEntity.ok(CollectionActivityMapper.toResponse(activity));
     }
 
     @PostMapping("/{id}/complete")
     @PreAuthorize("hasAuthority('loan:collect:approve')")
     @Operation(summary = "Mark collection activity as complete")
-    public ResponseEntity<CollectionActivityResponse> completeActivity(@PathVariable UUID loanAccountId,
+    public ResponseEntity<CollectionActivityResponse> completeActivity(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody CollectionActivityCompleteRequest request) {
 
+        String completedBy = CallerContextResolver.resolveUsername(authentication);
+
         CollectionActivity activity = collectionActivityService
-                .completeActivity(id, request.getOutcome(), request.getCompletedBy());
+                .completeActivity(id, request.getOutcome(), completedBy);
         return ResponseEntity.ok(CollectionActivityMapper.toResponse(activity));
     }
 
     @PostMapping("/{id}/schedule-followup")
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Schedule follow-up for collection activity")
-    public ResponseEntity<CollectionActivityResponse> scheduleFollowUp(@PathVariable UUID loanAccountId,
+    public ResponseEntity<CollectionActivityResponse> scheduleFollowUp(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody CollectionActivityFollowUpRequest request) {
+
+        String scheduledBy = CallerContextResolver.resolveUsername(authentication);
 
         CollectionActivity activity = collectionActivityService.scheduleFollowUpForLoanAccount(
                 loanAccountId,
                 id,
                 request.getFollowUpDate(),
                 request.getFollowUpType(),
-                request.getScheduledBy());
+                scheduledBy);
 
         return ResponseEntity.ok(CollectionActivityMapper.toResponse(activity));
     }

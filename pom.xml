@@ -49,6 +49,7 @@
 		<module>customer-account</module>
 		<module>transaction-processing</module>
 		<module>loan</module>
+		<module>compliance</module>
 	</modules>
 
 	<dependencyManagement>
@@ -135,6 +136,16 @@
 			<dependency>
 				<groupId>com.openfinova</groupId>
 				<artifactId>loan-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>compliance-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>compliance-service</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 		<dependency>

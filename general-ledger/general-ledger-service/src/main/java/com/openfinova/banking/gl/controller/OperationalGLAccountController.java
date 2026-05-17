@@ -9,12 +9,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.openfinova.banking.gl.api.dto.ConfigureOperationalAccountRequest;
@@ -24,6 +24,7 @@ import com.openfinova.banking.gl.dto.OperationalAccountValidationResult;
 import com.openfinova.banking.gl.entity.OperationalGLConfig;
 import com.openfinova.banking.gl.mapper.OperationalGLConfigMapper;
 import com.openfinova.banking.gl.service.OperationalGLAccountService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -56,13 +57,14 @@ public class OperationalGLAccountController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Configuration created successfully", content = @Content(schema = @Schema(implementation = OperationalGLConfigResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid configuration data") })
-    public ResponseEntity<OperationalGLConfigResponse> configureOperationalAccount(
+    public ResponseEntity<OperationalGLConfigResponse> configureOperationalAccount(Authentication authentication,
             @Valid @RequestBody ConfigureOperationalAccountRequest request) {
 
         log.info("Configuring operational account: {}", request.getType());
 
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
         OperationalGLConfig config = operationalAccountService
-                .configureOperationalAccount(request.getType(), request.getGlAccountId(), request.getCreatedBy());
+                .configureOperationalAccount(request.getType(), request.getGlAccountId(), createdBy);
 
         log.info("Successfully configured operational account with ID: {}", config.getId());
 
@@ -131,9 +133,10 @@ public class OperationalGLAccountController {
     @Operation(summary = "Deactivate configuration", description = "Deactivates an operational account configuration")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Configuration deactivated successfully"),
             @ApiResponse(responseCode = "404", description = "Configuration not found") })
-    public ResponseEntity<Map<String, String>> deactivateConfiguration(
-            @Parameter(description = "Configuration ID", required = true) @PathVariable UUID configId,
-            @Parameter(description = "User deactivating the configuration", required = true) @RequestParam String deactivatedBy) {
+    public ResponseEntity<Map<String, String>> deactivateConfiguration(Authentication authentication,
+            @Parameter(description = "Configuration ID", required = true) @PathVariable UUID configId) {
+
+        String deactivatedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Deactivating configuration: {} by {}", configId, deactivatedBy);
 
@@ -149,9 +152,10 @@ public class OperationalGLAccountController {
     @Operation(summary = "Activate configuration", description = "Activates an operational account configuration")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Configuration activated successfully"),
             @ApiResponse(responseCode = "404", description = "Configuration not found") })
-    public ResponseEntity<Map<String, String>> activateConfiguration(
-            @Parameter(description = "Configuration ID", required = true) @PathVariable UUID configId,
-            @Parameter(description = "User activating the configuration", required = true) @RequestParam String activatedBy) {
+    public ResponseEntity<Map<String, String>> activateConfiguration(Authentication authentication,
+            @Parameter(description = "Configuration ID", required = true) @PathVariable UUID configId) {
+
+        String activatedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Activating configuration: {} by {}", configId, activatedBy);
 
@@ -182,8 +186,9 @@ public class OperationalGLAccountController {
     @Operation(summary = "Create standard configurations", description = "Creates standard operational account configurations")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Standard configurations created"),
             @ApiResponse(responseCode = "400", description = "Invalid request") })
-    public ResponseEntity<Map<String, Object>> createStandardOperationalAccounts(
-            @Parameter(description = "User creating the configurations", required = true) @RequestParam String createdBy) {
+    public ResponseEntity<Map<String, Object>> createStandardOperationalAccounts(Authentication authentication) {
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Creating standard operational accounts by {}", createdBy);
 

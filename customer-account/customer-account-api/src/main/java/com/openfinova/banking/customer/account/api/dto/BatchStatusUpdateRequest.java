@@ -24,10 +24,6 @@ public class BatchStatusUpdateRequest {
     @Schema(description = "Reason for status change", required = true)
     private String reason;
 
-    @NotBlank(message = "Changed by is required")
-    @Schema(description = "User making the change", required = true)
-    private String changedBy;
-
     // Getters and setters
     public List<UUID> getAccountIds() {
         return accountIds;
@@ -51,13 +47,5 @@ public class BatchStatusUpdateRequest {
 
     public void setReason(String reason) {
         this.reason = reason;
-    }
-
-    public String getChangedBy() {
-        return changedBy;
-    }
-
-    public void setChangedBy(String changedBy) {
-        this.changedBy = changedBy;
     }
 }

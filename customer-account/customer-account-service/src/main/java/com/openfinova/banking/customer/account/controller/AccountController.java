@@ -7,6 +7,7 @@ import com.openfinova.banking.customer.account.mapper.AccountMapper;
 import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountSearchCriteria;
 import com.openfinova.banking.customer.account.service.AccountService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,6 +24,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -55,16 +57,19 @@ public class AccountController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Account created successfully", content = @Content(schema = @Schema(implementation = AccountResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid input data") })
-    public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
+    public ResponseEntity<AccountResponse> createAccount(Authentication authentication,
+            @Valid @RequestBody CreateAccountRequest request) {
 
         log.info("Creating account for user: {}", request.getPrimaryUserProfileId());
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         Account account = accountService.createAccount(
                 request.getPrimaryUserProfileId(),
                 request.getProductType(),
                 request.getCurrency(),
                 request.getAccountNumber(),
-                request.getCreatedBy());
+                createdBy);
 
         log.info("Successfully created account with ID: {}", account.getId());
 
@@ -182,11 +187,12 @@ public class AccountController {
             @ApiResponse(responseCode = "404", description = "Account not found") })
     public ResponseEntity<AccountResponse> updateAccountStatus(
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
-            @Valid @RequestBody UpdateAccountStatusRequest request) {
+            Authentication authentication, @Valid @RequestBody UpdateAccountStatusRequest request) {
 
-        log.info("Updating status of account {} to {}", id, request.getNewStatus());
+        String actor = authentication != null ? authentication.getName() : "system";
+        log.info("Updating status of account {} to {} by {}", id, request.getNewStatus(), actor);
 
-        accountService.updateAccountStatus(id, request.getNewStatus(), request.getReason(), request.getChangedBy());
+        accountService.updateAccountStatus(id, request.getNewStatus(), request.getReason(), actor);
 
         return accountService.getAccountById(id).map(account -> {
             log.info("Successfully updated status of account: {}", account.getAccountNumber());
@@ -238,15 +244,14 @@ public class AccountController {
     @PreAuthorize("hasAuthority('account:write')")
     @Operation(summary = "Batch update account status", description = "Updates status for multiple accounts")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Batch update completed") })
-    public ResponseEntity<Map<UUID, String>> batchUpdateStatus(@Valid @RequestBody BatchStatusUpdateRequest request) {
+    public ResponseEntity<Map<UUID, String>> batchUpdateStatus(@Valid @RequestBody BatchStatusUpdateRequest request,
+            Authentication authentication) {
 
-        log.info("Batch updating status for {} accounts", request.getAccountIds().size());
+        String actor = authentication != null ? authentication.getName() : "system";
+        log.info("Batch updating status for {} accounts by {}", request.getAccountIds().size(), actor);
 
-        Map<UUID, String> results = accountService.batchUpdateAccountStatus(
-                request.getAccountIds(),
-                request.getNewStatus(),
-                request.getReason(),
-                request.getChangedBy());
+        Map<UUID, String> results = accountService
+                .batchUpdateAccountStatus(request.getAccountIds(), request.getNewStatus(), request.getReason(), actor);
 
         long successCount = results.values().stream().filter(r -> r.equals("SUCCESS")).count();
         log.info(
@@ -261,12 +266,14 @@ public class AccountController {
     @PreAuthorize("hasAuthority('account:write')")
     @Operation(summary = "Batch close accounts", description = "Closes multiple accounts")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Batch close completed") })
-    public ResponseEntity<Map<UUID, String>> batchCloseAccounts(@Valid @RequestBody BatchCloseAccountsRequest request) {
+    public ResponseEntity<Map<UUID, String>> batchCloseAccounts(@Valid @RequestBody BatchCloseAccountsRequest request,
+            Authentication authentication) {
 
-        log.info("Batch closing {} accounts", request.getAccountIds().size());
+        String actor = authentication != null ? authentication.getName() : "system";
+        log.info("Batch closing {} accounts by {}", request.getAccountIds().size(), actor);
 
         Map<UUID, String> results = accountService
-                .batchCloseAccounts(request.getAccountIds(), request.getReason(), request.getClosedBy());
+                .batchCloseAccounts(request.getAccountIds(), request.getReason(), actor);
 
         long successCount = results.values().stream().filter(r -> r.equals("SUCCESS")).count();
         log.info("Batch close completed: {} successful, {} failed", successCount, results.size() - successCount);

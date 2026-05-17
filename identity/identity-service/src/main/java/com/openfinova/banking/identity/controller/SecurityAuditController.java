@@ -1,6 +1,7 @@
 package com.openfinova.banking.identity.controller;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +42,12 @@ public class SecurityAuditController {
     public SecurityAuditController(SecurityAuditService auditService, UserManagementService userManagementService) {
         this.auditService = auditService;
         this.userManagementService = userManagementService;
+    }
+
+    @GetMapping("/event-types")
+    @Operation(summary = "Security audit event type literals for filters")
+    public List<String> listSecurityAuditEventTypes() {
+        return Arrays.stream(SecurityAuditEventType.values()).map(Enum::name).toList();
     }
 
     @GetMapping("/suggestions/users")

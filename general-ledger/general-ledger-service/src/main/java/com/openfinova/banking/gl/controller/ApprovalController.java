@@ -11,15 +11,20 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openfinova.banking.gl.api.dto.GlApproveTransactionRequest;
+import com.openfinova.banking.gl.api.dto.GlRejectTransactionRequest;
 import com.openfinova.banking.gl.api.entity.GLApprovalRole;
 import com.openfinova.banking.gl.dto.ApprovalResponse;
 import com.openfinova.banking.gl.dto.AuthorizationLimitResponse;
 import com.openfinova.banking.gl.dto.CanApproveResponse;
 import com.openfinova.banking.gl.dto.PendingApprovalResponse;
 import com.openfinova.banking.gl.service.ApprovalService;
+import com.openfinova.banking.gl.service.GLTransactionService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -29,6 +34,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 
 /**
  * REST controller for GL transaction approval workflow operations.
@@ -49,9 +56,11 @@ public class ApprovalController {
     private static final String CLAIM_GL_APPROVAL_ROLE = "gl_approval_role";
 
     private final ApprovalService approvalService;
+    private final GLTransactionService glTransactionService;
 
-    public ApprovalController(ApprovalService approvalService) {
+    public ApprovalController(ApprovalService approvalService, GLTransactionService glTransactionService) {
         this.approvalService = approvalService;
+        this.glTransactionService = glTransactionService;
     }
 
     @GetMapping("/my-queue")
@@ -103,6 +112,47 @@ public class ApprovalController {
         log.info("GET /api/gl/approvals/{}/can-approve  user={} role={}", transactionId, username, role);
         return approvalService.checkCanApprove(transactionId, username, role).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{transactionId}/approve")
+    @Operation(summary = "Approve pending GL transaction", description = "Records your approval. "
+            + "When all required approval levels are satisfied, the transaction is posted. "
+            + "Approver identity comes from the JWT — not the request body.")
+    public ResponseEntity<java.util.Map<String, Object>> approveTransaction(
+            @Parameter(description = "GL transaction id", required = true) @PathVariable UUID transactionId,
+            Authentication auth, HttpServletRequest httpRequest,
+            @RequestBody(required = false) @Valid GlApproveTransactionRequest body) {
+        String username = auth.getName();
+        GLApprovalRole role = resolveGlRole(auth);
+        String comments = body != null ? body.getComments() : null;
+        String ip = clientIp(httpRequest);
+        boolean posted = glTransactionService.approveAndPostTransaction(transactionId, username, role, comments, ip);
+        java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("posted", posted);
+        payload.put("transactionId", transactionId);
+        return ResponseEntity.ok(payload);
+    }
+
+    @PostMapping("/{transactionId}/reject")
+    @Operation(summary = "Reject pending GL transaction", description = "Rejects the transaction so it will not post. "
+            + "Rejecter identity comes from the JWT — not spoofable via the body (only the reason is supplied).")
+    public ResponseEntity<java.util.Map<String, Object>> rejectTransaction(
+            @Parameter(description = "GL transaction id", required = true) @PathVariable UUID transactionId,
+            Authentication auth, HttpServletRequest httpRequest, @Valid @RequestBody GlRejectTransactionRequest body) {
+        String username = auth.getName();
+        GLApprovalRole role = resolveGlRole(auth);
+        String ip = clientIp(httpRequest);
+        glTransactionService.rejectTransaction(transactionId, username, role, body.getReason(), ip);
+        return ResponseEntity.ok(java.util.Map.of("rejected", true, "transactionId", transactionId));
+    }
+
+    private static String clientIp(HttpServletRequest req) {
+        String forwarded = req.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            int comma = forwarded.indexOf(',');
+            return comma > 0 ? forwarded.substring(0, comma).trim() : forwarded.trim();
+        }
+        return req.getRemoteAddr();
     }
 
     /**

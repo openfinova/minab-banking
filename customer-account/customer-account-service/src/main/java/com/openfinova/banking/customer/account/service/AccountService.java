@@ -619,14 +619,15 @@ public class AccountService {
      *
      * @param accountId the unique identifier of the account
      * @param request the details of the beneficiary
+     * @param createdBy the user or system creating the beneficiary relationship
      * @return the newly created relationship entity
      */
-    public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request) {
+    public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request, String createdBy) {
         return addAccountRelationship(
                 accountId,
                 request.getUserProfileId(),
                 RelationshipType.BENEFICIARY,
-                request.getCreatedBy());
+                createdBy);
     }
 
     /**

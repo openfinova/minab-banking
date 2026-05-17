@@ -4,6 +4,7 @@ import com.openfinova.banking.customer.api.entity.CustomerRelationshipType;
 import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.entity.CustomerRelationship;
 import com.openfinova.banking.customer.service.CustomerService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,11 +47,12 @@ public class CustomerRelationshipController {
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Relationship created successfully"),
             @ApiResponse(responseCode = "404", description = "Customer not found"),
             @ApiResponse(responseCode = "409", description = "Relationship already exists") })
-    public ResponseEntity<CustomerRelationship> createCustomerRelationship(
+    public ResponseEntity<CustomerRelationship> createCustomerRelationship(Authentication authentication,
             @Parameter(description = "Primary customer ID", required = true) @PathVariable UUID customerId,
             @Parameter(description = "Related customer ID") @RequestParam UUID relatedCustomerId,
-            @Parameter(description = "Relationship type") @RequestParam CustomerRelationshipType relationshipType,
-            @Parameter(description = "User creating the relationship") @RequestParam String createdBy) {
+            @Parameter(description = "Relationship type") @RequestParam CustomerRelationshipType relationshipType) {
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info(
                 "Creating relationship: primary={}, related={}, type={}, createdBy={}",
@@ -105,10 +108,11 @@ public class CustomerRelationshipController {
     @Operation(summary = "Remove customer relationship", description = "Removes a relationship between customers")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Relationship removed successfully"),
             @ApiResponse(responseCode = "404", description = "Relationship not found") })
-    public ResponseEntity<Void> removeCustomerRelationship(
+    public ResponseEntity<Void> removeCustomerRelationship(Authentication authentication,
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
-            @Parameter(description = "Relationship ID", required = true) @PathVariable UUID relationshipId,
-            @Parameter(description = "User removing the relationship") @RequestParam String removedBy) {
+            @Parameter(description = "Relationship ID", required = true) @PathVariable UUID relationshipId) {
+
+        String removedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Removing relationship: {}, removedBy: {}", relationshipId, removedBy);
 

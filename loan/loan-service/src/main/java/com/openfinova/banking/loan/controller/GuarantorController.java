@@ -5,6 +5,7 @@ import com.openfinova.banking.loan.api.entity.GuarantorStatus;
 import com.openfinova.banking.loan.entity.Guarantor;
 import com.openfinova.banking.loan.mapper.GuarantorMapper;
 import com.openfinova.banking.loan.service.GuarantorService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -33,7 +35,9 @@ public class GuarantorController {
 
     @PostMapping
     @Operation(summary = "Add a guarantor to a loan account")
-    public ResponseEntity<GuarantorResponse> addGuarantor(@PathVariable UUID loanAccountId,
+    public ResponseEntity<GuarantorResponse> addGuarantor(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @Valid @RequestBody GuarantorRequest request) {
 
         Guarantor guarantor = new Guarantor();
@@ -42,11 +46,9 @@ public class GuarantorController {
         guarantor.setGuaranteedAmount(request.getGuaranteedAmount());
         guarantor.setRemarks(request.getRemarks());
 
-        Guarantor created = guarantorService.addGuarantor(
-                loanAccountId,
-                guarantor,
-                request.getAddedBy() != null && !request.getAddedBy().isBlank() ? request.getAddedBy()
-                        : "TODO_CURRENT_USER");
+        String addedBy = CallerContextResolver.resolveUsername(authentication);
+
+        Guarantor created = guarantorService.addGuarantor(loanAccountId, guarantor, addedBy);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(GuarantorMapper.toResponse(created));
     }
@@ -80,38 +82,50 @@ public class GuarantorController {
 
     @PostMapping("/{id}/verify")
     @Operation(summary = "Verify a guarantor")
-    public ResponseEntity<GuarantorResponse> verifyGuarantor(@PathVariable UUID loanAccountId, @PathVariable UUID id,
+    public ResponseEntity<GuarantorResponse> verifyGuarantor(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
             @Valid @RequestBody GuarantorVerificationRequest request) {
 
-        Guarantor guarantor = guarantorService.verifyGuarantor(loanAccountId, id, "TODO_CURRENT_USER");
+        String verifiedBy = CallerContextResolver.resolveUsername(authentication);
+
+        Guarantor guarantor = guarantorService.verifyGuarantor(loanAccountId, id, verifiedBy);
         return ResponseEntity.ok(GuarantorMapper.toResponse(guarantor));
     }
 
     @PostMapping("/{id}/status")
     @Operation(summary = "Update guarantor status")
-    public ResponseEntity<GuarantorResponse> updateGuarantorStatus(@PathVariable UUID loanAccountId,
+    public ResponseEntity<GuarantorResponse> updateGuarantorStatus(
+            Authentication authentication,
+            @PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody GuarantorStatusUpdateRequest request) {
 
+        String updatedBy = CallerContextResolver.resolveUsername(authentication);
+
         Guarantor guarantor = guarantorService
-                .updateGuarantorStatus(loanAccountId, id, request.getNewStatus(), request.getUpdatedBy());
+                .updateGuarantorStatus(loanAccountId, id, request.getNewStatus(), updatedBy);
         return ResponseEntity.ok(GuarantorMapper.toResponse(guarantor));
     }
 
     @PostMapping("/{id}/release")
     @Operation(summary = "Release a guarantor from loan")
-    public ResponseEntity<GuarantorResponse> releaseGuarantor(@PathVariable UUID loanAccountId, @PathVariable UUID id,
+    public ResponseEntity<GuarantorResponse> releaseGuarantor(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
             @Valid @RequestBody GuarantorReleaseRequest request) {
 
-        Guarantor guarantor = guarantorService.releaseGuarantor(loanAccountId, id, request.getReleasedBy());
+        String releasedBy = CallerContextResolver.resolveUsername(authentication);
+
+        Guarantor guarantor = guarantorService.releaseGuarantor(loanAccountId, id, releasedBy);
         return ResponseEntity.ok(GuarantorMapper.toResponse(guarantor));
     }
 
     @PostMapping("/{id}/remove")
     @Operation(summary = "Remove a guarantor from loan")
-    public ResponseEntity<Void> removeGuarantor(@PathVariable UUID loanAccountId, @PathVariable UUID id,
-            @Valid @RequestBody GuarantorRemovalRequest request) {
+    public ResponseEntity<Void> removeGuarantor(Authentication authentication, @PathVariable UUID loanAccountId,
+            @PathVariable UUID id, @Valid @RequestBody GuarantorRemovalRequest request) {
 
-        guarantorService.removeGuarantor(loanAccountId, id, request.getRemovalReason(), request.getRemovedBy());
+        String removedBy = CallerContextResolver.resolveUsername(authentication);
+
+        guarantorService.removeGuarantor(loanAccountId, id, request.getRemovalReason(), removedBy);
         return ResponseEntity.noContent().build();
     }
 

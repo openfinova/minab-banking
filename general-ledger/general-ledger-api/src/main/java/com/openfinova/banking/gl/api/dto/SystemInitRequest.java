@@ -29,8 +29,7 @@ public class SystemInitRequest {
     @Schema(description = "Calendar/fiscal year for which 12 monthly periods are created", example = "2026", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer fiscalYear;
 
-    @NotBlank(message = "createdBy is required")
-    @Schema(description = "Username of the operator triggering initialization (audit trail)", example = "admin", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "Deprecated — ignored; the authenticated principal is used for the audit trail.", example = "admin", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     private String createdBy;
 
     // Constructors

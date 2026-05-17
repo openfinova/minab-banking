@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +24,7 @@ import com.openfinova.banking.exchangerate.api.entity.RateType;
 import com.openfinova.banking.exchangerate.api.exception.ExchangeRateNotFoundException;
 import com.openfinova.banking.exchangerate.api.exception.ExchangeRateValidationException;
 import com.openfinova.banking.exchangerate.api.exception.InvalidCurrencyPairException;
+import com.openfinova.banking.exchangerate.config.ExchangeRateProperties;
 import com.openfinova.banking.exchangerate.entity.ExchangeRate;
 import com.openfinova.banking.exchangerate.entity.FXSpread;
 import com.openfinova.banking.exchangerate.repository.ExchangeRateRepository;
@@ -36,15 +38,20 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
     private final ExchangeRateRepository exchangeRateRepository;
     private final DateTimeService dateTimeService;
     private final FXSpreadRepository fxSpreadRepository;
+    private final ExchangeRateProperties properties;
+
+    @Value("${app.base-currency:EUR}")
+    private String baseCurrency;
 
     /** Default spread when no configuration exists (0.25% = 25 bps). */
     public final BigDecimal DEFAULT_SPREAD = new BigDecimal("0.0025");
 
     public ExchangeRateServiceImpl(ExchangeRateRepository exchangeRateRepository, DateTimeService dateTimeService,
-            FXSpreadRepository fxSpreadRepository) {
+            FXSpreadRepository fxSpreadRepository, ExchangeRateProperties properties) {
         this.exchangeRateRepository = exchangeRateRepository;
         this.dateTimeService = dateTimeService;
         this.fxSpreadRepository = fxSpreadRepository;
+        this.properties = properties;
     }
 
     @Override
@@ -535,10 +542,20 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
 
     /**
      * Internal method to get exchange rate between two currencies for a specific date and type.
+     *
+     * <p>Resolution order:
+     * <ol>
+     *   <li>Direct row for the exact date.</li>
+     *   <li>Inverse row for the exact date (1 / stored).</li>
+     *   <li>Staleness fallback: most recent direct/inverse row within
+     *       {@code app.exchange-rate.max-staleness-days} before the requested date. Lets requests for a
+     *       date the scheduler hasn't published yet (e.g. weekends, late-day calls) succeed using the
+     *       last published business-day rate.</li>
+     *   <li>Cross via the bank's base currency (configured by {@code app.base-currency}).</li>
+     * </ol>
      */
     private BigDecimal getExchangeRateInternal(String sourceCurrency, String targetCurrency, LocalDate rateDate,
             RateType rateType) {
-        // Try direct rate lookup
         Optional<ExchangeRate> directRate = exchangeRateRepository
                 .findBySourceCurrencyAndTargetCurrencyAndRateDateAndRateType(
                         sourceCurrency,
@@ -550,7 +567,6 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
             return directRate.get().getRate();
         }
 
-        // Try inverse rate lookup
         Optional<ExchangeRate> inverseRate = exchangeRateRepository
                 .findBySourceCurrencyAndTargetCurrencyAndRateDateAndRateType(
                         targetCurrency,
@@ -562,12 +578,40 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
             return BigDecimal.ONE.divide(inverseRate.get().getRate(), 8, RoundingMode.HALF_UP);
         }
 
-        // Try cross-currency conversion through USD
-        if (!sourceCurrency.equals("USD") && !targetCurrency.equals("USD")) {
+        // Staleness fallback within the configured window — most recent row on or before requested date.
+        int staleness = properties.getMaxStalenessDays();
+        if (staleness > 0) {
+            LocalDate earliest = rateDate.minusDays(staleness);
+
+            Optional<ExchangeRate> staleDirect = exchangeRateRepository
+                    .findFirstBySourceCurrencyAndTargetCurrencyAndRateTypeAndRateDateBetweenOrderByRateDateDesc(
+                            sourceCurrency,
+                            targetCurrency,
+                            rateType,
+                            earliest,
+                            rateDate);
+            if (staleDirect.isPresent()) {
+                return staleDirect.get().getRate();
+            }
+
+            Optional<ExchangeRate> staleInverse = exchangeRateRepository
+                    .findFirstBySourceCurrencyAndTargetCurrencyAndRateTypeAndRateDateBetweenOrderByRateDateDesc(
+                            targetCurrency,
+                            sourceCurrency,
+                            rateType,
+                            earliest,
+                            rateDate);
+            if (staleInverse.isPresent()) {
+                return BigDecimal.ONE.divide(staleInverse.get().getRate(), 8, RoundingMode.HALF_UP);
+            }
+        }
+
+        // Cross-currency via the bank's base currency (e.g. EUR for an ECB-driven setup).
+        if (!sourceCurrency.equals(baseCurrency) && !targetCurrency.equals(baseCurrency)) {
             try {
-                BigDecimal sourceToUsd = getExchangeRateInternal(sourceCurrency, "USD", rateDate, rateType);
-                BigDecimal usdToTarget = getExchangeRateInternal("USD", targetCurrency, rateDate, rateType);
-                return sourceToUsd.multiply(usdToTarget).setScale(8, RoundingMode.HALF_UP);
+                BigDecimal sourceToBase = getExchangeRateInternal(sourceCurrency, baseCurrency, rateDate, rateType);
+                BigDecimal baseToTarget = getExchangeRateInternal(baseCurrency, targetCurrency, rateDate, rateType);
+                return sourceToBase.multiply(baseToTarget).setScale(8, RoundingMode.HALF_UP);
             } catch (IllegalArgumentException e) {
                 // Cross-currency conversion failed, continue to error
             }

@@ -62,6 +62,13 @@ public class DelegationOfAuthorityController {
         return delegationService.suggestStaffUsers(q, limit);
     }
 
+    @GetMapping("/transaction-types")
+    @PreAuthorize("hasAuthority('admin:doa:read')")
+    @Operation(summary = "Known delegation transaction types for UI pickers")
+    public List<String> listDelegationTransactionTypes() {
+        return List.of("USER_PROVISIONING");
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('admin:doa:read')")
     @Operation(summary = "Get delegation by id")

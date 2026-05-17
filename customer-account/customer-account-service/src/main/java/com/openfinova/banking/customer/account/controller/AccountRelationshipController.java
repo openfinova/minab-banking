@@ -1,25 +1,41 @@
 package com.openfinova.banking.customer.account.controller;
 
-import com.openfinova.banking.customer.account.api.dto.*;
+import java.util.List;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.openfinova.banking.customer.account.api.dto.AccountRelationshipResponse;
+import com.openfinova.banking.customer.account.api.dto.AddBeneficiaryRequest;
+import com.openfinova.banking.customer.account.api.dto.AddRelationshipRequest;
+import com.openfinova.banking.customer.account.api.dto.UpdatePermissionsRequest;
+import com.openfinova.banking.customer.account.api.dto.ValidationResult;
 import com.openfinova.banking.customer.account.api.entity.AccountPermission;
 import com.openfinova.banking.customer.account.entity.AccountRelationship;
 import com.openfinova.banking.customer.account.mapper.AccountRelationshipMapper;
 import com.openfinova.banking.customer.account.service.AccountRelationshipService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/accounts")
@@ -46,7 +62,7 @@ public class AccountRelationshipController {
     @Operation(summary = "Add relationship", description = "Creates a new relationship between a user and an account")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Relationship created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input data") })
-    public ResponseEntity<AccountRelationshipResponse> addRelationship(
+    public ResponseEntity<AccountRelationshipResponse> addRelationship(Authentication authentication,
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody AddRelationshipRequest request) {
 
@@ -56,8 +72,10 @@ public class AccountRelationshipController {
                 request.getUserProfileId(),
                 request.getRelationshipType());
 
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
+
         AccountRelationship relationship = relationshipService
-                .addRelationship(id, request.getUserProfileId(), request.getRelationshipType(), request.getCreatedBy());
+                .addRelationship(id, request.getUserProfileId(), request.getRelationshipType(), createdBy);
 
         log.info("Successfully created relationship with ID: {}", relationship.getId());
 
@@ -126,13 +144,15 @@ public class AccountRelationshipController {
     @Operation(summary = "Add beneficiary", description = "Adds a beneficiary to an account")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Beneficiary added successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input data") })
-    public ResponseEntity<AccountRelationshipResponse> addBeneficiary(
+    public ResponseEntity<AccountRelationshipResponse> addBeneficiary(Authentication authentication,
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody AddBeneficiaryRequest request) {
 
         log.info("Adding beneficiary to account {}: user={}", id, request.getUserProfileId());
 
-        AccountRelationship relationship = relationshipService.addBeneficiary(id, request);
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
+
+        AccountRelationship relationship = relationshipService.addBeneficiary(id, request, createdBy);
 
         log.info("Successfully added beneficiary with ID: {}", relationship.getId());
 

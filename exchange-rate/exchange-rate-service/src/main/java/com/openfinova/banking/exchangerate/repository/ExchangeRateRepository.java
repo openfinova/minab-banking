@@ -117,6 +117,25 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, UUID
             LocalDate rateDate, RateType rateType);
 
     /**
+     * Check if at least one exchange rate row exists for the given source currency. Used by the
+     * startup data initializer to decide whether a seed sync is required.
+     */
+    boolean existsBySourceCurrency(String sourceCurrency);
+
+    /**
+     * Find the most recent exchange rate within a date window. Used by the read-side staleness
+     * fallback when an exact-date lookup misses.
+     *
+     * @param sourceCurrency the source currency code
+     * @param targetCurrency the target currency code
+     * @param rateType the rate type
+     * @param startDate inclusive lower bound (e.g. requested date minus N staleness days)
+     * @param endDate inclusive upper bound (e.g. the requested date itself)
+     */
+    Optional<ExchangeRate> findFirstBySourceCurrencyAndTargetCurrencyAndRateTypeAndRateDateBetweenOrderByRateDateDesc(
+            String sourceCurrency, String targetCurrency, RateType rateType, LocalDate startDate, LocalDate endDate);
+
+    /**
      * Find the most recent exchange rates for all currency pairs.
      *
      * @param rateType the rate type

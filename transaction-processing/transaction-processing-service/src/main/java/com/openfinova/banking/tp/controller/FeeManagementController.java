@@ -1,6 +1,8 @@
 package com.openfinova.banking.tp.controller;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -189,5 +191,18 @@ public class FeeManagementController {
         List<FeeWaiverResponse> responses = waivers.stream().map(feeWaiverMapper::toResponse).toList();
 
         return ResponseEntity.ok(responses);
+    }
+
+    @PostMapping("/waiver-campaigns")
+    @PreAuthorize("hasAuthority('fee:campaign:write')")
+    @Operation(summary = "Register bulk waiver campaign (stub)", description = "Accepts campaign metadata — expansion job is backlog work for S3")
+    public ResponseEntity<Map<String, Object>> registerWaiverCampaign(@RequestBody Map<String, Object> body) {
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("campaignId", UUID.randomUUID().toString());
+        out.put("payloadEcho", body);
+        out.put("status", "ACCEPTED_FOR_PROCESSING");
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(out);
     }
 }
