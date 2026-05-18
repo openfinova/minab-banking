@@ -71,7 +71,6 @@ public class SuspenseAccountService {
         this.operationalGLAccountService = operationalGLAccountService;
     }
 
-
     /**
      * Clear a suspense item to the target account.
      * Creates offsetting GL transaction to move amount from suspense to correct account.

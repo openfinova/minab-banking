@@ -34,8 +34,8 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
          */
         String kycStatus,
 
-        /** 
-         * OAuth2 authorization id from JWT {@link #CLAIM_AUTHZ_ID}; null if absent. 
+        /**
+         * OAuth2 authorization id from JWT {@link #CLAIM_AUTHZ_ID}; null if absent.
          */
         String authSessionId, List<String> permissions) {
 
@@ -57,11 +57,11 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
      */
     public static final String CLAIM_AUTHZ_ID = "openfinova_authz_id";
 
-    /** 
-     * Pre-authz-id tokens mistakenly stored the OAuth2 authorization id under the OIDC {@code sid} claim name. 
+    /**
+     * Pre-authz-id tokens mistakenly stored the OAuth2 authorization id under the OIDC {@code sid} claim name.
      */
     private static final String LEGACY_AUTHZ_ID_CLAIM = "sid";
-    
+
     public static final String CLAIM_CLIENT_IP = "client_ip";
     /**
      * When true, the user must change password before using banking APIs (resource-server filter).

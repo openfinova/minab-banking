@@ -623,11 +623,7 @@ public class AccountService {
      * @return the newly created relationship entity
      */
     public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request, String createdBy) {
-        return addAccountRelationship(
-                accountId,
-                request.getUserProfileId(),
-                RelationshipType.BENEFICIARY,
-                createdBy);
+        return addAccountRelationship(accountId, request.getUserProfileId(), RelationshipType.BENEFICIARY, createdBy);
     }
 
     /**

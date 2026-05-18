@@ -62,6 +62,10 @@
 			<artifactId>compliance-service</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>com.openfinova</groupId>
+			<artifactId>notification-service</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-h2console</artifactId>
 		</dependency>

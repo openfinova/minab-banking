@@ -89,19 +89,22 @@ class ExchangeRateSyncServiceTest {
                         "EUR",
                         "USD",
                         TODAY,
-                        RateType.SPOT)).thenReturn(false);
+                        RateType.SPOT))
+                .thenReturn(false);
         when(
                 repository.existsBySourceCurrencyAndTargetCurrencyAndRateDateAndRateType(
                         "EUR",
                         "GBP",
                         TODAY,
-                        RateType.SPOT)).thenReturn(true);
+                        RateType.SPOT))
+                .thenReturn(true);
         when(
                 repository.existsBySourceCurrencyAndTargetCurrencyAndRateDateAndRateType(
                         "EUR",
                         "CHF",
                         TODAY,
-                        RateType.SPOT)).thenReturn(false);
+                        RateType.SPOT))
+                .thenReturn(false);
 
         ExchangeRateSyncService.SyncResult result = syncService.sync();
 
@@ -121,7 +124,8 @@ class ExchangeRateSyncServiceTest {
                         eq("EUR"),
                         anyString(),
                         eq(TODAY),
-                        eq(RateType.SPOT))).thenReturn(false);
+                        eq(RateType.SPOT)))
+                .thenReturn(false);
 
         ExchangeRateSyncService.SyncResult result = syncService.sync();
 
@@ -141,7 +145,8 @@ class ExchangeRateSyncServiceTest {
                         "EUR",
                         "USD",
                         TODAY,
-                        RateType.SPOT)).thenReturn(false);
+                        RateType.SPOT))
+                .thenReturn(false);
 
         ExchangeRateSyncService.SyncResult result = syncService.sync();
 

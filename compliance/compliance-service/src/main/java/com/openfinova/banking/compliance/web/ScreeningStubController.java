@@ -30,8 +30,8 @@ public class ScreeningStubController {
 
     @PostMapping("/{customerId}/runs")
     @PreAuthorize("hasAuthority('compliance:screening:run')")
-    public Map<String, Object> run(@PathVariable UUID customerId, @RequestBody(required = false) Map<String, Object> body,
-            Authentication authentication) {
+    public Map<String, Object> run(@PathVariable UUID customerId,
+            @RequestBody(required = false) Map<String, Object> body, Authentication authentication) {
         Map<String, Object> out = new HashMap<>();
         out.put("runId", UUID.randomUUID().toString());
         out.put("customerId", customerId.toString());

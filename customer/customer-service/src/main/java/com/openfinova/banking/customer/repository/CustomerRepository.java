@@ -19,6 +19,8 @@ import com.openfinova.banking.customer.entity.Customer;
 
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
+    Optional<Customer> findByLinkedIdentityUserId(UUID linkedIdentityUserId);
+
     // Existing method
     Optional<Customer> findByTaxId(String taxId);
 

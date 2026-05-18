@@ -19,14 +19,16 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountTransaction;
 import com.openfinova.banking.customer.account.repository.AccountLimitRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
+import com.openfinova.banking.customer.account.service.AccountHoldService;
 import com.openfinova.banking.customer.account.service.AccountTransactionService;
 import com.openfinova.banking.customer.account.service.GLAccountMappingService;
 
 /**
  * Facade implementation for Customer Account operations consumed by other modules.
  * Delegates to internal services while keeping the dependency graph acyclic:
- * this class depends only on {@link AccountRepository}, {@link AccountLimitRepository},
- * and {@link GLAccountMappingService}, never on {@link com.openfinova.banking.customer.account.service.AccountBalanceService}.
+ * this class depends on {@link AccountRepository}, {@link AccountLimitRepository},
+ * {@link GLAccountMappingService}, and {@link AccountHoldService}, never on
+ * {@link com.openfinova.banking.customer.account.service.AccountBalanceService}.
  */
 @Service
 @Transactional(readOnly = true)
@@ -38,14 +40,16 @@ public class CustomerAccountServiceImpl implements CustomerAccountService {
     private final AccountLimitRepository accountLimitRepository;
     private final GLAccountMappingService glAccountMappingService;
     private final AccountTransactionService accountTransactionService;
+    private final AccountHoldService accountHoldService;
 
     public CustomerAccountServiceImpl(AccountRepository accountRepository,
             AccountLimitRepository accountLimitRepository, GLAccountMappingService glAccountMappingService,
-            AccountTransactionService accountTransactionService) {
+            AccountTransactionService accountTransactionService, AccountHoldService accountHoldService) {
         this.accountRepository = accountRepository;
         this.accountLimitRepository = accountLimitRepository;
         this.glAccountMappingService = glAccountMappingService;
         this.accountTransactionService = accountTransactionService;
+        this.accountHoldService = accountHoldService;
     }
 
     @Override
@@ -184,5 +188,13 @@ public class CustomerAccountServiceImpl implements CustomerAccountService {
 
         logger.info("Account transaction recorded and linked successfully: {}", accountTransactionId);
         return accountTransactionId;
+    }
+
+    @Override
+    @Transactional
+    @PreAuthorize("hasAuthority('service:account:write')")
+    public UUID placeComplianceInvestigationHold(UUID accountId, BigDecimal amount, String currency, String reason,
+            String externalReferenceId) {
+        return accountHoldService.placeHold(accountId, amount, currency, reason, null, externalReferenceId).getId();
     }
 }

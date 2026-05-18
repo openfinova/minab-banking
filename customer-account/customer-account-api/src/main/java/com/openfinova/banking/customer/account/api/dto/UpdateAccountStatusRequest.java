@@ -16,7 +16,6 @@ public class UpdateAccountStatusRequest {
     @Schema(description = "Reason for status change", required = true)
     private String reason;
 
-
     // Getters and setters
     public AccountStatus getNewStatus() {
         return newStatus;

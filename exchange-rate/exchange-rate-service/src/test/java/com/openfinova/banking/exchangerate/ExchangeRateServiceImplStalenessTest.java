@@ -68,7 +68,8 @@ class ExchangeRateServiceImplStalenessTest {
                         eq("USD"),
                         eq(RateType.SPOT),
                         any(LocalDate.class),
-                        eq(TODAY))).thenReturn(Optional.of(friday));
+                        eq(TODAY)))
+                .thenReturn(Optional.of(friday));
 
         BigDecimal result = service.getExchangeRate("EUR", "USD", TODAY);
 
@@ -89,14 +90,16 @@ class ExchangeRateServiceImplStalenessTest {
                         eq("USD"),
                         eq(RateType.SPOT),
                         any(LocalDate.class),
-                        eq(TODAY))).thenReturn(Optional.empty());
+                        eq(TODAY)))
+                .thenReturn(Optional.empty());
         when(
                 repository.findFirstBySourceCurrencyAndTargetCurrencyAndRateTypeAndRateDateBetweenOrderByRateDateDesc(
                         eq("USD"),
                         eq("EUR"),
                         eq(RateType.SPOT),
                         any(LocalDate.class),
-                        eq(TODAY))).thenReturn(Optional.of(inverse));
+                        eq(TODAY)))
+                .thenReturn(Optional.of(inverse));
 
         BigDecimal result = service.getExchangeRate("EUR", "USD", TODAY);
 
@@ -114,7 +117,8 @@ class ExchangeRateServiceImplStalenessTest {
                         any(),
                         any(),
                         any(),
-                        any())).thenReturn(Optional.empty());
+                        any()))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getExchangeRate("EUR", "USD", TODAY))
                 .isInstanceOf(IllegalArgumentException.class);

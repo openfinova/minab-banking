@@ -141,4 +141,11 @@ public interface CustomerAccountService {
      */
     UUID recordAndLinkAccountTransaction(UUID accountId, String transactionType, BigDecimal amount, String currency,
             java.time.LocalDateTime transactionDate, String description, String referenceId, UUID glTransactionId);
+
+    /**
+     * Places an administrative AML / compliance investigation hold on available funds for the given amount.
+     * Used by compliance transaction monitoring escalation (trusted inter-module façade).
+     */
+    UUID placeComplianceInvestigationHold(UUID accountId, BigDecimal amount, String currency, String reason,
+            String externalReferenceId);
 }

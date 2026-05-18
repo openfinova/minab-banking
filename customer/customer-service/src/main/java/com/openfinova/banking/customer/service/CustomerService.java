@@ -283,6 +283,14 @@ public class CustomerService {
         return customerRepository.findById(customerId).map(Customer::getLinkedIdentityUserId);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<UUID> findCustomerIdByLinkedIdentityUserId(UUID linkedIdentityUserId) {
+        if (linkedIdentityUserId == null) {
+            return Optional.empty();
+        }
+        return customerRepository.findByLinkedIdentityUserId(linkedIdentityUserId).map(Customer::getId);
+    }
+
     /**
      * KYC status must only change through the KYC workflow (initiate, submit, review).
      * Direct override is not allowed for compliance.

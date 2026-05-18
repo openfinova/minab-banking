@@ -35,10 +35,8 @@ public class GuarantorController {
 
     @PostMapping
     @Operation(summary = "Add a guarantor to a loan account")
-    public ResponseEntity<GuarantorResponse> addGuarantor(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @Valid @RequestBody GuarantorRequest request) {
+    public ResponseEntity<GuarantorResponse> addGuarantor(Authentication authentication,
+            @PathVariable UUID loanAccountId, @Valid @RequestBody GuarantorRequest request) {
 
         Guarantor guarantor = new Guarantor();
         guarantor.setCustomerId(request.getCustomerId());
@@ -94,10 +92,9 @@ public class GuarantorController {
 
     @PostMapping("/{id}/status")
     @Operation(summary = "Update guarantor status")
-    public ResponseEntity<GuarantorResponse> updateGuarantorStatus(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @PathVariable UUID id, @Valid @RequestBody GuarantorStatusUpdateRequest request) {
+    public ResponseEntity<GuarantorResponse> updateGuarantorStatus(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
+            @Valid @RequestBody GuarantorStatusUpdateRequest request) {
 
         String updatedBy = CallerContextResolver.resolveUsername(authentication);
 

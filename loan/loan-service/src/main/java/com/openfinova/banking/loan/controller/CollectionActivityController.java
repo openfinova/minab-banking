@@ -55,10 +55,8 @@ public class CollectionActivityController {
     @PostMapping
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Create a collection activity")
-    public ResponseEntity<CollectionActivityResponse> createCollectionActivity(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @Valid @RequestBody CollectionActivityRequest request) {
+    public ResponseEntity<CollectionActivityResponse> createCollectionActivity(Authentication authentication,
+            @PathVariable UUID loanAccountId, @Valid @RequestBody CollectionActivityRequest request) {
 
         String createdBy = CallerContextResolver.resolveUsername(authentication);
 
@@ -116,10 +114,9 @@ public class CollectionActivityController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Update collection activity")
-    public ResponseEntity<CollectionActivityResponse> updateActivity(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @PathVariable UUID id, @Valid @RequestBody CollectionActivityUpdateRequest request) {
+    public ResponseEntity<CollectionActivityResponse> updateActivity(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
+            @Valid @RequestBody CollectionActivityUpdateRequest request) {
 
         String updatedBy = CallerContextResolver.resolveUsername(authentication);
 
@@ -132,10 +129,9 @@ public class CollectionActivityController {
     @PostMapping("/{id}/status")
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Update activity status")
-    public ResponseEntity<CollectionActivityResponse> updateActivityStatus(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @PathVariable UUID id, @Valid @RequestBody CollectionActivityStatusUpdateRequest request) {
+    public ResponseEntity<CollectionActivityResponse> updateActivityStatus(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
+            @Valid @RequestBody CollectionActivityStatusUpdateRequest request) {
 
         String updatedBy = CallerContextResolver.resolveUsername(authentication);
 
@@ -147,25 +143,22 @@ public class CollectionActivityController {
     @PostMapping("/{id}/complete")
     @PreAuthorize("hasAuthority('loan:collect:approve')")
     @Operation(summary = "Mark collection activity as complete")
-    public ResponseEntity<CollectionActivityResponse> completeActivity(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @PathVariable UUID id, @Valid @RequestBody CollectionActivityCompleteRequest request) {
+    public ResponseEntity<CollectionActivityResponse> completeActivity(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
+            @Valid @RequestBody CollectionActivityCompleteRequest request) {
 
         String completedBy = CallerContextResolver.resolveUsername(authentication);
 
-        CollectionActivity activity = collectionActivityService
-                .completeActivity(id, request.getOutcome(), completedBy);
+        CollectionActivity activity = collectionActivityService.completeActivity(id, request.getOutcome(), completedBy);
         return ResponseEntity.ok(CollectionActivityMapper.toResponse(activity));
     }
 
     @PostMapping("/{id}/schedule-followup")
     @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Schedule follow-up for collection activity")
-    public ResponseEntity<CollectionActivityResponse> scheduleFollowUp(
-            Authentication authentication,
-            @PathVariable UUID loanAccountId,
-            @PathVariable UUID id, @Valid @RequestBody CollectionActivityFollowUpRequest request) {
+    public ResponseEntity<CollectionActivityResponse> scheduleFollowUp(Authentication authentication,
+            @PathVariable UUID loanAccountId, @PathVariable UUID id,
+            @Valid @RequestBody CollectionActivityFollowUpRequest request) {
 
         String scheduledBy = CallerContextResolver.resolveUsername(authentication);
 

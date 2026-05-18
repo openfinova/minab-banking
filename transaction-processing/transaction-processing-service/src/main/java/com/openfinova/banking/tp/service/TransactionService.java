@@ -21,6 +21,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.openfinova.banking.tp.api.event.TransactionCompletedEvent;
 
 import com.openfinova.banking.customer.account.api.CustomerAccountService;
 import com.openfinova.banking.customer.account.api.entity.GLAccountMappingType;
@@ -70,6 +72,7 @@ public class TransactionService {
     private final CompensationWorkflowService compensationWorkflowService;
     private final DateTimeService dateTimeService;
     private final TransactionMapper transactionMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TransactionService(TransactionRepository transactionRepository,
             TransactionRequestRepository transactionRequestRepository, FeeManagementService feeManagementService,
@@ -77,7 +80,7 @@ public class TransactionService {
             GeneralLedgerService generalLedgerService, ExchangeRateService exchangeRateService,
             CustomerAccountService customerAccountService, CustomerInfoService customerInfoService,
             CompensationWorkflowService compensationWorkflowService, DateTimeService dateTimeService,
-            TransactionMapper transactionMapper) {
+            TransactionMapper transactionMapper, ApplicationEventPublisher eventPublisher) {
         this.transactionRepository = transactionRepository;
         this.transactionRequestRepository = transactionRequestRepository;
         this.feeManagementService = feeManagementService;
@@ -89,6 +92,7 @@ public class TransactionService {
         this.compensationWorkflowService = compensationWorkflowService;
         this.dateTimeService = dateTimeService;
         this.transactionMapper = transactionMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     public Transaction initiateTransaction(TransactionRequest request) {
@@ -505,6 +509,14 @@ public class TransactionService {
 
         // Process post-transaction operations
         processPostTransactionOperations(savedTransaction);
+        
+        eventPublisher.publishEvent(new TransactionCompletedEvent(
+                savedTransaction.getId(),
+                savedTransaction.getSourceAccountId(),
+                savedTransaction.getPrincipalAmount(),
+                savedTransaction.getCurrency(),
+                savedTransaction.getTransactionType().name()
+        ));
 
         logger.info("Transaction completed successfully: {}", transactionId);
         return savedTransaction;

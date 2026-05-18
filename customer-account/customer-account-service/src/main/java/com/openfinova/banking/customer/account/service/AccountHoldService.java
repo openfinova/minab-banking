@@ -5,15 +5,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.openfinova.banking.customer.account.api.entity.HoldStatus;
 import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountHold;
 import com.openfinova.banking.customer.account.repository.AccountHoldRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -71,13 +72,22 @@ public class AccountHoldService {
      */
     public AccountHold placeHold(UUID accountId, BigDecimal amount, String currency, String reason,
             LocalDateTime expiresAt) {
+        return placeHold(accountId, amount, currency, reason, expiresAt, null);
+    }
+
+    /**
+     * @param referenceId correlation id persisted on {@link AccountHold#setReferenceId(String)} (e.g. AML alert id)
+     */
+    public AccountHold placeHold(UUID accountId, BigDecimal amount, String currency, String reason,
+            LocalDateTime expiresAt, String referenceId) {
         logger.debug(
-                "Placing hold on account {}: amount={}, currency={}, reason={}, expiresAt={}",
+                "Placing hold on account {}: amount={}, currency={}, reason={}, expiresAt={}, referenceId={}",
                 accountId,
                 amount,
                 currency,
                 reason,
-                expiresAt);
+                expiresAt,
+                referenceId);
 
         // Validate account exists
         Account account = accountRepository.findById(accountId)
@@ -104,6 +114,7 @@ public class AccountHoldService {
         // Create the hold
         AccountHold hold = new AccountHold(account, amount, currency, reason);
         hold.setExpiresAt(expiresAt);
+        hold.setReferenceId(referenceId);
         hold.setStatus(HoldStatus.ACTIVE);
 
         AccountHold savedHold = accountHoldRepository.save(hold);
