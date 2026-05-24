@@ -41,7 +41,7 @@ jobs:
       - name: Build with Maven
         env:
           SPRING_PROFILES_ACTIVE: test
-        run: ./mvnw --batch-mode --no-transfer-progress verify
+        run: ./mvnw --batch-mode --no-transfer-progress verify -Djib.skip=true
 
       - name: Upload test reports
         if: always()

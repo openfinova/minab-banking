@@ -9,6 +9,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.openfinova.banking.compliance.api.ComplianceService;
 import com.openfinova.banking.compliance.api.entity.RiskRating;
@@ -17,6 +19,7 @@ import com.openfinova.banking.compliance.entity.CustomerRiskProfile;
 import com.openfinova.banking.compliance.repository.CustomerRiskProfileRepository;
 import com.openfinova.banking.customer.api.CustomerInfoService;
 import com.openfinova.banking.customer.api.dto.CustomerInfo;
+import com.openfinova.banking.tp.api.event.TransactionCompletedEvent;
 
 @Service
 @Transactional
@@ -84,5 +87,16 @@ public class ComplianceServiceImpl implements ComplianceService {
             String transactionTypeName) {
         postedTransactionAmlMonitoringService
                 .evaluatePostedTransaction(transactionId, sourceAccountId, amount, currency, transactionTypeName);
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void onPosted(TransactionCompletedEvent event) {
+        evaluatePostedTransaction(
+                event.getTransactionId(),
+                event.getSourceAccountId(),
+                event.getAmount(),
+                event.getCurrency(),
+                event.getTransactionType());
     }
 }

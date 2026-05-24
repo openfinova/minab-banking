@@ -15,14 +15,13 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.context.ApplicationEventPublisher;
-import com.openfinova.banking.tp.api.event.TransactionCompletedEvent;
 
 import com.openfinova.banking.customer.account.api.CustomerAccountService;
 import com.openfinova.banking.customer.account.api.entity.GLAccountMappingType;
@@ -42,6 +41,7 @@ import com.openfinova.banking.tp.api.entity.ReservationStatus;
 import com.openfinova.banking.tp.api.entity.ReservationType;
 import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import com.openfinova.banking.tp.api.entity.TransactionType;
+import com.openfinova.banking.tp.api.event.TransactionCompletedEvent;
 import com.openfinova.banking.tp.entity.BalanceReservation;
 import com.openfinova.banking.tp.entity.Transaction;
 import com.openfinova.banking.tp.entity.TransactionEvent;
@@ -469,13 +469,66 @@ public class TransactionService {
             return new PageImpl<>(List.of(), pageable, page.getTotalElements());
         }
 
-        Map<UUID, Transaction> byId = transactionRepository.findByIdInWithAllRelations(ids).stream()
+        Map<UUID, Transaction> byId = findByIdInWithAllRelations(ids).stream()
                 .collect(Collectors.toMap(Transaction::getId, Function.identity()));
 
         List<TransactionResponse> content = ids.stream().map(byId::get).filter(Objects::nonNull)
                 .map(transactionMapper::toResponse).toList();
 
         return new PageImpl<>(content, pageable, page.getTotalElements());
+    }
+
+    /**
+     * Loads transactions with both {@code events} and {@code reservations} fully populated.
+     *
+     * <p>Why two queries? Hibernate throws {@link org.hibernate.loader.MultipleBagFetchException}
+     * when you JOIN FETCH two {@code List} collections simultaneously. Both {@code events} and
+     * {@code reservations} are mapped as bags (unordered {@code List} without {@code @OrderColumn}),
+     * so a single query like:
+     *
+     * <pre>
+     *   SELECT t FROM Transaction t
+     *   LEFT JOIN FETCH t.events
+     *   LEFT JOIN FETCH t.reservations  -- BOOM: MultipleBagFetchException
+     * </pre>
+     *
+     * <p>is not possible. The root cause is that fetching two bags via JOIN produces a Cartesian
+     * product in the SQL result set — if a transaction has 3 events and 3 reservations, the JOIN
+     * returns 9 rows instead of 6, corrupting the hydrated entity state.
+     *
+     * <p>Solution: run two separate queries within the <strong>same Hibernate session</strong>.
+     * The first query loads transactions with their {@code events}. The second query loads
+     * transactions with their {@code reservations}. Because both queries run in the same session,
+     * Hibernate's first-level (session) cache recognises the same {@code Transaction} IDs and
+     * hydrates {@code reservations} directly onto the already-loaded entity instances.
+     *
+     * <pre>
+     *   Query 1 → Transaction#1 { events=[...],  reservations=[] }  ← stored in session cache
+     *   Query 2 → Transaction#1 { events=[...],  reservations=[...] } ← same reference, mutated
+     * </pre>
+     *
+     * <p>The return value of the second query is therefore intentionally discarded — the
+     * {@code transactions} list returned from the first query already holds the fully-populated
+     * instances by the time the method returns.
+     *
+     * <p><strong>⚠️ DO NOT:</strong>
+     * <ul>
+     *   <li>Merge the two results manually — the session cache handles this automatically.</li>
+     *   <li>Remove {@code @Transactional} — without a shared session, the cache is gone between
+     *       calls and {@code reservations} will remain uninitialized, causing a
+     *       {@link org.hibernate.LazyInitializationException} on access.</li>
+     *   <li>Collapse back into one query with two {@code JOIN FETCH} — see above.</li>
+     *   <li>"Fix" the discarded return value of the second query — it is not a bug.</li>
+     * </ul>
+     *
+     * @param transactionIds the IDs of the transactions to load
+     * @return transactions with {@code events} and {@code reservations} fully initialized
+     */
+    @Transactional(readOnly = true)
+    public List<Transaction> findByIdInWithAllRelations(List<UUID> transactionIds) {
+        List<Transaction> transactions = transactionRepository.findByIdInWithEvents(transactionIds);
+        transactionRepository.findByIdInWithReservations(transactionIds); // intentionally discarded — see Javadoc
+        return transactions;
     }
 
     public boolean isTransactionDuplicate(TransactionRequest request) {
@@ -509,14 +562,14 @@ public class TransactionService {
 
         // Process post-transaction operations
         processPostTransactionOperations(savedTransaction);
-        
-        eventPublisher.publishEvent(new TransactionCompletedEvent(
-                savedTransaction.getId(),
-                savedTransaction.getSourceAccountId(),
-                savedTransaction.getPrincipalAmount(),
-                savedTransaction.getCurrency(),
-                savedTransaction.getTransactionType().name()
-        ));
+
+        eventPublisher.publishEvent(
+                new TransactionCompletedEvent(
+                        savedTransaction.getId(),
+                        savedTransaction.getSourceAccountId(),
+                        savedTransaction.getPrincipalAmount(),
+                        savedTransaction.getCurrency(),
+                        savedTransaction.getTransactionType().name()));
 
         logger.info("Transaction completed successfully: {}", transactionId);
         return savedTransaction;

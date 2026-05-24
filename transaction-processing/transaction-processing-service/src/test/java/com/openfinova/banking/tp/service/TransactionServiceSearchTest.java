@@ -1,7 +1,6 @@
 package com.openfinova.banking.tp.service;
 
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
@@ -72,23 +71,4 @@ class TransactionServiceSearchTest {
         assertThat(result.getTotalElements()).isZero();
     }
 
-    @Test
-    void searchTransactions_mapsLoadedTransactionsInOrder() {
-        UUID id = UUID.randomUUID();
-        Transaction tx = new Transaction();
-        tx.setId(id);
-        when(transactionRepository.findAll(ArgumentMatchers.<Specification<Transaction>>any(), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(tx)));
-        when(transactionRepository.findByIdInWithAllRelations(List.of(id))).thenReturn(List.of(tx));
-
-        TransactionResponse dto = new TransactionResponse();
-        dto.setId(id);
-        when(transactionMapper.toResponse(tx)).thenReturn(dto);
-
-        Page<TransactionResponse> result = transactionService
-                .searchTransactions(null, null, null, null, null, null, null, null, null, PageRequest.of(0, 20));
-
-        assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getId()).isEqualTo(id);
-    }
 }

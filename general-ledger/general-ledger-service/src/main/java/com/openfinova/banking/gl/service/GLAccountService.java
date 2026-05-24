@@ -17,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,6 +101,7 @@ public class GLAccountService {
      * @throws IllegalArgumentException if the account code already exists or validation fails
      * @throws IllegalStateException if the parent account is invalid for hierarchy rules
      */
+    @CacheEvict(value = "glAccounts", allEntries = true)
     public GLAccount createAccount(CreateGLAccountRequest glAccountRequest) {
         logger.info("Creating GL account with request: {}", glAccountRequest);
 
@@ -177,6 +180,7 @@ public class GLAccountService {
      * @param id the UUID of the account to retrieve
      * @return an Optional containing the account if found, empty otherwise
      */
+    @Cacheable(value = "glAccounts", key = "#id")
     public Optional<GLAccount> getAccountById(UUID id) {
         logger.debug("Getting GL account by ID: {}", id);
         return glAccountRepository.findById(id);
@@ -188,6 +192,7 @@ public class GLAccountService {
      * @param code the account code to search for
      * @return an Optional containing the account if found, empty otherwise
      */
+    @Cacheable(value = "glAccounts", key = "#code", unless = "#code == null || #code.isBlank()")
     public Optional<GLAccount> findByCode(String code) {
         logger.debug("Finding GL account by code: {}", code);
         return glAccountRepository.findByCode(code);
@@ -214,6 +219,7 @@ public class GLAccountService {
      * @throws IllegalArgumentException if the account is not found
      * @throws IllegalStateException if the account has active children
      */
+    @CacheEvict(value = "glAccounts", allEntries = true)
     public GLAccount deactivateAccount(UUID id, String reason) {
         logger.info("Deactivating account: {} with reason: {}", id, reason);
 
@@ -286,6 +292,7 @@ public class GLAccountService {
      * @return the updated GL account
      * @throws IllegalArgumentException if the account is not found
      */
+    @CacheEvict(value = "glAccounts", allEntries = true)
     public GLAccount updateAccount(GLAccount account) {
         logger.info("Updating GL account with ID: {}", account.getId());
 
@@ -522,6 +529,7 @@ public class GLAccountService {
      * @return the updated account
      * @throws IllegalArgumentException if validation fails
      */
+    @CacheEvict(value = "glAccounts", allEntries = true)
     public GLAccount moveAccount(UUID accountId, UUID newParentId, String movedBy) {
         logger.info("Moving account: {} to parent: {} by {}", accountId, newParentId, movedBy);
 
@@ -911,6 +919,7 @@ public class GLAccountService {
      * @param importedBy the user performing the import
      * @return an import result with statistics and any errors
      */
+    @CacheEvict(value = "glAccounts", allEntries = true)
     public ChartOfAccountsImportResult importChartOfAccounts(ChartOfAccountsImport chartImport, String importedBy) {
         logger.info("Importing chart of accounts by {}", importedBy);
 
@@ -1045,6 +1054,7 @@ public class GLAccountService {
      * @param archivedBy the user performing the archival
      * @return the number of accounts archived
      */
+    @CacheEvict(value = "glAccounts", allEntries = true)
     public int archiveInactiveAccounts(int inactiveMonths, String archivedBy) {
         logger.info("Archiving inactive accounts (inactive for {} months) by {}", inactiveMonths, archivedBy);
 

@@ -1,0 +1,75 @@
+# Openfinova Banking — local stack
+# Usage:
+#   Postgres + pgAdmin only: docker compose up -d postgres pgadmin
+#   Full stack (API + dashboard): ./mvnw -pl banking-app -am clean install && docker compose up -d postgres pgadmin dashboard
+#   (Jib creates openfinova/banking-app:local during package/install; omit image with -Djib.skip=true.)
+#
+# JDBC from host when using default port: jdbc:postgresql://localhost:5432/openfinova_local
+# If 5432 is already in use locally: POSTGRES_PUBLISH_PORT=5433 docker compose up -d postgres
+# JDBC from containers: jdbc:postgresql://postgres:5432/openfinova_local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openfinova_local
+      POSTGRES_USER: openfinova
+      POSTGRES_PASSWORD: openfinova
+    ports:
+      - "${POSTGRES_PUBLISH_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openfinova -d openfinova_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@localhost.localdomain
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  banking-app:
+    image: openfinova/banking-app:local
+    pull_policy: never
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/openfinova_local
+      DB_USERNAME: openfinova
+      DB_PASSWORD: openfinova
+      OAUTH2_ISSUER_URI: http://localhost:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ../minab-banking-dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        NEXT_PUBLIC_OIDC_AUTHORITY: http://localhost:8080
+        NEXT_PUBLIC_OIDC_CLIENT_ID: staff-app
+        NEXT_PUBLIC_OIDC_REDIRECT_URI: http://localhost:3000/auth/callback
+        NEXT_PUBLIC_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3000/
+        NEXT_PUBLIC_OIDC_SCOPES: openid profile email offline_access banking.staff
+    ports:
+      - "3000:3000"
+    depends_on:
+      - banking-app
+
+volumes:
+  pgdata:

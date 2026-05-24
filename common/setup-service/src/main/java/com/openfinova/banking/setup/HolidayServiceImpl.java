@@ -11,6 +11,8 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,46 +52,38 @@ public class HolidayServiceImpl implements HolidayService {
     public boolean isHoliday(LocalDate date, String countryCode, String regionCode) {
         if (regionCode == null) {
             // National-only check: exact match on null region
-            return holidayRepository.existsByDateAndCountryCodeAndRegionCode(date, countryCode, null);
+            return existsNationalHoliday(date, countryCode);
         }
         // Regional check: the date is a holiday if it matches either the
         // specified region OR a national (null-region) holiday for that country.
-        return holidayRepository.existsByDateAndCountryCodeAndRegionOrNational(date, countryCode, regionCode);
+        return existsRegionalOrNational(date, countryCode, regionCode);
     }
 
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAuthority('service:setup:read')")
     public List<HolidayDTO> getHolidays(int year, String countryCode, String regionCode) {
-        List<Holiday> entities;
-        if (regionCode == null) {
-            entities = holidayRepository.findByYearAndCountryCodeOrderByDateAsc(year, countryCode);
-        } else {
-            entities = holidayRepository
-                    .findByYearAndCountryCodeAndRegionCodeOrderByDateAsc(year, countryCode, regionCode);
-        }
-        return entities.stream().map(this::mapToDTO).toList();
+        return listYearCountryRegion(year, countryCode, regionCode).stream().map(this::mapToDTO).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAuthority('service:setup:read')")
     public List<HolidayDTO> getHolidaysByCountry(int year, String countryCode) {
-        return holidayRepository.findByYearAndCountryCodeOrderByDateAsc(year, countryCode).stream().map(this::mapToDTO)
-                .toList();
+        return listYearCountry(year, countryCode).stream().map(this::mapToDTO).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAuthority('service:setup:read')")
     public Optional<HolidayDTO> getHoliday(LocalDate date, String countryCode, String regionCode) {
-        return holidayRepository.findByDateAndCountryCodeAndRegionCode(date, countryCode, regionCode)
-                .map(this::mapToDTO);
+        return findOne(date, countryCode, regionCode).map(this::mapToDTO);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('service:setup:write')")
+    @CacheEvict(value = "holidays", allEntries = true)
     public void addHoliday(HolidayDTO holidayDTO) {
         Holiday entity = mapToEntity(holidayDTO);
         holidayRepository.save(entity);
@@ -99,6 +93,7 @@ public class HolidayServiceImpl implements HolidayService {
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('service:setup:write')")
+    @CacheEvict(value = "holidays", allEntries = true)
     public boolean removeHoliday(LocalDate date, String countryCode, String regionCode) {
         Optional<Holiday> holiday = holidayRepository
                 .findByDateAndCountryCodeAndRegionCode(date, countryCode, regionCode);
@@ -127,6 +122,7 @@ public class HolidayServiceImpl implements HolidayService {
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('service:setup:write')")
+    @CacheEvict(value = "holidays", allEntries = true)
     public void initializeStandardHolidays(int year, String countryCode) {
         switch (countryCode.toUpperCase()) {
             case "US" -> initializeUSHolidays(year);
@@ -139,6 +135,7 @@ public class HolidayServiceImpl implements HolidayService {
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('service:setup:write')")
+    @CacheEvict(value = "holidays", allEntries = true)
     public void clearHolidays(int year, String countryCode, String regionCode) {
         if (regionCode == null) {
             holidayRepository.deleteByYearAndCountryCode(year, countryCode);
@@ -151,10 +148,43 @@ public class HolidayServiceImpl implements HolidayService {
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('service:setup:write')")
+    @CacheEvict(value = "holidays", allEntries = true)
     public void clearAllHolidays() {
         long count = holidayRepository.count();
         holidayRepository.deleteAll();
         logger.info("Cleared all {} holidays", count);
+    }
+
+    @Cacheable(value = "holidays", key = "#year + '_' + #countryCode + '_' + (#regionCode != null ? #regionCode : '_null_region_')")
+    public List<Holiday> listYearCountryRegion(int year, String countryCode, String regionCode) {
+        if (regionCode == null) {
+            return holidayRepository.findByYearAndCountryCodeOrderByDateAsc(year, countryCode);
+        }
+        return holidayRepository.findByYearAndCountryCodeAndRegionCodeOrderByDateAsc(year, countryCode, regionCode);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "holidays", key = "'country_' + #year + '_' + #countryCode")
+    public List<Holiday> listYearCountry(int year, String countryCode) {
+        return holidayRepository.findByYearAndCountryCodeOrderByDateAsc(year, countryCode);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "holidays", key = "'one_' + #date + '_' + #countryCode + '_' + (#regionCode != null ? #regionCode : '_null_region_')")
+    public Optional<Holiday> findOne(LocalDate date, String countryCode, String regionCode) {
+        return holidayRepository.findByDateAndCountryCodeAndRegionCode(date, countryCode, regionCode);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "holidays", key = "'national_' + #date + '_' + #countryCode")
+    public boolean existsNationalHoliday(LocalDate date, String countryCode) {
+        return holidayRepository.existsByDateAndCountryCodeAndRegionCode(date, countryCode, null);
+    }
+
+    @Transactional(readOnly = true)
+    @Cacheable(value = "holidays", key = "'reg_' + #date + '_' + #countryCode + '_' + #regionCode")
+    public boolean existsRegionalOrNational(LocalDate date, String countryCode, String regionCode) {
+        return holidayRepository.existsByDateAndCountryCodeAndRegionOrNational(date, countryCode, regionCode);
     }
 
     private HolidayDTO mapToDTO(Holiday entity) {

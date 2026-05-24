@@ -7,17 +7,18 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.openfinova.banking.customer.account.api.CustomerAccountService;
-import com.openfinova.banking.customer.api.CustomerInfoService;
-import com.openfinova.banking.compliance.entity.AmlAlert;
 import com.openfinova.banking.compliance.entity.MonitoringRule;
+import com.openfinova.banking.compliance.entity.AmlAlert;
 import com.openfinova.banking.compliance.repository.AmlAlertRepository;
 import com.openfinova.banking.compliance.repository.MonitoringRuleRepository;
+import com.openfinova.banking.customer.account.api.CustomerAccountService;
+import com.openfinova.banking.customer.api.CustomerInfoService;
 import com.openfinova.banking.notification.api.NotificationService;
 import com.openfinova.banking.notification.api.dto.SendNotificationCommand;
 import com.openfinova.banking.notification.api.entity.NotificationChannel;
@@ -34,20 +35,23 @@ public class PostedTransactionAmlMonitoringService {
 
     private static final String COMPLIANCE_RECIPIENT = "COMPLIANCE_INBOX";
 
-    private final MonitoringRuleRepository ruleRepository;
+    /** Must match banking-app {@code BankingCacheNames.COMPLIANCE_RULES}. */
+    public static final String CACHE_NAME = "complianceRules";
+
     private final AmlAlertRepository amlAlertRepository;
     private final CustomerAccountService customerAccountService;
     private final CustomerInfoService customerInfoService;
     private final NotificationService notificationService;
+    private final MonitoringRuleRepository monitoringRuleRepository;
 
-    public PostedTransactionAmlMonitoringService(MonitoringRuleRepository ruleRepository,
-            AmlAlertRepository amlAlertRepository, CustomerAccountService customerAccountService,
-            CustomerInfoService customerInfoService, NotificationService notificationService) {
-        this.ruleRepository = ruleRepository;
+    public PostedTransactionAmlMonitoringService(AmlAlertRepository amlAlertRepository,
+            CustomerAccountService customerAccountService, CustomerInfoService customerInfoService,
+            NotificationService notificationService, MonitoringRuleRepository monitoringRuleRepository) {
         this.amlAlertRepository = amlAlertRepository;
         this.customerAccountService = customerAccountService;
         this.customerInfoService = customerInfoService;
         this.notificationService = notificationService;
+        this.monitoringRuleRepository = monitoringRuleRepository;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -61,7 +65,7 @@ public class PostedTransactionAmlMonitoringService {
         Optional<UUID> customerPartyIdOpt = customerAccountService.getPrimaryUserProfileIdForAccount(sourceAccountId)
                 .flatMap(customerInfoService::getCustomerIdByLinkedIdentityUserId);
 
-        List<MonitoringRule> rules = ruleRepository.findAllByEnabledTrueOrderBySortOrderAsc();
+        List<MonitoringRule> rules = findEnabledOrdered();
         for (MonitoringRule rule : rules) {
             if (!rule.matches(amount, transactionTypeName)) {
                 continue;
@@ -75,6 +79,11 @@ public class PostedTransactionAmlMonitoringService {
                     currency,
                     transactionTypeName == null ? "" : transactionTypeName);
         }
+    }
+
+    @Cacheable(value = CACHE_NAME, key = "'enabled_ordered'")
+    public List<MonitoringRule> findEnabledOrdered() {
+        return monitoringRuleRepository.findAllByEnabledTrueOrderBySortOrderAsc();
     }
 
     private void createAlertAndEscalate(MonitoringRule rule, UUID transactionId, UUID sourceAccountId,

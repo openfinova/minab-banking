@@ -419,20 +419,33 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
     // Optimized batch queries to prevent N+1 problems
 
     /**
-     * Find multiple transactions by IDs with all related entities fetched.
+     * Find multiple transactions by IDs with events fetched.
      * Prevents N+1 problems when loading transaction batches.
      *
      * @param transactionIds list of transaction IDs
-     * @return list of transactions with all related entities loaded
+     * @return list of transactions with events loaded
      */
     @Query("""
-            SELECT DISTINCT t FROM Transaction t
-            JOIN FETCH t.request r
-            LEFT JOIN FETCH t.events
-            LEFT JOIN FETCH t.reservations
-            WHERE t.id IN :transactionIds
-            """)
-    List<Transaction> findByIdInWithAllRelations(@Param("transactionIds") List<UUID> transactionIds);
+        SELECT DISTINCT t FROM Transaction t
+        JOIN FETCH t.request r
+        LEFT JOIN FETCH t.events
+        WHERE t.id IN :transactionIds
+        """)
+    List<Transaction> findByIdInWithEvents(@Param("transactionIds") List<UUID> transactionIds);
+    
+    /**
+     * Find multiple transactions by IDs with reservations fetched.
+     * Prevents N+1 problems when loading transaction batches.
+     *
+     * @param transactionIds list of transaction IDs
+     * @return list of transactions with reservations loaded
+     */
+    @Query("""
+        SELECT DISTINCT t FROM Transaction t
+        LEFT JOIN FETCH t.reservations
+        WHERE t.id IN :transactionIds
+        """)
+    List<Transaction> findByIdInWithReservations(@Param("transactionIds") List<UUID> transactionIds);
 
     /**
      * Find transactions by account with optimized fetching for batch operations.

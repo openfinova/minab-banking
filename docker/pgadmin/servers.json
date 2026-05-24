@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "openfinova_local",
+      "Group": "Openfinova",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "openfinova_local",
+      "Username": "openfinova",
+      "Password": "openfinova",
+      "SSLMode": "prefer",
+      "PassFile": ""
+    }
+  }
+}

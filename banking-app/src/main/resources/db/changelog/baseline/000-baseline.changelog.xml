@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- If the DB was bootstrapped without Liquibase (e.g. leftover volume with tables but no changelog rows),
+         skip applying the pg_dump and still record this changeset so later includes/seeds can run. -->
+    <changeSet id="baseline-schema" author="openfinova">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="public" tableName="account_holds"/>
+            </not>
+        </preConditions>
+        <sqlFile path="001-baseline-schema.sql"
+                 relativeToChangelogFile="true"
+                 splitStatements="true"
+                 stripComments="false"
+                 endDelimiter=";"/>
+    </changeSet>
+</databaseChangeLog>
