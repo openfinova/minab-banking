@@ -1,5 +1,7 @@
 package com.openfinova.banking.identity.dto;
 
+import java.util.UUID;
+
 import com.openfinova.banking.identity.api.model.UserType;
 import com.openfinova.banking.identity.entity.AccountProvisioningStatus;
 
@@ -7,6 +9,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(name = "UserSearchCriteria", description = "Optional filters for GET /api/v1/identity/users/search")
 public class UserSearchCriteria {
+
+    @Schema(description = "Free text: case-insensitive match on username or email contains, or exact user id (UUID)")
+    private String q;
 
     @Schema(description = "Username contains / match (service-specific)")
     private String username;
@@ -34,6 +39,25 @@ public class UserSearchCriteria {
 
     @Schema(description = "When true, only users with an administrative suspension start timestamp set")
     private Boolean suspended;
+
+    @Schema(description = "Exact customer party UUID when searching for the linked CUSTOMER login")
+    private UUID customerPartyId;
+
+    public UUID getCustomerPartyId() {
+        return customerPartyId;
+    }
+
+    public void setCustomerPartyId(UUID v) {
+        this.customerPartyId = v;
+    }
+
+    public String getQ() {
+        return q;
+    }
+
+    public void setQ(String v) {
+        this.q = v;
+    }
 
     public String getUsername() {
         return username;

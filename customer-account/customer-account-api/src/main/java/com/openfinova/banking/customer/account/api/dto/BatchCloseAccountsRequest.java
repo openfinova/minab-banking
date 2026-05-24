@@ -18,10 +18,6 @@ public class BatchCloseAccountsRequest {
     @Schema(description = "Reason for closure", required = true)
     private String reason;
 
-    @NotBlank(message = "Closed by is required")
-    @Schema(description = "User closing the accounts", required = true)
-    private String closedBy;
-
     // Getters and setters
     public List<UUID> getAccountIds() {
         return accountIds;
@@ -37,13 +33,5 @@ public class BatchCloseAccountsRequest {
 
     public void setReason(String reason) {
         this.reason = reason;
-    }
-
-    public String getClosedBy() {
-        return closedBy;
-    }
-
-    public void setClosedBy(String closedBy) {
-        this.closedBy = closedBy;
     }
 }

@@ -2,6 +2,7 @@ package com.openfinova.banking.customer.account.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -48,6 +49,7 @@ import com.openfinova.banking.customer.account.repository.AccountRelationshipRep
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.AccountTransactionRepository;
 import com.openfinova.banking.customer.account.repository.InterestRateRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Enhanced AccountService implementation with comprehensive business rules
@@ -66,6 +68,7 @@ public class AccountService {
     private final InterestRateRepository interestRateRepository;
     private final AccountHoldService accountHoldService;
     private final AccountLimitService accountLimitService;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new AccountService with required dependencies.
@@ -77,11 +80,13 @@ public class AccountService {
      * @param interestRateRepository the repository for interest rate entities
      * @param accountHoldService the service for managing account holds
      * @param accountLimitService the service for managing account limits
+     * @param dateTimeService centralized clock and calendar operations
      */
     public AccountService(AccountRepository accountRepository,
             AccountTransactionRepository accountTransactionRepository, AccountLimitRepository accountLimitRepository,
             AccountRelationshipRepository accountRelationshipRepository, InterestRateRepository interestRateRepository,
-            AccountHoldService accountHoldService, AccountLimitService accountLimitService) {
+            AccountHoldService accountHoldService, AccountLimitService accountLimitService,
+            DateTimeService dateTimeService) {
         this.accountRepository = accountRepository;
         this.accountTransactionRepository = accountTransactionRepository;
         this.accountLimitRepository = accountLimitRepository;
@@ -89,27 +94,53 @@ public class AccountService {
         this.interestRateRepository = interestRateRepository;
         this.accountHoldService = accountHoldService;
         this.accountLimitService = accountLimitService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
-     * Creates a new customer account.
+     * Creates a new customer account and a {@link RelationshipType#PRIMARY_HOLDER} relationship for
+     * {@code primaryUserProfileId} so holder lists stay aligned with the account record.
      *
      * @param primaryUserProfileId the unique identifier of the primary user
      * @param productType the product type of the account
      * @param currency the currency of the account
+     * @param accountNumber the unique account number assigned by the caller
      * @param createdBy the user or system creating the account
      * @return the newly created account entity
+     * @throws IllegalArgumentException if {@code accountNumber} is already in use
      */
     public Account createAccount(UUID primaryUserProfileId, AccountProductType productType, String currency,
-            String createdBy) {
-        logger.info("Creating account for user: {} with product type: {}", primaryUserProfileId, productType);
+            String accountNumber, String createdBy) {
+        logger.info(
+                "Creating account for user: {} with product type: {} and number: {}",
+                primaryUserProfileId,
+                productType,
+                accountNumber);
+
+        if (accountNumber != null && accountRepository.findByAccountNumber(accountNumber).isPresent()) {
+            throw new IllegalArgumentException("Account number already in use: " + accountNumber);
+        }
 
         Account account = new Account(primaryUserProfileId, productType, createdBy);
         account.setCurrency(currency);
         account.setDisplayName(productType.getDisplayName() + " Account");
+        account.setAccountNumber(accountNumber);
 
         Account savedAccount = accountRepository.save(account);
         logger.info("Account created successfully: {}", savedAccount.getAccountNumber());
+
+        AccountRelationship primaryHolder = new AccountRelationship(
+                savedAccount,
+                primaryUserProfileId,
+                RelationshipType.PRIMARY_HOLDER,
+                createdBy);
+        primaryHolder.setStatus(RelationshipStatus.ACTIVE);
+        accountRelationshipRepository.save(primaryHolder);
+        logger.info(
+                "Created PRIMARY_HOLDER relationship for account {} and user profile {}",
+                savedAccount.getId(),
+                primaryUserProfileId);
+
         return savedAccount;
     }
 
@@ -338,16 +369,16 @@ public class AccountService {
     public int processDormancyDetection(int inactivityMonths) {
         logger.info("Processing dormancy detection for accounts inactive for {} months", inactivityMonths);
 
-        LocalDateTime cutoffDate = LocalDateTime.now().minusMonths(inactivityMonths);
+        Instant cutoffInstant = dateTimeService.nowZoned().minusMonths(inactivityMonths).toInstant();
 
         // Find accounts that are active but haven't had transactions since cutoff date
-        List<Account> candidateAccounts = accountRepository.findAccountsForDormancyCheck(cutoffDate);
+        List<Account> candidateAccounts = accountRepository.findAccountsForDormancyCheck(cutoffInstant);
 
         int dormantCount = 0;
 
         for (Account account : candidateAccounts) {
             // Additional checks for dormancy
-            if (shouldMarkAsDormant(account, cutoffDate)) {
+            if (shouldMarkAsDormant(account, cutoffInstant)) {
                 try {
                     account.changeStatus(
                             AccountStatus.DORMANT,
@@ -588,14 +619,11 @@ public class AccountService {
      *
      * @param accountId the unique identifier of the account
      * @param request the details of the beneficiary
+     * @param createdBy the user or system creating the beneficiary relationship
      * @return the newly created relationship entity
      */
-    public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request) {
-        return addAccountRelationship(
-                accountId,
-                request.getUserProfileId(),
-                RelationshipType.BENEFICIARY,
-                request.getCreatedBy());
+    public AccountRelationship addBeneficiary(UUID accountId, AddBeneficiaryRequest request, String createdBy) {
+        return addAccountRelationship(accountId, request.getUserProfileId(), RelationshipType.BENEFICIARY, createdBy);
     }
 
     /**
@@ -879,14 +907,16 @@ public class AccountService {
         return ValidationResult.valid();
     }
 
-    private boolean shouldMarkAsDormant(Account account, LocalDateTime cutoffDate) {
+    private boolean shouldMarkAsDormant(Account account, Instant cutoffInstant) {
         // Additional business rules for dormancy
         if (account.getStatus() != AccountStatus.ACTIVE) {
             return false;
         }
 
-        // Check if account has any recent activity
-        boolean hasRecentActivity = accountTransactionRepository.hasTransactionsSince(account.getId(), cutoffDate);
+        // AccountTransaction.transactionDate is LocalDateTime — same zone as DateTimeService / Clock bean
+        LocalDateTime cutoffForTransactions = LocalDateTime.ofInstant(cutoffInstant, dateTimeService.clock().getZone());
+        boolean hasRecentActivity = accountTransactionRepository
+                .hasTransactionsSince(account.getId(), cutoffForTransactions);
         if (hasRecentActivity) {
             return false;
         }

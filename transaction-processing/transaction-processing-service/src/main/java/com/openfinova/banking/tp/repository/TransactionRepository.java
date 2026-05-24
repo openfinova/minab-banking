@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,7 +25,7 @@ import com.openfinova.banking.tp.entity.Transaction;
 /**
  * Repository for Transaction entities in the TP module.
  */
-public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
+public interface TransactionRepository extends JpaRepository<Transaction, UUID>, JpaSpecificationExecutor<Transaction> {
 
     /**
      * Find transaction by its idempotency key from the request.
@@ -418,20 +419,33 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     // Optimized batch queries to prevent N+1 problems
 
     /**
-     * Find multiple transactions by IDs with all related entities fetched.
+     * Find multiple transactions by IDs with events fetched.
      * Prevents N+1 problems when loading transaction batches.
      *
      * @param transactionIds list of transaction IDs
-     * @return list of transactions with all related entities loaded
+     * @return list of transactions with events loaded
      */
     @Query("""
             SELECT DISTINCT t FROM Transaction t
             JOIN FETCH t.request r
             LEFT JOIN FETCH t.events
+            WHERE t.id IN :transactionIds
+            """)
+    List<Transaction> findByIdInWithEvents(@Param("transactionIds") List<UUID> transactionIds);
+
+    /**
+     * Find multiple transactions by IDs with reservations fetched.
+     * Prevents N+1 problems when loading transaction batches.
+     *
+     * @param transactionIds list of transaction IDs
+     * @return list of transactions with reservations loaded
+     */
+    @Query("""
+            SELECT DISTINCT t FROM Transaction t
             LEFT JOIN FETCH t.reservations
             WHERE t.id IN :transactionIds
             """)
-    List<Transaction> findByIdInWithAllRelations(@Param("transactionIds") List<UUID> transactionIds);
+    List<Transaction> findByIdInWithReservations(@Param("transactionIds") List<UUID> transactionIds);
 
     /**
      * Find transactions by account with optimized fetching for batch operations.

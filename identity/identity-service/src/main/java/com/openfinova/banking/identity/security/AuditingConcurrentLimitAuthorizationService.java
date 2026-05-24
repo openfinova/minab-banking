@@ -6,23 +6,26 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import com.openfinova.banking.identity.config.OAuth2AuthorizationJacksonConfiguration;
 import com.openfinova.banking.identity.config.OAuth2TokenPolicyProperties;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.service.SecurityAuditService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * OAuth2 authorization service that wraps JdbcOAuth2AuthorizationService with two additional
@@ -69,8 +72,16 @@ public class AuditingConcurrentLimitAuthorizationService implements OAuth2Author
 
     public AuditingConcurrentLimitAuthorizationService(JdbcOperations jdbcOperations,
             RegisteredClientRepository registeredClientRepository, SecurityAuditService auditService,
-            UserRepository userRepository, OAuth2TokenPolicyProperties tokenPolicy) {
+            UserRepository userRepository, OAuth2TokenPolicyProperties tokenPolicy,
+            @Qualifier(OAuth2AuthorizationJacksonConfiguration.OAUTH2_AUTHORIZATION_JSON_MAPPER_BEAN) JsonMapper oauth2AuthorizationJsonMapper) {
         this.delegate = new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClientRepository);
+        this.delegate.setAuthorizationRowMapper(
+                new JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationRowMapper(
+                        registeredClientRepository,
+                        oauth2AuthorizationJsonMapper));
+        this.delegate.setAuthorizationParametersMapper(
+                new JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationParametersMapper(
+                        oauth2AuthorizationJsonMapper));
         this.auditService = auditService;
         this.userRepository = userRepository;
         this.tokenPolicy = tokenPolicy;

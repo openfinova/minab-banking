@@ -2,7 +2,6 @@ package com.openfinova.banking.gl.api.dto;
 
 import com.openfinova.banking.gl.api.entity.OperationalGLAccountType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -19,9 +18,8 @@ public class ConfigureOperationalAccountRequest {
     @Schema(description = "GL account ID to use for this operational account")
     private UUID glAccountId;
 
-    @NotBlank(message = "Created by is required")
     @Size(max = 100, message = "Created by must not exceed 100 characters")
-    @Schema(description = "User creating the configuration", example = "admin")
+    @Schema(description = "Deprecated — ignored; the authenticated principal is used.", example = "admin")
     private String createdBy;
 
     // Constructors

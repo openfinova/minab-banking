@@ -19,9 +19,11 @@ import com.openfinova.banking.identity.api.audit.AuditActor;
 import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.identity.dto.CreateDelegationRequest;
 import com.openfinova.banking.identity.dto.DelegationResponse;
+import com.openfinova.banking.identity.dto.UserResponse;
 import com.openfinova.banking.identity.service.DelegationOfAuthorityService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -48,6 +50,25 @@ public class DelegationOfAuthorityController {
                 .body(DelegationResponse.from(delegationService.create(request, actor)));
     }
 
+    /**
+     * Must not be a single path segment: {@code GET .../delegations/{id}} would otherwise capture
+     * e.g. {@code staff-suggestions} and fail UUID conversion.
+     */
+    @GetMapping("/suggestions/staff")
+    @PreAuthorize("hasAuthority('admin:doa:read')")
+    @Operation(summary = "Staff user suggestions for delegation forms (STAFF only; same matching rules as user search q)")
+    public List<UserResponse> staffSuggestions(@RequestParam String q,
+            @RequestParam(required = false, defaultValue = "15") int limit) {
+        return delegationService.suggestStaffUsers(q, limit);
+    }
+
+    @GetMapping("/transaction-types")
+    @PreAuthorize("hasAuthority('admin:doa:read')")
+    @Operation(summary = "Known delegation transaction types for UI pickers")
+    public List<String> listDelegationTransactionTypes() {
+        return List.of("USER_PROVISIONING");
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('admin:doa:read')")
     @Operation(summary = "Get delegation by id")
@@ -63,24 +84,27 @@ public class DelegationOfAuthorityController {
         return DelegationResponse.from(delegationService.revoke(id, actor));
     }
 
-    @GetMapping("/outgoing/{userId}")
+    @GetMapping("/outgoing/{userRef}")
     @PreAuthorize("hasAuthority('admin:doa:read')")
     @Operation(summary = "List delegations granted by a user")
-    public List<DelegationResponse> listOutgoing(@PathVariable UUID userId) {
-        return delegationService.listOutgoing(userId);
+    public List<DelegationResponse> listOutgoing(
+            @Parameter(description = "Staff user UUID, or username/email term that matches exactly one STAFF user") @PathVariable String userRef) {
+        return delegationService.listOutgoing(userRef);
     }
 
-    @GetMapping("/incoming/{userId}")
+    @GetMapping("/incoming/{userRef}")
     @PreAuthorize("hasAuthority('admin:doa:read')")
     @Operation(summary = "List delegations received by a user")
-    public List<DelegationResponse> listIncoming(@PathVariable UUID userId) {
-        return delegationService.listIncoming(userId);
+    public List<DelegationResponse> listIncoming(
+            @Parameter(description = "Staff user UUID, or username/email term that matches exactly one STAFF user") @PathVariable String userRef) {
+        return delegationService.listIncoming(userRef);
     }
 
     @GetMapping("/active")
     @PreAuthorize("hasAuthority('admin:doa:read')")
     @Operation(summary = "Active delegations for a delegatee and transaction type (for supervisory checks)")
-    public List<DelegationResponse> activeForDelegatee(@RequestParam UUID delegateeUserId,
+    public List<DelegationResponse> activeForDelegatee(
+            @Parameter(description = "Staff delegatee: UUID, or username/email term matching exactly one STAFF user") @RequestParam String delegateeUserId,
             @RequestParam String transactionType) {
         return delegationService.findActiveForDelegatee(delegateeUserId, transactionType).stream()
                 .map(DelegationResponse::from).toList();

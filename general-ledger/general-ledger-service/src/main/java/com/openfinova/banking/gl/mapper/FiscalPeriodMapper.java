@@ -1,11 +1,12 @@
 package com.openfinova.banking.gl.mapper;
 
+import java.time.ZoneOffset;
+
+import org.springframework.stereotype.Component;
+
 import com.openfinova.banking.gl.api.dto.CreateFiscalPeriodRequest;
 import com.openfinova.banking.gl.api.dto.FiscalPeriodResponse;
 import com.openfinova.banking.gl.entity.FiscalPeriod;
-import org.springframework.stereotype.Component;
-
-import java.time.ZoneOffset;
 
 @Component
 public class FiscalPeriodMapper {
@@ -37,6 +38,7 @@ public class FiscalPeriodMapper {
         response.setClosedBy(period.getClosedBy());
         response.setFiscalYear(period.getFiscalYear());
         response.setPeriodNumber(period.getPeriodNumber());
+        response.setPostingAllowed(period.isOpen());
 
         // Convert LocalDateTime to Instant
         if (period.getClosedAt() != null) {

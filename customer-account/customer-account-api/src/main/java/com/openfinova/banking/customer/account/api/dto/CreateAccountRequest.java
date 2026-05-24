@@ -1,12 +1,14 @@
 package com.openfinova.banking.customer.account.api.dto;
 
+import java.util.UUID;
+
+import com.openfinova.banking.common.lib.validation.ValidAccountNumber;
 import com.openfinova.banking.customer.account.api.entity.AccountProductType;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-
-import java.util.UUID;
 
 @Schema(description = "Request to create a new account")
 public class CreateAccountRequest {
@@ -24,9 +26,10 @@ public class CreateAccountRequest {
     @Schema(description = "Three-letter ISO currency code", required = true, example = "USD")
     private String currency;
 
-    @NotBlank(message = "Created by is required")
-    @Schema(description = "User creating the account", required = true)
-    private String createdBy;
+    @NotBlank(message = "Account number is required")
+    @ValidAccountNumber
+    @Schema(description = "Domestic account number, must match account.number.regex", required = true, example = "CHK0001ABCD12")
+    private String accountNumber;
 
     // Getters and setters
     public UUID getPrimaryUserProfileId() {
@@ -53,11 +56,11 @@ public class CreateAccountRequest {
         this.currency = currency;
     }
 
-    public String getCreatedBy() {
-        return createdBy;
+    public String getAccountNumber() {
+        return accountNumber;
     }
 
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
+    public void setAccountNumber(String accountNumber) {
+        this.accountNumber = accountNumber;
     }
 }

@@ -6,6 +6,11 @@ import com.openfinova.banking.exchangerate.api.dto.ExchangeRateRequest;
 import com.openfinova.banking.exchangerate.api.dto.ExchangeRateResponse;
 import com.openfinova.banking.exchangerate.api.entity.RateType;
 import com.openfinova.banking.exchangerate.api.ExchangeRateService;
+import com.openfinova.banking.exchangerate.sync.ExchangeRateSyncService;
+import com.openfinova.banking.exchangerate.sync.ExchangeRateSyncService.SyncResult;
+import com.openfinova.banking.exchangerate.sync.ManagedRatesViewService;
+import com.openfinova.banking.exchangerate.sync.ManagedRatesViewService.ManagedRatesView;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,6 +23,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -48,9 +54,14 @@ public class ExchangeRateController {
     private static final Logger log = LoggerFactory.getLogger(ExchangeRateController.class);
 
     private final ExchangeRateService exchangeRateService;
+    private final ExchangeRateSyncService exchangeRateSyncService;
+    private final ManagedRatesViewService managedRatesViewService;
 
-    public ExchangeRateController(ExchangeRateService exchangeRateService) {
+    public ExchangeRateController(ExchangeRateService exchangeRateService,
+            ExchangeRateSyncService exchangeRateSyncService, ManagedRatesViewService managedRatesViewService) {
         this.exchangeRateService = exchangeRateService;
+        this.exchangeRateSyncService = exchangeRateSyncService;
+        this.managedRatesViewService = managedRatesViewService;
     }
 
     @PostMapping("/convert")
@@ -197,7 +208,10 @@ public class ExchangeRateController {
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Exchange rate created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid exchange rate data"),
             @ApiResponse(responseCode = "409", description = "Exchange rate already exists") })
-    public ResponseEntity<ExchangeRateResponse> createExchangeRate(@Valid @RequestBody ExchangeRateRequest request) {
+    public ResponseEntity<ExchangeRateResponse> createExchangeRate(Authentication authentication,
+            @Valid @RequestBody ExchangeRateRequest request) {
+
+        request.setCreatedBy(CallerContextResolver.resolveUsername(authentication));
 
         log.info(
                 "Creating exchange rate: {} to {} = {} for date: {}, type: {}",
@@ -223,10 +237,11 @@ public class ExchangeRateController {
             @ApiResponse(responseCode = "400", description = "Invalid exchange rate data"),
             @ApiResponse(responseCode = "404", description = "Exchange rate not found"),
             @ApiResponse(responseCode = "409", description = "New natural key conflicts with an existing record") })
-    public ResponseEntity<ExchangeRateResponse> updateExchangeRateById(
+    public ResponseEntity<ExchangeRateResponse> updateExchangeRateById(Authentication authentication,
             @Parameter(description = "UUID of the exchange rate record to update", required = true) @PathVariable UUID id,
-            @Valid @RequestBody ExchangeRateRequest request,
-            @Parameter(description = "Username of the operator making the correction (audit trail)", required = true) @RequestParam String updatedBy) {
+            @Valid @RequestBody ExchangeRateRequest request) {
+
+        String updatedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info(
                 "Updating exchange rate {}: {} to {} = {} for {}/{} by {}",
@@ -252,9 +267,10 @@ public class ExchangeRateController {
             + "Administrative operation.")
     @ApiResponses(value = { @ApiResponse(responseCode = "204", description = "Exchange rate deleted successfully"),
             @ApiResponse(responseCode = "404", description = "Exchange rate not found") })
-    public ResponseEntity<Void> deleteExchangeRate(
-            @Parameter(description = "UUID of the exchange rate record to delete", required = true) @PathVariable UUID id,
-            @Parameter(description = "Username of the operator requesting deletion (audit trail)", required = true) @RequestParam String deletedBy) {
+    public ResponseEntity<Void> deleteExchangeRate(Authentication authentication,
+            @Parameter(description = "UUID of the exchange rate record to delete", required = true) @PathVariable UUID id) {
+
+        String deletedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Deleting exchange rate {} by {}", id, deletedBy);
 
@@ -290,6 +306,31 @@ public class ExchangeRateController {
         log.info("Found {} historical rates", rates.size());
 
         return ResponseEntity.ok(rates);
+    }
+
+    @GetMapping("/managed-rates")
+    @PreAuthorize("hasAuthority('exchange-rate:read')")
+    @Operation(summary = "Today's managed rates board", description = "Returns one row per managed currency with the latest mid rate (today's row if present, otherwise the most recent prior snapshot marked stale=true, or a placeholder if the pair has never been published). Powers the admin 'Today's rates' dashboard.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Managed rates view retrieved successfully") })
+    public ResponseEntity<ManagedRatesView> getManagedRatesView() {
+        return ResponseEntity.ok(managedRatesViewService.getView());
+    }
+
+    @PostMapping("/sync")
+    @PreAuthorize("hasAuthority('exchange-rate:write')")
+    @Operation(summary = "Trigger an immediate rate sync", description = "Fetches the latest mid rates from the configured provider (ECB by default) and inserts today's snapshot for each managed currency. Idempotent: pairs already present for today are skipped. Administrative operation.")
+    @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Sync completed"),
+            @ApiResponse(responseCode = "502", description = "Provider unreachable or returned an invalid response") })
+    public ResponseEntity<SyncResult> syncNow() {
+        log.info("Manual exchange-rate sync requested");
+        SyncResult result = exchangeRateSyncService.sync();
+        log.info(
+                "Manual sync complete: inserted={}, skipped={}, unsupported={}",
+                result.inserted().size(),
+                result.skippedAlreadyPresent().size(),
+                result.unsupportedByProvider().size());
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/rates/exists")

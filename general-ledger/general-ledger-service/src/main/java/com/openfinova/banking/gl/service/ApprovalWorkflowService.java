@@ -5,7 +5,6 @@ import com.openfinova.banking.gl.api.entity.GLApprovalRole;
 import com.openfinova.banking.gl.entity.GLAuthorizationLimit;
 import com.openfinova.banking.gl.entity.GLTransaction;
 import com.openfinova.banking.gl.entity.GLTransactionApproval;
-import com.openfinova.banking.gl.repository.GLAuthorizationLimitRepository;
 import com.openfinova.banking.gl.repository.GLTransactionApprovalRepository;
 import com.openfinova.banking.gl.repository.GLTransactionRepository;
 import org.slf4j.Logger;
@@ -41,13 +40,14 @@ public class ApprovalWorkflowService {
 
     private final GLTransactionRepository transactionRepository;
     private final GLTransactionApprovalRepository approvalRepository;
-    private final GLAuthorizationLimitRepository authLimitRepository;
+    private final GLAuthorizationLimitQueryService authorizationLimitQueryService;
 
     public ApprovalWorkflowService(GLTransactionRepository transactionRepository,
-            GLTransactionApprovalRepository approvalRepository, GLAuthorizationLimitRepository authLimitRepository) {
+            GLTransactionApprovalRepository approvalRepository,
+            GLAuthorizationLimitQueryService authorizationLimitQueryService) {
         this.transactionRepository = transactionRepository;
         this.approvalRepository = approvalRepository;
-        this.authLimitRepository = authLimitRepository;
+        this.authorizationLimitQueryService = authorizationLimitQueryService;
     }
 
     /**
@@ -319,7 +319,7 @@ public class ApprovalWorkflowService {
      */
     private GLAuthorizationLimit getAuthorizationLimit(GLApprovalRole GLApprovalRole, String currency,
             com.openfinova.banking.gl.api.entity.GLTransactionSource source) {
-        List<GLAuthorizationLimit> limits = authLimitRepository
+        List<GLAuthorizationLimit> limits = authorizationLimitQueryService
                 .findByRoleCurrencyAndSource(GLApprovalRole, currency, source);
 
         if (limits.isEmpty()) {

@@ -54,4 +54,10 @@ public interface CustomerInfoService {
      * @return an {@link Optional} containing the linked identity user ID, or empty if none
      */
     Optional<UUID> getLinkedIdentityUserId(UUID customerId);
+
+    /**
+     * Resolves the core banking {@code Customer} identifier from an identity-linked user id,
+     * as stored on accounts as primary holder ({@code primary_user_profile_id}).
+     */
+    Optional<UUID> getCustomerIdByLinkedIdentityUserId(UUID linkedIdentityUserId);
 }

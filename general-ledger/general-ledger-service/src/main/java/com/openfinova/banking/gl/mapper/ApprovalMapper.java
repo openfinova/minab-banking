@@ -5,9 +5,9 @@ import com.openfinova.banking.gl.dto.ApprovalResponse;
 import com.openfinova.banking.gl.dto.AuthorizationLimitResponse;
 import com.openfinova.banking.gl.dto.PendingApprovalResponse;
 import com.openfinova.banking.gl.entity.GLAuthorizationLimit;
+import com.openfinova.banking.gl.service.GLAuthorizationLimitQueryService;
 import com.openfinova.banking.gl.entity.GLTransaction;
 import com.openfinova.banking.gl.entity.GLTransactionApproval;
-import com.openfinova.banking.gl.repository.GLAuthorizationLimitRepository;
 import com.openfinova.banking.gl.repository.GLTransactionApprovalRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,12 +26,12 @@ public class ApprovalMapper {
     private static final Logger log = LoggerFactory.getLogger(ApprovalMapper.class);
 
     private final GLTransactionApprovalRepository approvalRepository;
-    private final GLAuthorizationLimitRepository authLimitRepository;
+    private final GLAuthorizationLimitQueryService authorizationLimitQueryService;
 
     public ApprovalMapper(GLTransactionApprovalRepository approvalRepository,
-            GLAuthorizationLimitRepository authLimitRepository) {
+            GLAuthorizationLimitQueryService authorizationLimitQueryService) {
         this.approvalRepository = approvalRepository;
-        this.authLimitRepository = authLimitRepository;
+        this.authorizationLimitQueryService = authorizationLimitQueryService;
     }
 
     /**
@@ -63,7 +63,7 @@ public class ApprovalMapper {
 
         // Get required approvals from authorization limit
         try {
-            List<GLAuthorizationLimit> limits = authLimitRepository.findByRoleCurrencyAndSource(
+            List<GLAuthorizationLimit> limits = authorizationLimitQueryService.findByRoleCurrencyAndSource(
                     GLApprovalRole.MANAGER, // Default - should be transaction-specific
                     transaction.getCurrency(),
                     transaction.getSource());

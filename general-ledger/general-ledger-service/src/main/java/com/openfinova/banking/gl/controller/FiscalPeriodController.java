@@ -11,6 +11,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,6 +27,7 @@ import com.openfinova.banking.gl.entity.FiscalPeriod;
 import com.openfinova.banking.gl.mapper.FiscalPeriodMapper;
 import com.openfinova.banking.gl.service.FiscalPeriodService;
 import com.openfinova.banking.gl.service.FiscalPeriodWorkflowService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -171,10 +173,11 @@ public class FiscalPeriodController {
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Period closed successfully"),
             @ApiResponse(responseCode = "404", description = "Period not found"),
             @ApiResponse(responseCode = "400", description = "Period cannot be closed") })
-    public ResponseEntity<Map<String, String>> closePeriod(
+    public ResponseEntity<Map<String, String>> closePeriod(Authentication authentication,
             @Parameter(description = "Period ID", required = true) @PathVariable UUID id,
-            @Parameter(description = "User closing the period", required = true) @RequestParam String closedBy,
             @Parameter(description = "Reason for closing the period", required = true) @RequestParam String reason) {
+
+        String closedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Closing fiscal period: {} by {}", id, closedBy);
 
@@ -190,10 +193,11 @@ public class FiscalPeriodController {
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Period reopened successfully"),
             @ApiResponse(responseCode = "404", description = "Period not found"),
             @ApiResponse(responseCode = "400", description = "Period cannot be reopened or reason insufficient") })
-    public ResponseEntity<FiscalPeriodResponse> reopenFiscalPeriod(
+    public ResponseEntity<FiscalPeriodResponse> reopenFiscalPeriod(Authentication authentication,
             @Parameter(description = "Period ID", required = true) @PathVariable UUID id,
-            @Parameter(description = "User reopening the period", required = true) @RequestParam String reopenedBy,
             @Parameter(description = "Business justification for reopening (min 10 characters)", required = true) @RequestParam String reason) {
+
+        String reopenedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Reopening fiscal period: {} by {}", id, reopenedBy);
 

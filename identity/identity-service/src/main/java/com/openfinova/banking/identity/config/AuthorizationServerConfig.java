@@ -1,5 +1,6 @@
 package com.openfinova.banking.identity.config;
 
+import java.io.IOException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
@@ -11,14 +12,18 @@ import java.util.UUID;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
@@ -28,10 +33,14 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatchers;
 
 import com.nimbusds.jose.jwk.JWKSet;
@@ -45,6 +54,9 @@ import com.openfinova.banking.identity.security.LoginRateLimitFilter;
 import com.openfinova.banking.identity.security.MfaChallengeFilter;
 import com.openfinova.banking.identity.service.MfaService;
 import com.openfinova.banking.identity.service.SecurityAuditService;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Configures the OAuth2 / OIDC Authorization Server (Spring Security 7.0).
@@ -65,43 +77,77 @@ import com.openfinova.banking.identity.service.SecurityAuditService;
 @Configuration
 public class AuthorizationServerConfig {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(AuthorizationServerConfig.class);
+
+    @Bean
+    public RequestCache requestCache() {
+        return new HttpSessionRequestCache();
+    }
+
+    @Bean
+    public MfaChallengeFilter mfaChallengeFilter(MfaService mfaService, SecurityAuditService auditService,
+            UserRepository userRepository, RequestCache requestCache) {
+        return new MfaChallengeFilter(mfaService, auditService, userRepository, requestCache);
+    }
+
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http, MfaChallengeFilter mfaChallengeFilter)
+            throws Exception {
+        http.cors(Customizer.withDefaults());
         http.oauth2AuthorizationServer(authServer -> {
             http.securityMatcher(authServer.getEndpointsMatcher());
-            authServer.oidc(Customizer.withDefaults());
+            authServer.oidc(
+                    oidc -> oidc.logoutEndpoint(
+                            logout -> logout.errorResponseHandler(AuthorizationServerConfig::handleOidcLogoutFailure)));
         }).authorizeHttpRequests(auth -> auth.anyRequest().authenticated()).exceptionHandling(
                 ex -> ex.defaultAuthenticationEntryPointFor(
                         new LoginUrlAuthenticationEntryPoint("/login"),
                         new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
+        http.addFilterBefore(mfaChallengeFilter, AuthorizationFilter.class);
         return http.build();
     }
 
     @Bean
     @Order(2)
     public SecurityFilterChain loginFormFilterChain(HttpSecurity http, LoginEventHandlers loginEventHandlers,
-            LoginRateLimitFilter loginRateLimitFilter, MfaService mfaService, SecurityAuditService auditService,
-            UserRepository userRepository) throws Exception {
+            LoginRateLimitFilter loginRateLimitFilter, MfaChallengeFilter mfaChallengeFilter) throws Exception {
+        http.cors(Customizer.withDefaults());
         http.authorizeHttpRequests(
-                auth -> auth.requestMatchers("/mfa/challenge", "/mfa/verify", "/css/**", "/js/**").permitAll()
-                        .anyRequest().authenticated())
+                auth -> auth.requestMatchers(
+                        "/mfa/challenge",
+                        "/mfa/verify",
+                        "/css/**",
+                        "/js/**",
+                        "/login",
+                        "/login/**",
+                        "/logout",
+                        "/logout/**",
+                        "/logged-out",
+                        "/logged-out/**").permitAll().anyRequest().authenticated())
                 .formLogin(
-                        form -> form.successHandler(loginEventHandlers.successHandler())
+                        form -> form.loginPage("/login").successHandler(loginEventHandlers.successHandler())
                                 .failureHandler(loginEventHandlers.failureHandler()))
+                .logout(
+                        logout -> logout.logoutRequestMatcher(
+                                // GET enables SPAs to clear the IdP session when no id_token is available
+                                // (Spring's /connect/logout requires id_token_hint). Prefer POST from HTML forms.
+                                new OrRequestMatcher(
+                                        PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/logout"),
+                                        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/logout")))
+                                .logoutSuccessUrl("/logged-out") // redirect here after logout
+                                .permitAll())
                 .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(
-                        new MfaChallengeFilter(mfaService, auditService, userRepository),
-                        UsernamePasswordAuthenticationFilter.class)
-                // Apply after formLogin: Spring Security 7 otherwise leaves this chain matching any
-                // request
-                // (UnreachableFilterChainException vs. the resource-server chain).
+                .addFilterBefore(mfaChallengeFilter, AuthorizationFilter.class)
+                // Narrow matcher avoids clashing with the resource-server chain (Order 3).
                 .securityMatcher(
                         RequestMatchers.anyOf(
                                 PathPatternRequestMatcher.pathPattern("/login"),
                                 PathPatternRequestMatcher.pathPattern("/login/**"),
                                 PathPatternRequestMatcher.pathPattern("/logout"),
                                 PathPatternRequestMatcher.pathPattern("/logout/**"),
+                                PathPatternRequestMatcher.pathPattern("/logged-out"),
+                                PathPatternRequestMatcher.pathPattern("/logged-out/**"),
                                 PathPatternRequestMatcher.pathPattern("/mfa/challenge"),
                                 PathPatternRequestMatcher.pathPattern("/mfa/verify"),
                                 PathPatternRequestMatcher.pathPattern("/css/**"),
@@ -110,13 +156,16 @@ public class AuthorizationServerConfig {
     }
 
     /**
-     * Two in-memory clients wired for dev/test.
+     * In-memory OAuth2 clients for dev/test.
      *
-     * {@code staff-app} — used by the internal banking portal / Swagger UI for staff.
+     * {@code staff-app} — Swagger UI on {@code localhost:8080} (confidential: basic auth +
+     * {@code staff-secret}) and the management portal SPA on {@code localhost:3000} (public: PKCE,
+     * no secret on the token request). Both {@link ClientAuthenticationMethod#CLIENT_SECRET_BASIC}
+     * and {@link ClientAuthenticationMethod#NONE} are registered so either flow works.
+     *
      * {@code customer-app} — used by the customer mobile / web application.
      *
-     * Both use PKCE (no client secret stored in the browser) and authorization_code flow. Replace
-     * with a DB-backed {@link RegisteredClientRepository} for production.
+     * Replace with a DB-backed {@link RegisteredClientRepository} for production.
      */
     @Bean
     public RegisteredClientRepository registeredClientRepository(PasswordEncoder passwordEncoder,
@@ -128,14 +177,21 @@ public class AuthorizationServerConfig {
 
         RegisteredClient staffApp = RegisteredClient.withId(UUID.randomUUID().toString()).clientId("staff-app")
                 .clientSecret(passwordEncoder.encode("staff-secret"))
+                // CLIENT_SECRET_BASIC: Swagger UI sends client_id:secret in Authorization header.
+                // NONE: dashboard SPA cannot keep a secret; relies on PKCE code verifier instead.
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri("http://localhost:8080/login/oauth2/code/staff-app")
                 .redirectUri("http://localhost:8080/swagger-ui/oauth2-redirect.html")
-                .postLogoutRedirectUri("http://localhost:8080/").scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
+                .redirectUri("http://localhost:3000/auth/callback").postLogoutRedirectUri("http://localhost:8080/")
+                .postLogoutRedirectUri("http://localhost:3000/").postLogoutRedirectUri("http://localhost:3000")
+                .postLogoutRedirectUri("http://127.0.0.1:3000/").postLogoutRedirectUri("http://127.0.0.1:3000")
+                .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL).scope("offline_access")
                 .scope("banking.staff")
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
+                .clientSettings(
+                        ClientSettings.builder().requireAuthorizationConsent(false).requireProofKey(true).build())
                 .tokenSettings(shortLivedTokens).build();
 
         RegisteredClient customerApp = RegisteredClient.withId(UUID.randomUUID().toString()).clientId("customer-app")
@@ -186,10 +242,36 @@ public class AuthorizationServerConfig {
         return AuthorizationServerSettings.builder().build();
     }
 
-    // ── Password encoder (shared across the application context) ──────────────
-
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * Logs any failure while processing {@code /connect/logout}; does not change whether logout
+     * succeeds (that is determined by token/session validation). The default SAS handler passes a
+     * long {@code OAuth2Error} string into {@link HttpServletResponse#sendError(int, String)}, which
+     * some servlet containers handle poorly; we use the single-arg {@code sendError(400)} instead
+     * and put detail in logs (including stack trace).
+     */
+    private static void handleOidcLogoutFailure(HttpServletRequest request, HttpServletResponse response,
+            AuthenticationException exception) throws IOException {
+        String oauthSummary;
+        if (exception instanceof OAuth2AuthenticationException oae && oae.getError() != null) {
+            oauthSummary = oae.getError().toString();
+        } else {
+            oauthSummary = exception.getClass().getSimpleName();
+        }
+        String idTokenHint = request.getParameter("id_token_hint");
+        LOG.warn(
+                "OIDC RP-initiated logout failed: method={} uri={} summary={} client_id={} id_token_hint_length={} post_logout_redirect_uri={}",
+                request.getMethod(),
+                request.getRequestURI(),
+                oauthSummary,
+                request.getParameter("client_id"),
+                idTokenHint != null ? idTokenHint.length() : 0,
+                request.getParameter("post_logout_redirect_uri"),
+                exception);
+        response.sendError(HttpStatus.BAD_REQUEST.value());
     }
 }

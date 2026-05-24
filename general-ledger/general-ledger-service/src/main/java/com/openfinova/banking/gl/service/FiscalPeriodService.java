@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.gl.api.dto.CreateFiscalPeriodRequest;
 import com.openfinova.banking.gl.api.entity.FiscalPeriodStatus;
@@ -51,7 +53,7 @@ public class FiscalPeriodService {
      */
     public List<FiscalPeriod> getAllFiscalPeriods() {
         logger.debug("Getting all fiscal periods");
-        return fiscalPeriodRepository.findAll();
+        return fiscalPeriodRepository.findAllByOrderByStartDateAscFiscalYearAscPeriodNumberAsc();
     }
 
     /**

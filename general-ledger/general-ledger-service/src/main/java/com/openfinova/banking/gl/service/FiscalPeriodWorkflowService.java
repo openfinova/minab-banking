@@ -94,14 +94,16 @@ public class FiscalPeriodWorkflowService {
      * <p>This method performs the following operations in order:
      * <ol>
      *   <li>Validates the period exists and is not already closed</li>
-     *   <li>Validates balance consistency</li>
+     *   <li>Materializes missing daily snapshots for each day of the period (required before consistency checks)</li>
+     *   <li>Validates balance consistency (journal-derived vs snapshot on period end date)</li>
+     *   <li>Validates accounting equation holds as of period end</li>
      *   <li>Validates no pending-approval transactions exist</li>
      *   <li>Validates transaction number sequence completeness</li>
      *   <li>Performs currency revaluation for all foreign-currency accounts</li>
-     *   <li>Synchronises daily balance snapshots for the entire period</li>
-     *   <li>Generates and posts P&L closing journal entries</li>
+     *   <li>Synchronises daily balance snapshots again (covers new postings during revaluation)</li>
+     *   <li>Generates and posts P&L closing journal entries (year-end only)</li>
      *   <li>Delegates the actual status change to {@link FiscalPeriodService#markClosed}</li>
-     *   <li>Validates the post-closing trial balance</li>
+     *   <li>Validates the post-closing trial balance (year-end only)</li>
      * </ol>
      *
      * @param periodId the UUID of the fiscal period to close
@@ -132,16 +134,28 @@ public class FiscalPeriodWorkflowService {
                 "name",
                 period.getName());
 
-        // --- Step 1: balance consistency ---
+        // --- Step 1: snapshot materialization ---
+        // Consistency validation compares persisted GLDailyBalance rows to balances recalculated from
+        // journal entries as of period end; missing snapshots always fail validation even though
+        // postings may be fine. Older flows synchronized snapshots only after revaluation — too late.
+        logger.info(
+                "Pre-close daily snapshot synchronization for [{}] ({}, …{})",
+                period.getName(),
+                period.getStartDate(),
+                period.getEndDate());
+        balanceService.synchronizeDailySnapshots(period.getStartDate(), period.getEndDate());
+        balanceService.recreateSnapshotsForDate(period.getEndDate());
+
+        // --- Step 2: balance consistency ---
         boolean balancesConsistent = balanceService.validateAllBalancesConsistency(period.getEndDate());
         if (!balancesConsistent) {
             throw new IllegalStateException("Cannot close fiscal period with inconsistent balances: " + periodId);
         }
 
-        // --- Step 1b: accounting equation (Assets = Liabilities + Equity) ---
+        // --- Step 3: accounting equation (Assets = Liabilities + Equity) ---
         glTransactionService.validateAccountingEquation(period.getEndDate());
 
-        // --- Step 2: no pending-approval transactions ---
+        // --- Step 4: no pending-approval transactions ---
         logger.info("Validating no pending approval transactions for period: {}", period.getName());
         List<GLTransaction> pendingApprovals = glTransactionRepository.findByStatusAndTransactionDateBetween(
                 GLTransactionStatus.PENDING_APPROVAL,
@@ -156,7 +170,7 @@ public class FiscalPeriodWorkflowService {
             throw new IllegalStateException(errorMessage);
         }
 
-        // --- Step 3: transaction number sequence integrity ---
+        // --- Step 5: transaction number sequence integrity ---
         logger.info("Validating transaction number sequence for period: {}", period.getName());
         List<String> sequenceErrors = validatePeriodSequence(periodId);
         if (!sequenceErrors.isEmpty()) {
@@ -166,7 +180,7 @@ public class FiscalPeriodWorkflowService {
             throw new IllegalStateException(errorMessage);
         }
 
-        // --- Step 4: currency revaluation ---
+        // --- Step 6: currency revaluation ---
         logger.info("Performing automatic currency revaluation for period close: {}", periodId);
         try {
             revaluationService.performRevaluation(period.getEndDate());
@@ -177,10 +191,11 @@ public class FiscalPeriodWorkflowService {
                     e);
         }
 
-        // --- Step 5: synchronise daily balance snapshots ---
+        // --- Step 7: synchronise daily balance snapshots (revaluation postings; recreate period-end snap) ---
         balanceService.synchronizeDailySnapshots(period.getStartDate(), period.getEndDate());
+        balanceService.recreateSnapshotsForDate(period.getEndDate());
 
-        // --- Step 6: closing journal entries (year-end period only) ---
+        // --- Step 8: closing journal entries (year-end period only) ---
         // Revenue and Expense accounts are temporary: they accumulate throughout the
         // fiscal year and must only be zeroed out — and the P&L transferred to
         // Retained Earnings — when the LAST period of the year is closed.
@@ -210,11 +225,16 @@ public class FiscalPeriodWorkflowService {
             logger.info("Non-year-end period close — P&L closing entries skipped for: {}", period.getName());
         }
 
-        // --- Step 7: status change (delegates to FiscalPeriodService) ---
+        if (isYearEnd) {
+            balanceService.synchronizeDailySnapshots(period.getStartDate(), period.getEndDate());
+            balanceService.recreateSnapshotsForDate(period.getEndDate());
+        }
+
+        // --- Step 9: status change (delegates to FiscalPeriodService) ---
         fiscalPeriodService.markClosed(periodId, closedBy, reason, oldValues, correlationId);
         logger.info("Fiscal period closed successfully: {}", periodId);
 
-        // --- Step 8: post-close trial balance validation (year-end only, non-fatal) ---
+        // --- Step 10: post-close trial balance validation (year-end only, non-fatal) ---
         // This check asserts that all P&L accounts are at zero after the closing entries,
         // so it only makes sense at year-end when those entries have actually been posted.
         if (isYearEnd) {

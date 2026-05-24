@@ -28,9 +28,6 @@ public class AddBeneficiaryRequest {
 
     private LocalDateTime effectiveUntil;
 
-    @NotNull(message = "Created by is required")
-    private String createdBy;
-
     public AddBeneficiaryRequest() {
     }
 
@@ -80,13 +77,5 @@ public class AddBeneficiaryRequest {
 
     public void setEffectiveUntil(LocalDateTime effectiveUntil) {
         this.effectiveUntil = effectiveUntil;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
     }
 }

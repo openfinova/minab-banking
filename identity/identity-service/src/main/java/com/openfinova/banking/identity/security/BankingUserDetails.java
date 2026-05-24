@@ -3,6 +3,7 @@ package com.openfinova.banking.identity.security;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -138,5 +139,30 @@ public class BankingUserDetails implements UserDetails {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Identity is the persistent user id so that two instances loaded from different requests
+     * (form login vs. JSON-deserialized OAuth2 authorization row) compare equal. Spring
+     * Authorization Server stores this object as the key in {@link
+     * org.springframework.security.core.session.SessionRegistry SessionRegistry} at
+     * {@code /oauth2/authorize}; when {@code /oauth2/token} regenerates the id_token from a fresh
+     * deserialized instance, lookup must still match so the {@code sid} claim is populated and
+     * RP-initiated logout can validate it.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof BankingUserDetails other)) {
+            return false;
+        }
+        return Objects.equals(getUserId(), other.getUserId());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(getUserId());
     }
 }

@@ -21,6 +21,7 @@ import com.openfinova.banking.identity.dto.ApprovalWorkflowResponse;
 import com.openfinova.banking.identity.dto.CreateApprovalWorkflowRequest;
 import com.openfinova.banking.identity.dto.WorkflowActionRequest;
 import com.openfinova.banking.identity.service.IdentityApprovalWorkflowService;
+import com.openfinova.banking.identity.service.RoleManagementService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -47,6 +48,13 @@ public class IdentityApprovalWorkflowController {
         AuditActor actor = AuditActor.fromPrincipal(BankingPrincipal.from(auth));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApprovalWorkflowResponse.from(workflowService.start(request, actor)));
+    }
+
+    @GetMapping("/resource-types")
+    @PreAuthorize("hasAuthority('admin:doa:read')")
+    @Operation(summary = "Known workflow resource types for UI pickers")
+    public List<String> listApprovalWorkflowResourceTypes() {
+        return List.of("USER_PROVISIONING", RoleManagementService.RESOURCE_TYPE_ROLE_PERMISSION_CHANGE);
     }
 
     @GetMapping("/{id}")

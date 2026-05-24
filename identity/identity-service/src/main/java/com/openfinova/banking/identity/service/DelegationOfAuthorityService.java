@@ -2,11 +2,14 @@ package com.openfinova.banking.identity.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +18,7 @@ import com.openfinova.banking.identity.api.audit.AuditActor;
 import com.openfinova.banking.identity.api.model.UserType;
 import com.openfinova.banking.identity.dto.CreateDelegationRequest;
 import com.openfinova.banking.identity.dto.DelegationResponse;
+import com.openfinova.banking.identity.dto.UserResponse;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.entity.DelegationOfAuthority;
 import com.openfinova.banking.identity.entity.DelegationStatus;
@@ -23,6 +27,8 @@ import com.openfinova.banking.identity.repository.DelegationOfAuthorityRepositor
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.validation.GlApprovalRoleValidation;
 import com.openfinova.banking.setup.api.DateTimeService;
+
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Service for managing delegations of authority between banking users.
@@ -67,9 +73,10 @@ public class DelegationOfAuthorityService {
      * allowed GL role codes. On success the delegation is stored with ACTIVE status and a
      * DOA_CREATED audit event is recorded against the delegate user.
      *
-     * @param request  the creation payload containing delegatedFromUserId, delegatedToUserId,
-     *                 transactionType, validFrom, optional validUntil, optional approvalLimit
-     *                 with currency, and optional actingGlApprovalRole
+     * @param request  the creation payload containing delegatedFromUserId, delegatedToUserId
+     *                 (each a UUID or a unique staff username/email search term), transactionType,
+     *                 validFrom, optional validUntil, optional approvalLimit with currency, and
+     *                 optional actingGlApprovalRole
      * @param actor    the authenticated actor performing the operation, used for audit recording
      * @return the persisted DelegationOfAuthority entity with ACTIVE status
      * @throws IllegalArgumentException  if delegator and delegate are the same user, if either
@@ -79,22 +86,11 @@ public class DelegationOfAuthorityService {
      */
     @Transactional
     public DelegationOfAuthority create(CreateDelegationRequest request, AuditActor actor) {
-        if (request.getDelegatedFromUserId().equals(request.getDelegatedToUserId())) {
+        BankingUser from = resolveStaffUser(request.getDelegatedFromUserId());
+        BankingUser to = resolveStaffUser(request.getDelegatedToUserId());
+        if (from.getId().equals(to.getId())) {
             throw new IllegalArgumentException("delegatedFrom and delegatedTo must differ");
         }
-        Optional<BankingUser> fromOpt = userRepository.findById(request.getDelegatedFromUserId());
-        Optional<BankingUser> toOpt = userRepository.findById(request.getDelegatedToUserId());
-        if (fromOpt.isEmpty() || toOpt.isEmpty()) {
-            log.warn(
-                    "Delegation create failed: missing user fromId={} toId={}",
-                    request.getDelegatedFromUserId(),
-                    request.getDelegatedToUserId());
-            throw ResourceNotFoundException.opaque("Delegation user lookup failed", OPAQUE_NOT_FOUND);
-        }
-        BankingUser from = fromOpt.get();
-        BankingUser to = toOpt.get();
-        requireStaff(from, "delegatedFrom");
-        requireStaff(to, "delegatedTo");
 
         LocalDateTime validFrom = request.getValidFrom();
         LocalDateTime validUntil = request.getValidUntil();
@@ -179,13 +175,13 @@ public class DelegationOfAuthorityService {
      * Returns delegations in all statuses, including REVOKED and EXPIRED. The result
      * is mapped to DelegationResponse DTOs suitable for returning from the API layer.
      *
-     * @param userId  the UUID of the delegating principal whose outgoing delegations to list
+     * @param userRef  the delegating principal: UUID, or username/email term matching exactly one STAFF user
      * @return a list of DelegationResponse DTOs; empty if the user has no outgoing delegations
      * @throws ResourceNotFoundException if no user exists with the given ID
      */
     @Transactional(readOnly = true)
-    public List<DelegationResponse> listOutgoing(UUID userId) {
-        requireExistingUser(userId);
+    public List<DelegationResponse> listOutgoing(String userRef) {
+        UUID userId = resolveStaffUser(userRef).getId();
         return delegationRepository.findByDelegatedFromId(userId).stream().map(DelegationResponse::from).toList();
     }
 
@@ -195,13 +191,13 @@ public class DelegationOfAuthorityService {
      * Returns delegations in all statuses, including REVOKED and EXPIRED. The result
      * is mapped to DelegationResponse DTOs suitable for returning from the API layer.
      *
-     * @param userId  the UUID of the delegate user whose incoming delegations to list
+     * @param userRef  the delegate user: UUID, or username/email term matching exactly one STAFF user
      * @return a list of DelegationResponse DTOs; empty if the user has no incoming delegations
      * @throws ResourceNotFoundException if no user exists with the given ID
      */
     @Transactional(readOnly = true)
-    public List<DelegationResponse> listIncoming(UUID userId) {
-        requireExistingUser(userId);
+    public List<DelegationResponse> listIncoming(String userRef) {
+        UUID userId = resolveStaffUser(userRef).getId();
         return delegationRepository.findByDelegatedToId(userId).stream().map(DelegationResponse::from).toList();
     }
 
@@ -214,22 +210,92 @@ public class DelegationOfAuthorityService {
      * logic to determine whether a user may act on behalf of another for a given transaction
      * type.
      *
-     * @param delegateeUserId  the UUID of the user acting as delegate
+     * @param delegateeUserRef  staff delegatee: UUID, or username/email term matching exactly one STAFF user
      * @param transactionType  the transaction type the delegate intends to perform
      * @return the list of currently active DelegationOfAuthority records; empty if none apply
      */
     @Transactional(readOnly = true)
-    public List<DelegationOfAuthority> findActiveForDelegatee(UUID delegateeUserId, String transactionType) {
+    public List<DelegationOfAuthority> findActiveForDelegatee(String delegateeUserRef, String transactionType) {
+        UUID delegateeUserId = resolveStaffUser(delegateeUserRef).getId();
         LocalDateTime now = dateTimeService.now();
         return delegationRepository
                 .findActiveForDelegatee(delegateeUserId, transactionType, DelegationStatus.ACTIVE, now);
     }
 
-    private void requireExistingUser(UUID userId) {
-        if (!userRepository.existsById(userId)) {
-            log.warn("Delegation query failed: user not found userId={}", userId);
-            throw ResourceNotFoundException.opaque("User not found: " + userId, OPAQUE_NOT_FOUND);
+    /**
+     * Typeahead suggestions for STAFF users (delegation UI). Does not require {@code admin:users:read}.
+     */
+    @Transactional(readOnly = true)
+    public List<UserResponse> suggestStaffUsers(String rawQ, int limit) {
+        int cap = Math.min(Math.max(limit, 1), 50);
+        String term = rawQ == null ? "" : rawQ.trim();
+        if (term.isEmpty()) {
+            return List.of();
         }
+        UUID id = tryParseUuid(term);
+        if (id != null) {
+            return userRepository.findById(id).filter(u -> u.getUserType() == UserType.STAFF)
+                    .map(u -> List.of(UserResponse.from(u))).orElseGet(List::of);
+        }
+        Page<BankingUser> page = userRepository.findAll(staffWithFreeText(term), PageRequest.of(0, cap));
+        return page.getContent().stream().map(UserResponse::from).toList();
+    }
+
+    /**
+     * Resolves a staff user from a UUID string or from a case-insensitive username / email substring
+     * (must match exactly one STAFF user).
+     */
+    private BankingUser resolveStaffUser(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("User reference must not be blank");
+        }
+        String s = raw.strip();
+        UUID id = tryParseUuid(s);
+        if (id != null) {
+            BankingUser u = userRepository.findById(id).orElseThrow(
+                    () -> ResourceNotFoundException.opaque("Delegation user not found id=" + id, OPAQUE_NOT_FOUND));
+            requireStaff(u, "user");
+            return u;
+        }
+        return resolveStaffUserByNonUuidTerm(s);
+    }
+
+    private static UUID tryParseUuid(String s) {
+        try {
+            return UUID.fromString(s);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private BankingUser resolveStaffUserByNonUuidTerm(String raw) {
+        List<BankingUser> found = userRepository.findAll(staffWithFreeText(raw), PageRequest.of(0, 6)).getContent();
+        if (found.isEmpty()) {
+            log.warn("Delegation user resolve failed: no STAFF match for term={}", raw);
+            throw ResourceNotFoundException.opaque("No staff user matches the given reference", OPAQUE_NOT_FOUND);
+        }
+        if (found.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Multiple staff users match \"" + raw + "\"; use the exact user id (UUID) or a unique term.");
+        }
+        return found.get(0);
+    }
+
+    /**
+     * STAFF users only; OR on username / email contains (same wildcard stripping as user search {@code q}).
+     */
+    private static Specification<BankingUser> staffWithFreeText(String raw) {
+        return (root, query, cb) -> {
+            Predicate staffPred = cb.equal(root.get("userType"), UserType.STAFF);
+            String term = raw.toLowerCase(Locale.ROOT).replace("%", "").replace("_", "").trim();
+            if (term.isEmpty()) {
+                return cb.disjunction();
+            }
+            String like = "%" + term + "%";
+            Predicate usernamePred = cb.like(cb.lower(root.get("username")), like);
+            Predicate emailPred = cb.and(cb.isNotNull(root.get("email")), cb.like(cb.lower(root.get("email")), like));
+            return cb.and(staffPred, cb.or(usernamePred, emailPred));
+        };
     }
 
     private static void requireStaff(BankingUser u, String label) {

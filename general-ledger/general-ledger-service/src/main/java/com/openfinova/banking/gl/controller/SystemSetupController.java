@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +20,7 @@ import com.openfinova.banking.gl.api.dto.SystemInitRequest;
 import com.openfinova.banking.gl.service.FiscalPeriodService;
 import com.openfinova.banking.gl.service.GLAccountService;
 import com.openfinova.banking.gl.service.OperationalGLAccountService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -71,17 +73,20 @@ public class SystemSetupController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Initialization completed (see body for per-step counts)"),
             @ApiResponse(responseCode = "400", description = "Invalid request body") })
-    public ResponseEntity<Map<String, Object>> initialize(@Valid @RequestBody SystemInitRequest request) {
+    public ResponseEntity<Map<String, Object>> initialize(Authentication authentication,
+            @Valid @RequestBody SystemInitRequest request) {
+
+        String actor = CallerContextResolver.resolveUsername(authentication);
 
         log.info(
                 "GL system initialization: currency={}, fiscalYear={}, createdBy={}",
                 request.getCurrency(),
                 request.getFiscalYear(),
-                request.getCreatedBy());
+                actor);
 
-        int chartCount = initChartOfAccounts(request.getCurrency(), request.getCreatedBy());
-        int operationalCount = initOperationalAccounts(request.getCreatedBy());
-        int[] periodResults = initFiscalPeriods(request.getFiscalYear(), request.getCreatedBy());
+        int chartCount = initChartOfAccounts(request.getCurrency(), actor);
+        int operationalCount = initOperationalAccounts(actor);
+        int[] periodResults = initFiscalPeriods(request.getFiscalYear(), actor);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("currency", request.getCurrency());
@@ -108,9 +113,10 @@ public class SystemSetupController {
             + "Accounts that already exist (by code) are skipped.")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Chart of accounts initialized"),
             @ApiResponse(responseCode = "400", description = "Invalid request") })
-    public ResponseEntity<Map<String, Object>> initializeChartOfAccounts(
-            @Parameter(description = "ISO 4217 base currency code", required = true, example = "USD") @RequestParam String currency,
-            @Parameter(description = "Operator username for audit trail", required = true, example = "admin") @RequestParam String createdBy) {
+    public ResponseEntity<Map<String, Object>> initializeChartOfAccounts(Authentication authentication,
+            @Parameter(description = "ISO 4217 base currency code", required = true, example = "USD") @RequestParam String currency) {
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Initializing chart of accounts: currency={}, createdBy={}", currency, createdBy);
 
@@ -128,8 +134,9 @@ public class SystemSetupController {
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Operational accounts initialized"),
             @ApiResponse(responseCode = "400", description = "Invalid request"),
             @ApiResponse(responseCode = "409", description = "Chart of accounts not present — run chart-of-accounts init first") })
-    public ResponseEntity<Map<String, Object>> initializeOperationalAccounts(
-            @Parameter(description = "Operator username for audit trail", required = true, example = "admin") @RequestParam String createdBy) {
+    public ResponseEntity<Map<String, Object>> initializeOperationalAccounts(Authentication authentication) {
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Initializing operational account mappings: createdBy={}", createdBy);
 
@@ -145,9 +152,10 @@ public class SystemSetupController {
             + "(period 1 = January … period 12 = December). " + "Periods that already exist are skipped.")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Fiscal periods initialized"),
             @ApiResponse(responseCode = "400", description = "Invalid request") })
-    public ResponseEntity<Map<String, Object>> initializeFiscalPeriods(
-            @Parameter(description = "Fiscal year to bootstrap (e.g. 2026)", required = true, example = "2026") @RequestParam int fiscalYear,
-            @Parameter(description = "Operator username for audit trail", required = true, example = "admin") @RequestParam String createdBy) {
+    public ResponseEntity<Map<String, Object>> initializeFiscalPeriods(Authentication authentication,
+            @Parameter(description = "Fiscal year to bootstrap (e.g. 2026)", required = true, example = "2026") @RequestParam int fiscalYear) {
+
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Initializing fiscal periods for year={}, createdBy={}", fiscalYear, createdBy);
 

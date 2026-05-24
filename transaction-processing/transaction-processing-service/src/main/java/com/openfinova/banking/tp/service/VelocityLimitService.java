@@ -7,7 +7,6 @@ import com.openfinova.banking.tp.api.entity.VelocityLimitPeriod;
 import com.openfinova.banking.tp.entity.*;
 import com.openfinova.banking.tp.repository.VelocityLimitBreachRepository;
 import com.openfinova.banking.tp.repository.VelocityLimitRepository;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,7 +97,6 @@ public class VelocityLimitService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "velocityLimits", key = "#accountId + '_' + #type")
     public List<VelocityLimit> getRemainingLimits(UUID accountId, TransactionType type) {
         return velocityLimitRepository.findByAccountIdAndTransactionTypeAndIsActiveTrue(accountId, type);
     }
@@ -166,13 +164,11 @@ public class VelocityLimitService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "velocityLimits", key = "'account_' + #accountId")
     public List<VelocityLimit> getVelocityLimitsByAccount(UUID accountId) {
         return velocityLimitRepository.findByAccountId(accountId);
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "velocityLimits", key = "'type_' + #type")
     public List<VelocityLimit> getVelocityLimitsByType(TransactionType type) {
         return velocityLimitRepository.findByTransactionType(type);
     }

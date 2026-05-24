@@ -68,9 +68,9 @@ public class RoleManagementController {
     @PreAuthorize("hasAuthority('admin:roles:read')")
     @Operation(summary = "List all available permissions from the permission catalogue")
     public ResponseEntity<List<PermissionInfo>> listAvailablePermissions() {
-        List<PermissionInfo> perms = Arrays.stream(BankingPermission.values())
-                .map(p -> new PermissionInfo(p.name(), p.getAuthority())).toList();
-        return ResponseEntity.ok(perms);
+        return ResponseEntity.ok(
+                Arrays.stream(BankingPermission.values())
+                        .map(p -> new PermissionInfo(p.name(), p.getAuthority(), p.getCatalogDescription())).toList());
     }
 
     @PostMapping
@@ -157,12 +157,14 @@ public class RoleManagementController {
     /**
      * Lightweight DTO for the permission catalogue listing.
      *
-     * @param name      enum constant name (e.g. {@code LOAN_READ})
-     * @param authority value placed in JWT {@code permissions} claim (e.g. {@code loan:read})
+     * @param name        enum constant name (e.g. {@code LOAN_READ})
+     * @param authority   value placed in JWT {@code permissions} claim (e.g. {@code loan:read})
+     * @param description operator-facing explanation from the permission enum
      */
     @Schema(name = "PermissionInfo", description = "Single entry from the banking permission catalogue")
     public record PermissionInfo(
             @Schema(description = "Permission enum constant name", example = "LOAN_READ") String name,
-            @Schema(description = "Authority string used in JWT and @PreAuthorize", example = "loan:read") String authority) {
+            @Schema(description = "Authority string used in JWT and @PreAuthorize", example = "loan:read") String authority,
+            @Schema(description = "Human-readable description") String description) {
     }
 }

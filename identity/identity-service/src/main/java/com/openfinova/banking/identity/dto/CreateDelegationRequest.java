@@ -2,27 +2,31 @@ package com.openfinova.banking.identity.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 @Schema(description = "Register a delegation of authority between two staff users")
 public class CreateDelegationRequest {
 
-    @NotNull
-    private UUID delegatedFromUserId;
+    @NotBlank
+    @Size(max = 320)
+    @Schema(description = "Delegator: user UUID, or username / email substring that resolves to exactly one STAFF user")
+    private String delegatedFromUserId;
 
-    @NotNull
-    private UUID delegatedToUserId;
+    @NotBlank
+    @Size(max = 320)
+    @Schema(description = "Delegatee: user UUID, or username / email substring that resolves to exactly one STAFF user")
+    private String delegatedToUserId;
 
     @Size(max = 3)
     private String currency;
 
     private BigDecimal approvalLimit;
 
-    @NotNull
+    @NotBlank
     @Size(max = 80)
     private String transactionType;
 
@@ -34,20 +38,20 @@ public class CreateDelegationRequest {
     @Size(max = 30)
     private String actingGlApprovalRole;
 
-    public UUID getDelegatedFromUserId() {
+    public String getDelegatedFromUserId() {
         return delegatedFromUserId;
     }
 
-    public void setDelegatedFromUserId(UUID v) {
-        this.delegatedFromUserId = v;
+    public void setDelegatedFromUserId(String v) {
+        this.delegatedFromUserId = v != null ? v.strip() : null;
     }
 
-    public UUID getDelegatedToUserId() {
+    public String getDelegatedToUserId() {
         return delegatedToUserId;
     }
 
-    public void setDelegatedToUserId(UUID v) {
-        this.delegatedToUserId = v;
+    public void setDelegatedToUserId(String v) {
+        this.delegatedToUserId = v != null ? v.strip() : null;
     }
 
     public String getCurrency() {

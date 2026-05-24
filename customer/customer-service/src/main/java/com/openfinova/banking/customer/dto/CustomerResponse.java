@@ -1,17 +1,21 @@
 package com.openfinova.banking.customer.dto;
 
-import com.openfinova.banking.customer.api.entity.CustomerSegmentType;
-import com.openfinova.banking.customer.api.entity.CustomerStatus;
-import com.openfinova.banking.customer.api.entity.CustomerType;
-import com.openfinova.banking.customer.api.entity.KYCStatus;
-
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.openfinova.banking.customer.api.entity.CustomerSegmentType;
+import com.openfinova.banking.customer.api.entity.CustomerStatus;
+import com.openfinova.banking.customer.api.entity.CustomerType;
+import com.openfinova.banking.customer.api.entity.Gender;
+import com.openfinova.banking.customer.api.entity.KYCStatus;
+import com.openfinova.banking.customer.api.entity.LegalEntityType;
+import com.openfinova.banking.customer.api.entity.MaritalStatus;
+
 /**
  * Response DTO for customer API endpoints.
- * Excludes sensitive fields: motherMaidenName, pepFlag, sanctionFlag.
+ * Excludes highly sensitive fields: motherMaidenName, taxId (use tax-id lookup with customer:pii:read).
  */
 public class CustomerResponse {
 
@@ -27,6 +31,19 @@ public class CustomerResponse {
     private String nationality;
     private String residenceCountry;
     private CustomerSegmentType segment;
+    private Gender gender;
+    private MaritalStatus maritalStatus;
+    private String placeOfBirth;
+    private String occupation;
+    private BigDecimal annualIncome;
+    private LocalDate incorporationDate;
+    private String incorporationCountry;
+    private String businessRegistrationNumber;
+    private LegalEntityType legalEntityType;
+    private boolean pepFlag;
+    private boolean sanctionFlag;
+    private UUID linkedIdentityUserId;
+    private String linkedIdentityUsername;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -127,6 +144,110 @@ public class CustomerResponse {
 
     public void setSegment(CustomerSegmentType segment) {
         this.segment = segment;
+    }
+
+    public Gender getGender() {
+        return gender;
+    }
+
+    public void setGender(Gender gender) {
+        this.gender = gender;
+    }
+
+    public MaritalStatus getMaritalStatus() {
+        return maritalStatus;
+    }
+
+    public void setMaritalStatus(MaritalStatus maritalStatus) {
+        this.maritalStatus = maritalStatus;
+    }
+
+    public String getPlaceOfBirth() {
+        return placeOfBirth;
+    }
+
+    public void setPlaceOfBirth(String placeOfBirth) {
+        this.placeOfBirth = placeOfBirth;
+    }
+
+    public String getOccupation() {
+        return occupation;
+    }
+
+    public void setOccupation(String occupation) {
+        this.occupation = occupation;
+    }
+
+    public BigDecimal getAnnualIncome() {
+        return annualIncome;
+    }
+
+    public void setAnnualIncome(BigDecimal annualIncome) {
+        this.annualIncome = annualIncome;
+    }
+
+    public LocalDate getIncorporationDate() {
+        return incorporationDate;
+    }
+
+    public void setIncorporationDate(LocalDate incorporationDate) {
+        this.incorporationDate = incorporationDate;
+    }
+
+    public String getIncorporationCountry() {
+        return incorporationCountry;
+    }
+
+    public void setIncorporationCountry(String incorporationCountry) {
+        this.incorporationCountry = incorporationCountry;
+    }
+
+    public String getBusinessRegistrationNumber() {
+        return businessRegistrationNumber;
+    }
+
+    public void setBusinessRegistrationNumber(String businessRegistrationNumber) {
+        this.businessRegistrationNumber = businessRegistrationNumber;
+    }
+
+    public LegalEntityType getLegalEntityType() {
+        return legalEntityType;
+    }
+
+    public void setLegalEntityType(LegalEntityType legalEntityType) {
+        this.legalEntityType = legalEntityType;
+    }
+
+    public boolean isPepFlag() {
+        return pepFlag;
+    }
+
+    public void setPepFlag(boolean pepFlag) {
+        this.pepFlag = pepFlag;
+    }
+
+    public boolean isSanctionFlag() {
+        return sanctionFlag;
+    }
+
+    public void setSanctionFlag(boolean sanctionFlag) {
+        this.sanctionFlag = sanctionFlag;
+    }
+
+    public UUID getLinkedIdentityUserId() {
+        return linkedIdentityUserId;
+    }
+
+    public void setLinkedIdentityUserId(UUID linkedIdentityUserId) {
+        this.linkedIdentityUserId = linkedIdentityUserId;
+    }
+
+    public String getLinkedIdentityUsername() {
+        return linkedIdentityUsername;
+    }
+
+    public void setLinkedIdentityUsername(String linkedIdentityUsername) {
+        this.linkedIdentityUsername = linkedIdentityUsername;
     }
 
     public LocalDateTime getCreatedAt() {

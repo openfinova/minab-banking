@@ -1,16 +1,25 @@
 package com.openfinova.banking.tp.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +41,7 @@ import com.openfinova.banking.tp.api.entity.ReservationStatus;
 import com.openfinova.banking.tp.api.entity.ReservationType;
 import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import com.openfinova.banking.tp.api.entity.TransactionType;
+import com.openfinova.banking.tp.api.event.TransactionCompletedEvent;
 import com.openfinova.banking.tp.entity.BalanceReservation;
 import com.openfinova.banking.tp.entity.Transaction;
 import com.openfinova.banking.tp.entity.TransactionEvent;
@@ -39,6 +49,7 @@ import com.openfinova.banking.tp.entity.TransactionRequest;
 import com.openfinova.banking.tp.mapper.TransactionMapper;
 import com.openfinova.banking.tp.repository.TransactionRepository;
 import com.openfinova.banking.tp.repository.TransactionRequestRepository;
+import com.openfinova.banking.tp.repository.TransactionSpecifications;
 
 /**
  * Implementation of TransactionService with comprehensive lifecycle management,
@@ -58,10 +69,10 @@ public class TransactionService {
     private final GeneralLedgerService generalLedgerService;
     private final ExchangeRateService exchangeRateService;
     private final CustomerAccountService customerAccountService;
-    private final CustomerInfoService customerInfoService;
     private final CompensationWorkflowService compensationWorkflowService;
     private final DateTimeService dateTimeService;
     private final TransactionMapper transactionMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TransactionService(TransactionRepository transactionRepository,
             TransactionRequestRepository transactionRequestRepository, FeeManagementService feeManagementService,
@@ -69,7 +80,7 @@ public class TransactionService {
             GeneralLedgerService generalLedgerService, ExchangeRateService exchangeRateService,
             CustomerAccountService customerAccountService, CustomerInfoService customerInfoService,
             CompensationWorkflowService compensationWorkflowService, DateTimeService dateTimeService,
-            TransactionMapper transactionMapper) {
+            TransactionMapper transactionMapper, ApplicationEventPublisher eventPublisher) {
         this.transactionRepository = transactionRepository;
         this.transactionRequestRepository = transactionRequestRepository;
         this.feeManagementService = feeManagementService;
@@ -78,10 +89,10 @@ public class TransactionService {
         this.generalLedgerService = generalLedgerService;
         this.exchangeRateService = exchangeRateService;
         this.customerAccountService = customerAccountService;
-        this.customerInfoService = customerInfoService;
         this.compensationWorkflowService = compensationWorkflowService;
         this.dateTimeService = dateTimeService;
         this.transactionMapper = transactionMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     public Transaction initiateTransaction(TransactionRequest request) {
@@ -425,8 +436,99 @@ public class TransactionService {
         return transaction.getEvents();
     }
 
+    /**
+     * Resolves an existing transaction by idempotency key (external facade / idempotency helpers).
+     */
+    @Transactional(readOnly = true)
     public Optional<Transaction> findExistingTransaction(String idempotencyKey) {
         return transactionRepository.findByTransactionKey(idempotencyKey);
+    }
+
+    /**
+     * Paginated admin search across TP transactions with optional filters.
+     */
+    @Transactional(readOnly = true)
+    public Page<TransactionResponse> searchTransactions(UUID accountId, TransactionStatus status,
+            TransactionType transactionType, LocalDate fromTransactionDate, LocalDate toTransactionDate,
+            String currency, BigDecimal minAmount, BigDecimal maxAmount, String referenceContains, Pageable pageable) {
+
+        Specification<Transaction> spec = TransactionSpecifications.adminSearch(
+                accountId,
+                status,
+                transactionType,
+                fromTransactionDate,
+                toTransactionDate,
+                currency,
+                minAmount,
+                maxAmount,
+                referenceContains);
+
+        Page<Transaction> page = transactionRepository.findAll(spec, pageable);
+        List<UUID> ids = page.getContent().stream().map(Transaction::getId).toList();
+        if (ids.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, page.getTotalElements());
+        }
+
+        Map<UUID, Transaction> byId = findByIdInWithAllRelations(ids).stream()
+                .collect(Collectors.toMap(Transaction::getId, Function.identity()));
+
+        List<TransactionResponse> content = ids.stream().map(byId::get).filter(Objects::nonNull)
+                .map(transactionMapper::toResponse).toList();
+
+        return new PageImpl<>(content, pageable, page.getTotalElements());
+    }
+
+    /**
+     * Loads transactions with both {@code events} and {@code reservations} fully populated.
+     *
+     * <p>Why two queries? Hibernate throws {@link org.hibernate.loader.MultipleBagFetchException}
+     * when you JOIN FETCH two {@code List} collections simultaneously. Both {@code events} and
+     * {@code reservations} are mapped as bags (unordered {@code List} without {@code @OrderColumn}),
+     * so a single query like:
+     *
+     * <pre>
+     *   SELECT t FROM Transaction t
+     *   LEFT JOIN FETCH t.events
+     *   LEFT JOIN FETCH t.reservations  -- BOOM: MultipleBagFetchException
+     * </pre>
+     *
+     * <p>is not possible. The root cause is that fetching two bags via JOIN produces a Cartesian
+     * product in the SQL result set — if a transaction has 3 events and 3 reservations, the JOIN
+     * returns 9 rows instead of 6, corrupting the hydrated entity state.
+     *
+     * <p>Solution: run two separate queries within the <strong>same Hibernate session</strong>.
+     * The first query loads transactions with their {@code events}. The second query loads
+     * transactions with their {@code reservations}. Because both queries run in the same session,
+     * Hibernate's first-level (session) cache recognises the same {@code Transaction} IDs and
+     * hydrates {@code reservations} directly onto the already-loaded entity instances.
+     *
+     * <pre>
+     *   Query 1 → Transaction#1 { events=[...],  reservations=[] }  ← stored in session cache
+     *   Query 2 → Transaction#1 { events=[...],  reservations=[...] } ← same reference, mutated
+     * </pre>
+     *
+     * <p>The return value of the second query is therefore intentionally discarded — the
+     * {@code transactions} list returned from the first query already holds the fully-populated
+     * instances by the time the method returns.
+     *
+     * <p><strong>⚠️ DO NOT:</strong>
+     * <ul>
+     *   <li>Merge the two results manually — the session cache handles this automatically.</li>
+     *   <li>Remove {@code @Transactional} — without a shared session, the cache is gone between
+     *       calls and {@code reservations} will remain uninitialized, causing a
+     *       {@link org.hibernate.LazyInitializationException} on access.</li>
+     *   <li>Collapse back into one query with two {@code JOIN FETCH} — see above.</li>
+     *   <li>"Fix" the discarded return value of the second query — it is not a bug.</li>
+     * </ul>
+     *
+     * @param transactionIds the IDs of the transactions to load
+     * @return transactions with {@code events} and {@code reservations} fully initialized
+     */
+    @Transactional(readOnly = true)
+    public List<Transaction> findByIdInWithAllRelations(List<UUID> transactionIds) {
+        List<Transaction> transactions = transactionRepository.findByIdInWithEvents(transactionIds);
+        transactionRepository.findByIdInWithReservations(transactionIds); // intentionally discarded — see Javadoc
+        return transactions;
     }
 
     public boolean isTransactionDuplicate(TransactionRequest request) {
@@ -460,6 +562,14 @@ public class TransactionService {
 
         // Process post-transaction operations
         processPostTransactionOperations(savedTransaction);
+
+        eventPublisher.publishEvent(
+                new TransactionCompletedEvent(
+                        savedTransaction.getId(),
+                        savedTransaction.getSourceAccountId(),
+                        savedTransaction.getPrincipalAmount(),
+                        savedTransaction.getCurrency(),
+                        savedTransaction.getTransactionType().name()));
 
         logger.info("Transaction completed successfully: {}", transactionId);
         return savedTransaction;
@@ -879,6 +989,9 @@ public class TransactionService {
                     "GL_POSTING_COMPLETED",
                     transaction.getStatus(),
                     "GL posting completed with GL transaction ID: " + glTransactionId);
+
+            // Create customer-facing AccountTransactions after successful GL posting
+            createAccountTransactions(transaction);
 
         } catch (Exception e) {
             logger.error("GL posting failed for transaction: {}", transaction.getId(), e);
@@ -1727,6 +1840,7 @@ public class TransactionService {
         metadata.put("originalAmount", originalTransaction.getTotalAmount());
         metadata.put("transactionType", "REFUND");
         refundRequest.setMetadata(metadata);
+        refundRequest.setCreatedBy(initiatedBy != null && !initiatedBy.isBlank() ? initiatedBy : "SYSTEM");
 
         // Initiate the refund transaction
         Transaction refundTransaction = initiateTransaction(refundRequest);
@@ -1746,5 +1860,183 @@ public class TransactionService {
         }
 
         return refundTransaction;
+    }
+
+    /**
+     * Creates customer-facing AccountTransactions after successful GL posting.
+     * This method is called from initiateGLPosting() after the GL transaction is created.
+     * It creates AccountTransaction records that customers see in their statements.
+     *
+     * @param transaction the TP transaction that was posted to GL
+     */
+    private void createAccountTransactions(Transaction transaction) {
+        logger.debug("Creating customer-facing AccountTransactions for transaction: {}", transaction.getId());
+
+        UUID glTransactionId = transaction.getGlTransactionId();
+        if (glTransactionId == null) {
+            logger.warn(
+                    "Cannot create AccountTransactions - GL transaction ID is null for transaction: {}",
+                    transaction.getId());
+            return;
+        }
+
+        LocalDateTime txDate = LocalDateTime.of(transaction.getTransactionDate(), java.time.LocalTime.now());
+
+        try {
+            // Create AccountTransaction for source account (debit)
+            if (transaction.getSourceAccountId() != null) {
+                String debitType = mapToAccountTransactionType(transaction.getTransactionType(), true);
+                String debitDescription = buildAccountTransactionDescription(transaction, true);
+
+                UUID sourceAccountTxId = customerAccountService.recordAndLinkAccountTransaction(
+                        transaction.getSourceAccountId(),
+                        debitType,
+                        transaction.getTotalAmount(), // Principal + fees
+                        transaction.getCurrency(),
+                        txDate,
+                        debitDescription,
+                        transaction.getIdempotencyKey(),
+                        glTransactionId);
+
+                logger.info(
+                        "Created source AccountTransaction: {} for TP transaction: {}",
+                        sourceAccountTxId,
+                        transaction.getId());
+
+                recordTransactionEvent(
+                        transaction,
+                        "ACCOUNT_TRANSACTION_CREATED",
+                        transaction.getStatus(),
+                        "Source AccountTransaction created: " + sourceAccountTxId);
+            }
+
+            // Create AccountTransaction for destination account (credit)
+            if (transaction.getDestinationAccountId() != null) {
+                String creditType = mapToAccountTransactionType(transaction.getTransactionType(), false);
+                String creditDescription = buildAccountTransactionDescription(transaction, false);
+
+                UUID destAccountTxId = customerAccountService.recordAndLinkAccountTransaction(
+                        transaction.getDestinationAccountId(),
+                        creditType,
+                        transaction.getPrincipalAmount(), // Principal only (no fees)
+                        transaction.getCurrency(),
+                        txDate,
+                        creditDescription,
+                        transaction.getIdempotencyKey(),
+                        glTransactionId);
+
+                logger.info(
+                        "Created destination AccountTransaction: {} for TP transaction: {}",
+                        destAccountTxId,
+                        transaction.getId());
+
+                recordTransactionEvent(
+                        transaction,
+                        "ACCOUNT_TRANSACTION_CREATED",
+                        transaction.getStatus(),
+                        "Destination AccountTransaction created: " + destAccountTxId);
+            }
+
+        } catch (Exception e) {
+            logger.error(
+                    "Failed to create AccountTransactions for transaction {}: {}",
+                    transaction.getId(),
+                    e.getMessage(),
+                    e);
+            // Don't fail the transaction - AccountTransactions can be created later via reconciliation
+            recordTransactionEvent(
+                    transaction,
+                    "ACCOUNT_TRANSACTION_CREATION_FAILED",
+                    transaction.getStatus(),
+                    "Failed to create AccountTransactions: " + e.getMessage(),
+                    "ACCOUNT_TX_ERROR");
+        }
+    }
+
+    /**
+     * Maps TP TransactionType to AccountTransactionType for customer-facing display.
+     *
+     * @param tpType the TP transaction type
+     * @param isSource true if this is the source account (debit), false for destination (credit)
+     * @return the AccountTransactionType as a string
+     */
+    private String mapToAccountTransactionType(TransactionType tpType, boolean isSource) {
+        if (isSource) {
+            // Debit transactions (money leaving the account)
+            return switch (tpType) {
+                case P2P, TRANSFER -> "TRANSFER_OUT";
+                case CASH_OUT -> "WITHDRAWAL";
+                case BILL_PAYMENT -> "FEE"; // Or could be a new type like BILL_PAYMENT
+                case MERCHANT_PURCHASE -> "FEE"; // Or could be a new type like PURCHASE
+                case REFUND -> "ADJUSTMENT"; // Refund source (rare case)
+                default -> "ADJUSTMENT";
+            };
+        } else {
+            // Credit transactions (money entering the account)
+            return switch (tpType) {
+                case P2P, TRANSFER -> "TRANSFER_IN";
+                case CASH_IN, DEPOSIT -> "DEPOSIT";
+                case REFUND -> "ADJUSTMENT"; // Refund destination (common case)
+                default -> "ADJUSTMENT";
+            };
+        }
+    }
+
+    /**
+     * Builds a customer-friendly description for AccountTransaction.
+     *
+     * @param transaction the TP transaction
+     * @param isSource true if this is the source account, false for destination
+     * @return customer-friendly description
+     */
+    private String buildAccountTransactionDescription(Transaction transaction, boolean isSource) {
+        TransactionType type = transaction.getTransactionType();
+        TransactionRequest request = transaction.getRequest();
+
+        if (isSource) {
+            // Descriptions for debit (money leaving)
+            return switch (type) {
+                case P2P, TRANSFER -> {
+                    String destAccountId = transaction.getDestinationAccountId() != null
+                            ? transaction.getDestinationAccountId().toString().substring(0, 8)
+                            : "unknown";
+                    yield "Transfer to account " + destAccountId;
+                }
+                case CASH_OUT -> "ATM Withdrawal";
+                case BILL_PAYMENT -> {
+                    String payee = request.getMetadata() != null && request.getMetadata().containsKey("payee")
+                            ? String.valueOf(request.getMetadata().get("payee"))
+                            : "Bill Payment";
+                    yield payee;
+                }
+                case MERCHANT_PURCHASE -> {
+                    String merchant = request.getMetadata() != null && request.getMetadata().containsKey("merchant")
+                            ? String.valueOf(request.getMetadata().get("merchant"))
+                            : "Purchase";
+                    yield merchant;
+                }
+                case REFUND -> "Refund reversal";
+                default -> "Transaction";
+            };
+        } else {
+            // Descriptions for credit (money entering)
+            return switch (type) {
+                case P2P, TRANSFER -> {
+                    String sourceAccountId = transaction.getSourceAccountId() != null
+                            ? transaction.getSourceAccountId().toString().substring(0, 8)
+                            : "unknown";
+                    yield "Transfer from account " + sourceAccountId;
+                }
+                case CASH_IN, DEPOSIT -> "Deposit";
+                case REFUND -> {
+                    String originalTxId = request.getMetadata() != null
+                            && request.getMetadata().containsKey("originalTransactionId")
+                                    ? String.valueOf(request.getMetadata().get("originalTransactionId")).substring(0, 8)
+                                    : "unknown";
+                    yield "Refund for transaction " + originalTxId;
+                }
+                default -> "Transaction";
+            };
+        }
     }
 }

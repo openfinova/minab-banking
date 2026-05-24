@@ -9,7 +9,6 @@ import com.openfinova.banking.gl.dto.PendingApprovalResponse;
 import com.openfinova.banking.gl.entity.GLAuthorizationLimit;
 import com.openfinova.banking.gl.entity.GLTransaction;
 import com.openfinova.banking.gl.mapper.ApprovalMapper;
-import com.openfinova.banking.gl.repository.GLAuthorizationLimitRepository;
 import com.openfinova.banking.gl.repository.GLTransactionApprovalRepository;
 import com.openfinova.banking.gl.repository.GLTransactionRepository;
 import org.slf4j.Logger;
@@ -36,16 +35,17 @@ public class ApprovalService {
 
     private final GLTransactionRepository transactionRepository;
     private final GLTransactionApprovalRepository approvalRepository;
-    private final GLAuthorizationLimitRepository authLimitRepository;
+    private final GLAuthorizationLimitQueryService authorizationLimitQueryService;
     private final ApprovalWorkflowService approvalWorkflowService;
     private final ApprovalMapper approvalMapper;
 
     public ApprovalService(GLTransactionRepository transactionRepository,
-            GLTransactionApprovalRepository approvalRepository, GLAuthorizationLimitRepository authLimitRepository,
+            GLTransactionApprovalRepository approvalRepository,
+            GLAuthorizationLimitQueryService authorizationLimitQueryService,
             ApprovalWorkflowService approvalWorkflowService, ApprovalMapper approvalMapper) {
         this.transactionRepository = transactionRepository;
         this.approvalRepository = approvalRepository;
-        this.authLimitRepository = authLimitRepository;
+        this.authorizationLimitQueryService = authorizationLimitQueryService;
         this.approvalWorkflowService = approvalWorkflowService;
         this.approvalMapper = approvalMapper;
     }
@@ -88,7 +88,7 @@ public class ApprovalService {
     public List<AuthorizationLimitResponse> getAuthorizationLimitsForRole(GLApprovalRole role) {
         log.info("Fetching authorization limits for role: {}", role);
 
-        List<AuthorizationLimitResponse> limits = authLimitRepository.findByRole(role).stream()
+        List<AuthorizationLimitResponse> limits = authorizationLimitQueryService.findByRole(role).stream()
                 .map(approvalMapper::toAuthorizationLimitResponse).collect(Collectors.toList());
 
         log.info("Found {} authorization limits for role: {}", limits.size(), role);
@@ -144,7 +144,7 @@ public class ApprovalService {
 
         try {
             BigDecimal amount = approvalMapper.calculateTransactionAmount(transaction);
-            List<GLAuthorizationLimit> limits = authLimitRepository
+            List<GLAuthorizationLimit> limits = authorizationLimitQueryService
                     .findByRoleCurrencyAndSource(role, transaction.getCurrency(), transaction.getSource());
 
             if (limits.isEmpty()) {
@@ -172,7 +172,7 @@ public class ApprovalService {
         }
 
         BigDecimal amount = approvalMapper.calculateTransactionAmount(transaction);
-        List<GLAuthorizationLimit> limits = authLimitRepository
+        List<GLAuthorizationLimit> limits = authorizationLimitQueryService
                 .findByRoleCurrencyAndSource(role, transaction.getCurrency(), transaction.getSource());
 
         if (limits.isEmpty()) {

@@ -2,7 +2,6 @@ package com.openfinova.banking.customer.account.api.dto;
 
 import com.openfinova.banking.customer.account.api.entity.RelationshipType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.UUID;
@@ -17,10 +16,6 @@ public class AddRelationshipRequest {
     @NotNull(message = "Relationship type is required")
     @Schema(description = "Relationship type", required = true)
     private RelationshipType relationshipType;
-
-    @NotBlank(message = "Created by is required")
-    @Schema(description = "User creating the relationship", required = true)
-    private String createdBy;
 
     // Getters and setters
     public UUID getUserProfileId() {
@@ -37,13 +32,5 @@ public class AddRelationshipRequest {
 
     public void setRelationshipType(RelationshipType relationshipType) {
         this.relationshipType = relationshipType;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
     }
 }

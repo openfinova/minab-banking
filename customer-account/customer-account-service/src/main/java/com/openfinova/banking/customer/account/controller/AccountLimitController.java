@@ -7,6 +7,7 @@ import com.openfinova.banking.customer.account.api.dto.ValidationResult;
 import com.openfinova.banking.customer.account.api.entity.LimitType;
 import com.openfinova.banking.customer.account.entity.AccountLimit;
 import com.openfinova.banking.customer.account.service.AccountLimitService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -48,7 +50,7 @@ public class AccountLimitController {
     @Operation(summary = "Add limit", description = "Adds a new limit to an account")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Limit added successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input data") })
-    public ResponseEntity<AccountLimitResponse> addLimit(
+    public ResponseEntity<AccountLimitResponse> addLimit(Authentication authentication,
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody AddLimitRequest request) {
 
@@ -58,13 +60,15 @@ public class AccountLimitController {
                 request.getLimitType(),
                 request.getLimitPeriod());
 
+        String createdBy = CallerContextResolver.resolveUsername(authentication);
+
         AccountLimit limit = limitService.addLimit(
                 id,
                 request.getLimitType(),
                 request.getLimitPeriod(),
                 request.getMaxAmount(),
                 request.getMaxCount(),
-                request.getCreatedBy());
+                createdBy);
 
         log.info("Successfully added limit with ID: {}", limit.getId());
 
@@ -111,9 +115,10 @@ public class AccountLimitController {
     @Operation(summary = "Remove limit", description = "Permanently removes or expires a limit")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Limit removed successfully"),
             @ApiResponse(responseCode = "404", description = "Limit not found") })
-    public ResponseEntity<Void> removeLimit(
-            @Parameter(description = "Limit ID", required = true) @PathVariable UUID limitId,
-            @Parameter(description = "User removing the limit") @RequestParam String removedBy) {
+    public ResponseEntity<Void> removeLimit(Authentication authentication,
+            @Parameter(description = "Limit ID", required = true) @PathVariable UUID limitId) {
+
+        String removedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Removing limit with ID: {}", limitId);
 

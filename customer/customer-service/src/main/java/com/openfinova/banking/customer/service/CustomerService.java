@@ -1,25 +1,34 @@
 package com.openfinova.banking.customer.service;
 
-import com.openfinova.banking.customer.api.entity.CustomerRelationshipType;
-import com.openfinova.banking.customer.api.entity.CustomerStatus;
-import com.openfinova.banking.customer.api.entity.KYCDecision;
-import com.openfinova.banking.customer.api.entity.KYCStatus;
-import com.openfinova.banking.customer.api.event.CustomerLifecycleEvent;
-import com.openfinova.banking.customer.dto.CustomerProfileUpdate;
-import com.openfinova.banking.customer.dto.KYCDocumentSubmission;
-import com.openfinova.banking.customer.entity.*;
-import com.openfinova.banking.customer.repository.*;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import com.openfinova.banking.customer.api.entity.CustomerRelationshipType;
+import com.openfinova.banking.customer.api.entity.CustomerStatus;
+import com.openfinova.banking.customer.api.entity.DocumentStatus;
+import com.openfinova.banking.customer.api.entity.KYCDecision;
+import com.openfinova.banking.customer.api.entity.KYCStatus;
+import com.openfinova.banking.customer.api.event.CustomerLifecycleEvent;
+import com.openfinova.banking.customer.dto.CustomerProfileUpdate;
+import com.openfinova.banking.customer.dto.KYCDocumentSubmission;
+import com.openfinova.banking.customer.entity.Customer;
+import com.openfinova.banking.customer.entity.CustomerRelationship;
+import com.openfinova.banking.customer.entity.IdentificationDocument;
+import com.openfinova.banking.customer.entity.KYCReviewStep;
+import com.openfinova.banking.customer.entity.KYCWorkflow;
+import com.openfinova.banking.customer.repository.CustomerRelationshipRepository;
+import com.openfinova.banking.customer.repository.CustomerRepository;
+import com.openfinova.banking.customer.repository.IdentificationDocumentRepository;
+import com.openfinova.banking.customer.repository.KYCWorkflowRepository;
 
 /**
  * Service class for managing customer profiles, relationships, and lifecycle operations
@@ -128,7 +137,61 @@ public class CustomerService {
             }
             customer.setTaxId(customerDetails.getTaxId());
         }
+        if (customerDetails.getNationality() != null) {
+            customer.setNationality(customerDetails.getNationality());
+        }
+        if (customerDetails.getResidenceCountry() != null) {
+            customer.setResidenceCountry(customerDetails.getResidenceCountry());
+        }
+        if (customerDetails.getSegment() != null) {
+            customer.setSegment(customerDetails.getSegment());
+        }
+        if (customerDetails.getGender() != null) {
+            customer.setGender(customerDetails.getGender());
+        }
+        if (customerDetails.getMaritalStatus() != null) {
+            customer.setMaritalStatus(customerDetails.getMaritalStatus());
+        }
+        if (customerDetails.getPlaceOfBirth() != null) {
+            customer.setPlaceOfBirth(customerDetails.getPlaceOfBirth());
+        }
+        if (customerDetails.getMotherMaidenName() != null) {
+            customer.setMotherMaidenName(customerDetails.getMotherMaidenName());
+        }
+        if (customerDetails.getOccupation() != null) {
+            customer.setOccupation(customerDetails.getOccupation());
+        }
+        if (customerDetails.getAnnualIncome() != null) {
+            customer.setAnnualIncome(customerDetails.getAnnualIncome());
+        }
+        if (customerDetails.getIncorporationDate() != null) {
+            customer.setIncorporationDate(customerDetails.getIncorporationDate());
+        }
+        if (customerDetails.getIncorporationCountry() != null) {
+            customer.setIncorporationCountry(customerDetails.getIncorporationCountry());
+        }
+        if (customerDetails.getBusinessRegistrationNumber() != null) {
+            customer.setBusinessRegistrationNumber(customerDetails.getBusinessRegistrationNumber());
+        }
+        if (customerDetails.getLegalEntityType() != null) {
+            customer.setLegalEntityType(customerDetails.getLegalEntityType());
+        }
 
+        return customerRepository.save(customer);
+    }
+
+    /**
+     * Updates PEP / sanctions screening flags. {@code null} means leave unchanged.
+     */
+    public Customer updateComplianceFlags(UUID id, Boolean pepFlag, Boolean sanctionFlag) {
+        Customer customer = customerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + id));
+        if (pepFlag != null) {
+            customer.setPepFlag(pepFlag);
+        }
+        if (sanctionFlag != null) {
+            customer.setSanctionFlag(sanctionFlag);
+        }
         return customerRepository.save(customer);
     }
 
@@ -220,6 +283,14 @@ public class CustomerService {
         return customerRepository.findById(customerId).map(Customer::getLinkedIdentityUserId);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<UUID> findCustomerIdByLinkedIdentityUserId(UUID linkedIdentityUserId) {
+        if (linkedIdentityUserId == null) {
+            return Optional.empty();
+        }
+        return customerRepository.findByLinkedIdentityUserId(linkedIdentityUserId).map(Customer::getId);
+    }
+
     /**
      * KYC status must only change through the KYC workflow (initiate, submit, review).
      * Direct override is not allowed for compliance.
@@ -248,14 +319,27 @@ public class CustomerService {
     }
 
     /**
-     * Retrieves a paginated list of customers, optionally filtered by their current status.
+     * Retrieves a paginated list of customers, optionally filtered by status and
+     * an operator search string (customer number, name, business name, email/phone via contacts, customer UUID,
+     * or linked identity user UUID when it equals {@code idMatch}).
      *
      * @param status the customer status to filter by, or null to retrieve all customers
+     * @param search free-text search; blank means no search filter
      * @param pageable pagination and sorting configuration
      * @return a paginated result of matching customers
      */
     @Transactional(readOnly = true)
-    public Page<Customer> listCustomers(CustomerStatus status, Pageable pageable) {
+    public Page<Customer> listCustomers(CustomerStatus status, String search, Pageable pageable) {
+        String q = search == null ? "" : search.trim();
+        if (!q.isEmpty()) {
+            UUID idMatch = null;
+            try {
+                idMatch = UUID.fromString(q);
+            } catch (IllegalArgumentException ignored) {
+                // not a UUID
+            }
+            return customerRepository.searchCustomers(q, status, idMatch, pageable);
+        }
         if (status != null) {
             return customerRepository.findByStatus(status, pageable);
         }
@@ -323,11 +407,14 @@ public class CustomerService {
             doc.setCustomer(customer);
             doc.setType(docSubmission.getDocumentType());
             doc.setDocumentNumber(docSubmission.getDocumentNumber());
-            doc.setIssuingCountry(docSubmission.getIssuingCountry());
+            doc.setIssuingCountry(
+                    docSubmission.getIssuingCountry() == null ? null
+                            : docSubmission.getIssuingCountry().trim().toUpperCase());
             doc.setIssuingAuthority(docSubmission.getIssuingAuthority());
             doc.setIssueDate(docSubmission.getIssueDate());
             doc.setExpiryDate(docSubmission.getExpiryDate());
             doc.setVerified(false);
+            doc.setDocumentStatus(DocumentStatus.UNDER_REVIEW);
             identificationDocumentRepository.save(doc);
         }
 
@@ -375,10 +462,44 @@ public class CustomerService {
             workflow.setComments(comments);
         }
 
+        syncIdentificationDocumentsWithKycDecision(customerId, decision, reviewedBy);
+
         workflow = kycWorkflowRepository.save(workflow);
         customerRepository.save(customer);
 
         return workflow;
+    }
+
+    /**
+     * Keeps {@link IdentificationDocument} rows aligned with the KYC review outcome.
+     * Pending pipeline docs ({@link DocumentStatus#SUBMITTED}, {@link DocumentStatus#UNDER_REVIEW}) are
+     * verified when KYC is approved, rejected when KYC is rejected, or marked under review when more
+     * information is required.
+     */
+    private void syncIdentificationDocumentsWithKycDecision(UUID customerId, KYCDecision decision, String reviewedBy) {
+        List<IdentificationDocument> docs = identificationDocumentRepository
+                .findByCustomerIdAndDeletedAtIsNull(customerId);
+        LocalDateTime now = LocalDateTime.now();
+        for (IdentificationDocument doc : docs) {
+            DocumentStatus st = doc.getDocumentStatus();
+            if (st != DocumentStatus.SUBMITTED && st != DocumentStatus.UNDER_REVIEW) {
+                continue;
+            }
+            if (decision == KYCDecision.APPROVED) {
+                doc.setDocumentStatus(DocumentStatus.VERIFIED);
+                doc.setVerified(true);
+                doc.setVerifiedAt(now);
+                doc.setVerifiedBy(reviewedBy);
+            } else if (decision == KYCDecision.REJECTED) {
+                doc.setDocumentStatus(DocumentStatus.REJECTED);
+                doc.setVerified(false);
+                doc.setVerifiedAt(null);
+                doc.setVerifiedBy(null);
+            } else {
+                doc.setDocumentStatus(DocumentStatus.UNDER_REVIEW);
+            }
+            identificationDocumentRepository.save(doc);
+        }
     }
 
     /**

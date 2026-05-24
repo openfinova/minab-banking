@@ -1,21 +1,31 @@
 package com.openfinova.banking.gl.entity;
 
-import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import com.openfinova.banking.common.lib.validation.ValidCurrency;
+import com.openfinova.banking.gl.api.entity.GLApprovalRole;
+import com.openfinova.banking.gl.api.entity.GLTransactionSource;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import com.openfinova.banking.common.lib.validation.ValidCurrency;
-import com.openfinova.banking.gl.api.entity.GLTransactionSource;
-import com.openfinova.banking.gl.api.entity.GLApprovalRole;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.UUID;
 
 /**
  * Authorization limits for GL transaction approval workflow.
@@ -48,10 +58,11 @@ import java.util.UUID;
  * Limits can be configured per currency and transaction source for fine-grained control.
  */
 @Entity
-@Table(name = "gl_authorization_limits", indexes = { @Index(name = "idx_auth_limits_role", columnList = "user_role"),
+@Table(name = "gl_authorization_limits", indexes = {
+        @Index(name = "idx_auth_limits_role", columnList = "approval_role"),
         @Index(name = "idx_auth_limits_source", columnList = "transaction_source") }, uniqueConstraints = {
-                @UniqueConstraint(name = "uk_auth_limits_role_currency_source", columnNames = { "user_role", "currency",
-                        "transaction_source" }) })
+                @UniqueConstraint(name = "uk_auth_limits_role_currency_source", columnNames = { "approval_role",
+                        "currency", "transaction_source" }) })
 public class GLAuthorizationLimit {
 
     @Id

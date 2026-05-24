@@ -21,8 +21,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openfinova.banking.customer.account.api.CustomerAccountService;
 import com.openfinova.banking.customer.account.api.dto.AccountTransactionResponse;
 import com.openfinova.banking.customer.account.api.dto.RecordTransactionRequest;
+import com.openfinova.banking.customer.account.api.dto.RecordTransactionWithGLRequest;
 import com.openfinova.banking.customer.account.entity.AccountTransaction;
 import com.openfinova.banking.customer.account.mapper.AccountTransactionMapper;
 import com.openfinova.banking.customer.account.service.AccountTransactionService;
@@ -47,16 +49,18 @@ public class AccountTransactionController {
 
     private final AccountTransactionService transactionService;
     private final AccountTransactionMapper transactionMapper;
+    private final CustomerAccountService customerAccountService;
 
     public AccountTransactionController(AccountTransactionService transactionService,
-            AccountTransactionMapper transactionMapper) {
+            AccountTransactionMapper transactionMapper, CustomerAccountService customerAccountService) {
         this.transactionService = transactionService;
         this.transactionMapper = transactionMapper;
+        this.customerAccountService = customerAccountService;
     }
 
     @PostMapping("/{id}/transactions")
     @PreAuthorize("hasAuthority('account:write')")
-    @Operation(summary = "Record transaction", description = "Records a new transaction on an account")
+    @Operation(summary = "Record transaction", description = "Records a new transaction on an account in PENDING status. Use this for transactions that haven't been posted to GL yet (e.g., ATM withdrawals, branch deposits).")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Transaction recorded successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input data") })
     public ResponseEntity<AccountTransactionResponse> recordTransaction(
@@ -75,6 +79,38 @@ public class AccountTransactionController {
                 request.getReferenceId());
 
         log.info("Successfully recorded transaction with ID: {}", transaction.getId());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(transactionMapper.toResponse(transaction));
+    }
+
+    @PostMapping("/{id}/transactions/with-gl")
+    @PreAuthorize("hasAuthority('account:write')")
+    @Operation(summary = "Record transaction with GL link", description = "Records a transaction and immediately links it to an existing GL transaction in POSTED status. Use this for management dashboard operations where GL posting has already occurred (e.g., manual corrections, backdated entries, external system integrations).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Transaction recorded and linked successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid input data"),
+            @ApiResponse(responseCode = "404", description = "Account or GL transaction not found") })
+    public ResponseEntity<AccountTransactionResponse> recordTransactionWithGL(
+            @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
+            @Valid @RequestBody RecordTransactionWithGLRequest request) {
+
+        log.info("Recording transaction with GL link for account: {} GL: {}", id, request.getGlTransactionId());
+
+        // Use the facade to record and link in one operation
+        UUID accountTransactionId = customerAccountService.recordAndLinkAccountTransaction(
+                id,
+                request.getTransactionType().name(),
+                request.getAmount(),
+                request.getCurrency(),
+                request.getTransactionDate(),
+                request.getDescription(),
+                request.getReferenceId(),
+                request.getGlTransactionId());
+
+        // Retrieve the created transaction to return full response
+        AccountTransaction transaction = transactionService.getTransactionById(accountTransactionId);
+
+        log.info("Successfully recorded and linked transaction with ID: {}", accountTransactionId);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(transactionMapper.toResponse(transaction));
     }

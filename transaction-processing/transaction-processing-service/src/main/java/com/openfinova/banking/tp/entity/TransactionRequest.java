@@ -97,7 +97,6 @@ public class TransactionRequest {
     private Instant createdAt;
 
     @Column(name = "created_by", nullable = false, length = 100)
-    @NotBlank(message = "Created by is required")
     @Size(max = 100, message = "Created by must not exceed 100 characters")
     private String createdBy;
 

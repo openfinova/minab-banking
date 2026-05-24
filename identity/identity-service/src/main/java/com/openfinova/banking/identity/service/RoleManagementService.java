@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,8 +29,8 @@ import com.openfinova.banking.identity.repository.RoleRepository;
  * Covers role creation, metadata updates, deletion, and fine-grained permission management
  * including full replacement, additive grant, and selective removal of BankingPermission
  * values. System roles seeded at startup are protected from deletion and from having their
- * permissions entirely replaced or removed. Permission-mutating operations additionally
- * require a pre-approved ROLE_PERMISSION_CHANGE workflow when enforcement is enabled,
+ * permissions entirely replaced or removed. Permission-mutating operations on non-system roles
+ * additionally require a pre-approved ROLE_PERMISSION_CHANGE workflow when enforcement is enabled,
  * implementing a change-management control. All state transitions are recorded through
  * SecurityAuditService.
  */
@@ -77,7 +79,14 @@ public class RoleManagementService {
      * @throws ResourceNotFoundException if no role exists with the given ID
      */
     @Transactional(readOnly = true)
+    @Cacheable(value = "bankingRoles", key = "'id_' + #id")
     public BankingRole getRole(UUID id) {
+        return roleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", id, OPAQUE_NOT_FOUND));
+    }
+
+    /** Loads a managed entity for writes; bypasses read cache so mutations see current state. */
+    private BankingRole requireRoleForMutation(UUID id) {
         return roleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", id, OPAQUE_NOT_FOUND));
     }
@@ -100,6 +109,7 @@ public class RoleManagementService {
      * @throws IllegalArgumentException if a role with the given name already exists
      */
     @Transactional
+    @CacheEvict(value = "bankingRoles", allEntries = true)
     public BankingRole createRole(String name, String displayName, String description,
             Set<BankingPermission> permissions, AuditActor actor) {
         if (roleRepository.existsByName(name)) {
@@ -143,8 +153,9 @@ public class RoleManagementService {
      * @throws ResourceNotFoundException if no role exists with the given ID
      */
     @Transactional
+    @CacheEvict(value = "bankingRoles", allEntries = true)
     public BankingRole updateRole(UUID id, String displayName, String description, AuditActor actor) {
-        BankingRole role = getRole(id);
+        BankingRole role = requireRoleForMutation(id);
         String prev = "displayName=" + role.getDisplayName() + ";description=" + role.getDescription();
         if (displayName != null) {
             role.setDisplayName(displayName);
@@ -167,24 +178,20 @@ public class RoleManagementService {
     /**
      * Permanently deletes a custom role from the system.
      *
-     * System roles cannot be deleted. When workflow enforcement is enabled a pre-approved
-     * ROLE_PERMISSION_CHANGE workflow must exist for the role. A ROLE_DELETED audit event is
-     * recorded.
+     * System roles cannot be deleted. A ROLE_DELETED audit event is recorded.
      *
      * @param id     the UUID of the role to delete
      * @param actor  the authenticated actor performing the deletion, used for audit recording
      * @throws ResourceNotFoundException if no role exists with the given ID
      * @throws IllegalArgumentException  if the role is a system role
-     * @throws IllegalStateException     if workflow enforcement is active and no approved
-     *                                   workflow exists for this role
      */
     @Transactional
+    @CacheEvict(value = "bankingRoles", allEntries = true)
     public void deleteRole(UUID id, AuditActor actor) {
-        BankingRole role = getRole(id);
+        BankingRole role = requireRoleForMutation(id);
         if (role.isSystemRole()) {
             throw new IllegalArgumentException("Cannot delete system role: " + role.getName());
         }
-        requireApprovedWorkflow(id);
         String roleName = role.getName();
         roleRepository.delete(role);
         auditService.recordParticipating(
@@ -216,8 +223,9 @@ public class RoleManagementService {
      *                                   workflow exists for this role
      */
     @Transactional
+    @CacheEvict(value = "bankingRoles", allEntries = true)
     public BankingRole setPermissions(UUID id, Set<BankingPermission> permissions, AuditActor actor) {
-        BankingRole role = getRole(id);
+        BankingRole role = requireRoleForMutation(id);
         if (role.isSystemRole()) {
             throw new IllegalArgumentException("Cannot replace permissions on system role: " + role.getName());
         }
@@ -240,21 +248,26 @@ public class RoleManagementService {
     /**
      * Grants additional permissions to a role without affecting existing ones.
      *
-     * Permissions already present on the role are left unchanged. When workflow enforcement is
-     * enabled a pre-approved workflow must exist for the role. A PERMISSION_ADDED audit event
-     * is recorded with a before-and-after snapshot.
+     * Permissions already present on the role are left unchanged. System roles cannot receive new
+     * permissions via this API. When workflow enforcement is enabled a pre-approved workflow must
+     * exist for the role. A PERMISSION_ADDED audit event is recorded with a before-and-after snapshot.
      *
      * @param id      the UUID of the role to grant permissions to
      * @param toAdd   the set of BankingPermission values to add
      * @param actor   the authenticated actor performing the operation, used for audit recording
      * @return the updated and persisted BankingRole entity
      * @throws ResourceNotFoundException if no role exists with the given ID
+     * @throws IllegalArgumentException  if the role is a system role
      * @throws IllegalStateException     if workflow enforcement is active and no approved
      *                                   workflow exists for this role
      */
     @Transactional
+    @CacheEvict(value = "bankingRoles", allEntries = true)
     public BankingRole addPermissions(UUID id, Set<BankingPermission> toAdd, AuditActor actor) {
-        BankingRole role = getRole(id);
+        BankingRole role = requireRoleForMutation(id);
+        if (role.isSystemRole()) {
+            throw new IllegalArgumentException("Cannot add permissions to system role: " + role.getName());
+        }
         requireApprovedWorkflow(id);
         String prev = role.getPermissions().toString();
         role.getPermissions().addAll(toAdd);
@@ -290,8 +303,9 @@ public class RoleManagementService {
      *                                   workflow exists for this role
      */
     @Transactional
+    @CacheEvict(value = "bankingRoles", allEntries = true)
     public BankingRole removePermissions(UUID id, Set<BankingPermission> toRemove, AuditActor actor) {
-        BankingRole role = getRole(id);
+        BankingRole role = requireRoleForMutation(id);
         if (role.isSystemRole()) {
             throw new IllegalArgumentException("Cannot remove permissions from system role: " + role.getName());
         }

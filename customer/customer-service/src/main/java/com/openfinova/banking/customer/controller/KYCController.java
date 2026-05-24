@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,8 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.openfinova.banking.customer.api.entity.KYCDecision;
 import com.openfinova.banking.customer.dto.KYCDocumentSubmission;
+import com.openfinova.banking.customer.dto.KYCWorkflowResponse;
 import com.openfinova.banking.customer.entity.KYCWorkflow;
+import com.openfinova.banking.customer.mapper.KYCMapper;
 import com.openfinova.banking.customer.service.CustomerService;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -56,9 +60,10 @@ public class KYCController {
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "KYC process initiated successfully"),
             @ApiResponse(responseCode = "404", description = "Customer not found"),
             @ApiResponse(responseCode = "409", description = "KYC process already in progress") })
-    public ResponseEntity<KYCWorkflow> initiateKYCProcess(
-            @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
-            @Parameter(description = "User initiating the process") @RequestParam String initiatedBy) {
+    public ResponseEntity<KYCWorkflowResponse> initiateKYCProcess(Authentication authentication,
+            @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId) {
+
+        String initiatedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Initiating KYC process for customer: {}, initiatedBy: {}", customerId, initiatedBy);
 
@@ -66,7 +71,7 @@ public class KYCController {
 
         log.info("Successfully initiated KYC workflow with ID: {}", workflow.getId());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(workflow);
+        return ResponseEntity.status(HttpStatus.CREATED).body(KYCMapper.toWorkflowResponse(workflow));
     }
 
     @PostMapping("/documents")
@@ -75,10 +80,11 @@ public class KYCController {
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Documents submitted successfully"),
             @ApiResponse(responseCode = "404", description = "Customer or KYC workflow not found"),
             @ApiResponse(responseCode = "400", description = "Invalid document data") })
-    public ResponseEntity<KYCWorkflow> submitKYCDocuments(
+    public ResponseEntity<KYCWorkflowResponse> submitKYCDocuments(Authentication authentication,
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
-            @Valid @RequestBody List<KYCDocumentSubmission> documents,
-            @Parameter(description = "User submitting the documents") @RequestParam String submittedBy) {
+            @Valid @RequestBody List<KYCDocumentSubmission> documents) {
+
+        String submittedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info(
                 "Submitting {} KYC documents for customer: {}, submittedBy: {}",
@@ -90,7 +96,7 @@ public class KYCController {
 
         log.info("Successfully submitted KYC documents for customer: {}", customerId);
 
-        return ResponseEntity.ok(workflow);
+        return ResponseEntity.ok(KYCMapper.toWorkflowResponse(workflow));
     }
 
     @PostMapping("/review")
@@ -98,11 +104,12 @@ public class KYCController {
     @Operation(summary = "Review KYC documents", description = "Reviews and approves/rejects KYC documents. Administrative operation.")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "KYC review completed successfully"),
             @ApiResponse(responseCode = "404", description = "Customer or KYC workflow not found") })
-    public ResponseEntity<KYCWorkflow> reviewKYCDocuments(
+    public ResponseEntity<KYCWorkflowResponse> reviewKYCDocuments(Authentication authentication,
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
             @Parameter(description = "KYC decision") @RequestParam KYCDecision decision,
-            @Parameter(description = "Reviewer comments") @RequestParam String comments,
-            @Parameter(description = "User performing the review") @RequestParam String reviewedBy) {
+            @Parameter(description = "Reviewer comments") @RequestParam String comments) {
+
+        String reviewedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info("Reviewing KYC for customer: {}, decision: {}, reviewedBy: {}", customerId, decision, reviewedBy);
 
@@ -110,7 +117,7 @@ public class KYCController {
 
         log.info("Successfully reviewed KYC for customer: {}, decision: {}", customerId, decision);
 
-        return ResponseEntity.ok(workflow);
+        return ResponseEntity.ok(KYCMapper.toWorkflowResponse(workflow));
     }
 
     @GetMapping("/workflow")
@@ -118,14 +125,14 @@ public class KYCController {
     @Operation(summary = "Get current KYC workflow", description = "Retrieves the current KYC workflow status for a customer")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "KYC workflow retrieved successfully"),
             @ApiResponse(responseCode = "404", description = "KYC workflow not found") })
-    public ResponseEntity<KYCWorkflow> getKYCWorkflow(
+    public ResponseEntity<KYCWorkflowResponse> getKYCWorkflow(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId) {
 
         log.info("Fetching KYC workflow for customer: {}", customerId);
 
         Optional<KYCWorkflow> workflow = customerService.getKYCWorkflow(customerId);
 
-        return workflow.map(ResponseEntity::ok).orElseGet(() -> {
+        return workflow.map(KYCMapper::toWorkflowResponse).map(ResponseEntity::ok).orElseGet(() -> {
             log.warn("KYC workflow not found for customer: {}", customerId);
             return ResponseEntity.notFound().build();
         });
@@ -135,7 +142,7 @@ public class KYCController {
     @PreAuthorize("hasAuthority('customer:read')")
     @Operation(summary = "Get KYC workflow history", description = "Retrieves all KYC workflows for a customer including historical records")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "KYC history retrieved successfully") })
-    public ResponseEntity<List<KYCWorkflow>> getKYCWorkflowHistory(
+    public ResponseEntity<List<KYCWorkflowResponse>> getKYCWorkflowHistory(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId) {
 
         log.info("Fetching KYC workflow history for customer: {}", customerId);
@@ -144,7 +151,7 @@ public class KYCController {
 
         log.info("Found {} KYC workflows for customer: {}", history.size(), customerId);
 
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok(KYCMapper.toWorkflowResponseList(history));
     }
 
     @PostMapping("/re-verification")
@@ -152,10 +159,11 @@ public class KYCController {
     @Operation(summary = "Request KYC re-verification", description = "Requests KYC re-verification for a customer. Administrative operation.")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Re-verification requested successfully"),
             @ApiResponse(responseCode = "404", description = "Customer not found") })
-    public ResponseEntity<KYCWorkflow> requestKYCReVerification(
+    public ResponseEntity<KYCWorkflowResponse> requestKYCReVerification(Authentication authentication,
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
-            @Parameter(description = "Reason for re-verification") @RequestParam String reason,
-            @Parameter(description = "User requesting re-verification") @RequestParam String requestedBy) {
+            @Parameter(description = "Reason for re-verification") @RequestParam String reason) {
+
+        String requestedBy = CallerContextResolver.resolveUsername(authentication);
 
         log.info(
                 "Requesting KYC re-verification for customer: {}, reason: {}, requestedBy: {}",
@@ -167,7 +175,7 @@ public class KYCController {
 
         log.info("Successfully requested KYC re-verification for customer: {}", customerId);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(workflow);
+        return ResponseEntity.status(HttpStatus.CREATED).body(KYCMapper.toWorkflowResponse(workflow));
     }
 
 }

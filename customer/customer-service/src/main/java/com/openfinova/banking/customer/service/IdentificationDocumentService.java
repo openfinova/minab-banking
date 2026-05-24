@@ -1,15 +1,17 @@
 package com.openfinova.banking.customer.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.openfinova.banking.customer.api.entity.DocumentStatus;
 import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.entity.IdentificationDocument;
 import com.openfinova.banking.customer.repository.CustomerRepository;
 import com.openfinova.banking.customer.repository.IdentificationDocumentRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
 
 /**
  * Service class for managing customer identification documents in the core banking system.
@@ -146,7 +148,10 @@ public class IdentificationDocumentService {
         }
         validateDocumentOwnership(document, customerId);
 
+        LocalDateTime now = LocalDateTime.now();
         document.setVerified(true);
+        document.setDocumentStatus(DocumentStatus.VERIFIED);
+        document.setVerifiedAt(now);
         documentRepository.save(document);
     }
 

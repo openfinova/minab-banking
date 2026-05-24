@@ -4,15 +4,19 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,6 +33,7 @@ import com.openfinova.banking.identity.config.AccountLifecycleProperties;
 import com.openfinova.banking.identity.config.WorkflowEnforcementProperties;
 import com.openfinova.banking.identity.dto.CreateUserRequest;
 import com.openfinova.banking.identity.dto.UpdateUserAccessRequest;
+import com.openfinova.banking.identity.dto.UserResponse;
 import com.openfinova.banking.identity.dto.UserSearchCriteria;
 import com.openfinova.banking.identity.entity.AccountProvisioningStatus;
 import com.openfinova.banking.identity.entity.BankingRole;
@@ -40,6 +45,8 @@ import com.openfinova.banking.identity.repository.ApprovalWorkflowInstanceReposi
 import com.openfinova.banking.identity.repository.RoleRepository;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.validation.GlApprovalRoleValidation;
+
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Central service for the full lifecycle of banking user accounts.
@@ -261,6 +268,10 @@ public class UserManagementService {
     public Page<BankingUser> searchUsers(UserSearchCriteria criteria, Pageable pageable) {
         Specification<BankingUser> spec = (root, query, cb) -> cb.conjunction();
 
+        if (criteria.getQ() != null && !criteria.getQ().isBlank()) {
+            spec = spec.and(qSpecification(criteria.getQ().trim()));
+        }
+
         if (criteria.getUsername() != null && !criteria.getUsername().isBlank()) {
             spec = spec.and(
                     (root, query, cb) -> cb
@@ -302,11 +313,41 @@ public class UserManagementService {
             spec = spec.and((root, query, cb) -> cb.isNull(root.get("suspendedAt")));
         }
 
+        if (criteria.getCustomerPartyId() != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("customerPartyId"), criteria.getCustomerPartyId()));
+        }
+
         return userRepository.findAll(spec, pageable);
     }
 
     /**
-     * Updates the mutable access and profile fields of an existing user account.
+     * Typeahead for audit filters and similar screens ({@link com.openfinova.banking.identity.controller.SecurityAuditController}).
+     * All user types; same {@code q} matching rules as {@link #searchUsers}.
+     *
+     * @param rawQ  the search term to match against
+     * @param limit the maximum number of results to return
+     * @return a list of UserResponse objects matching the search term
+     */
+    @Transactional(readOnly = true)
+    public List<UserResponse> suggestUsersForLookup(String rawQ, int limit) {
+        int cap = Math.min(Math.max(limit, 1), 50);
+        String term = rawQ == null ? "" : rawQ.trim();
+        if (term.isEmpty()) {
+            return List.of();
+        }
+        try {
+            UUID id = UUID.fromString(term);
+            return userRepository.findById(id).map(u -> List.of(UserResponse.from(u))).orElseGet(List::of);
+        } catch (IllegalArgumentException ignored) {
+            /* not a UUID */
+        }
+        Specification<BankingUser> spec = qSpecification(term);
+        Page<BankingUser> page = userRepository.findAll(spec, PageRequest.of(0, cap));
+        return page.getContent().stream().map(UserResponse::from).toList();
+    }
+
+    /**
+     * Updates the mutable access and profile fields of an existing banking user account.
      *
      * Only non-null fields in the request are applied, making this a partial-update operation.
      * When customerPartyId changes the previous customer party link is removed and a new one is
@@ -989,5 +1030,28 @@ public class UserManagementService {
         if (!customerInfoService.isCustomerActive(customerPartyId)) {
             throw new IllegalArgumentException("Customer party is not active: " + customerPartyId);
         }
+    }
+
+    /**
+     * OR filter: exact id (UUID), or case-insensitive substring on username / email.
+     * Wildcard characters in {@code raw} are stripped to avoid broad LIKE matches.
+     */
+    private static Specification<BankingUser> qSpecification(String raw) {
+        return (root, query, cb) -> {
+            try {
+                UUID uuid = UUID.fromString(raw);
+                return cb.equal(root.get("id"), uuid);
+            } catch (IllegalArgumentException ignored) {
+                String term = raw.toLowerCase(Locale.ROOT).replace("%", "").replace("_", "").trim();
+                if (term.isEmpty()) {
+                    return cb.disjunction();
+                }
+                String like = "%" + term + "%";
+                Predicate usernamePred = cb.like(cb.lower(root.get("username")), like);
+                Predicate emailPred = cb
+                        .and(cb.isNotNull(root.get("email")), cb.like(cb.lower(root.get("email")), like));
+                return cb.or(usernamePred, emailPred);
+            }
+        };
     }
 }

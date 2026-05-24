@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
@@ -23,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.exchangerate.api.exception.ExchangeRateValidationException;
 import com.openfinova.banking.exchangerate.api.exception.InvalidCurrencyPairException;
+import com.openfinova.banking.identity.exception.PasswordPolicyViolationException;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.OptimisticLockException;
@@ -136,6 +138,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(PasswordPolicyViolationException.class)
+    ProblemDetail handlePasswordPolicyViolation(PasswordPolicyViolationException ex) {
+        log.warn("Password policy violation: {}", ex.getMessage());
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        pd.setTitle("Password Policy Violation");
+        pd.setType(URI.create("/errors/password-policy"));
+        pd.setProperty("violations", ex.getViolations());
+        return pd;
+    }
+
     /**
      * {@code IllegalStateException} is used for business-rule violations
      * (e.g. "Cannot deactivate account with active children").
@@ -202,6 +214,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         pd.setProperty("fieldErrors", fieldErrors);
 
         return ResponseEntity.badRequest().body(pd);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        log.warn("Unreadable HTTP message (JSON/body): {}", ex.getMessage());
+        return super.handleHttpMessageNotReadable(ex, headers, status, request);
     }
 
     @ExceptionHandler(Exception.class)

@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.openfinova.banking.gl.api.entity.OperationalGLAccountType;
@@ -33,19 +34,22 @@ public class OperationalGLAccountService {
     private final OperationalGLConfigRepository operationalGLConfigRepository;
     private final GLAccountRepository glAccountRepository;
     private final AuditService auditService;
+    private final OperationalGLConfigReadService operationalGLConfigReadService;
 
     public OperationalGLAccountService(OperationalGLConfigRepository operationalGLConfigRepository,
-            GLAccountRepository glAccountRepository, AuditService auditService) {
+            GLAccountRepository glAccountRepository, AuditService auditService,
+            OperationalGLConfigReadService operationalGLConfigReadService) {
         this.operationalGLConfigRepository = operationalGLConfigRepository;
         this.glAccountRepository = glAccountRepository;
         this.auditService = auditService;
+        this.operationalGLConfigReadService = operationalGLConfigReadService;
     }
 
     @Transactional(readOnly = true)
     public UUID getOperationalGLAccount(OperationalGLAccountType type) {
         logger.debug("Getting operational GL account for type: {}", type);
 
-        Optional<OperationalGLConfig> config = operationalGLConfigRepository.findByConfigTypeAndIsActiveTrue(type);
+        Optional<OperationalGLConfig> config = operationalGLConfigReadService.resolveActiveOperationalConfig(type);
 
         if (config.isEmpty()) {
             throw new IllegalStateException(
@@ -66,11 +70,12 @@ public class OperationalGLAccountService {
     public UUID getOperationalGLAccountOrNull(OperationalGLAccountType type) {
         logger.debug("Getting operational GL account (nullable) for type: {}", type);
 
-        Optional<OperationalGLConfig> config = operationalGLConfigRepository.findByConfigTypeAndIsActiveTrue(type);
+        Optional<OperationalGLConfig> config = operationalGLConfigReadService.resolveActiveOperationalConfig(type);
 
         return config.map(OperationalGLConfig::getGlAccountId).orElse(null);
     }
 
+    @CacheEvict(value = "operationalGlConfig", allEntries = true)
     public OperationalGLConfig configureOperationalAccount(OperationalGLAccountType type, UUID glAccountId,
             String createdBy) {
         logger.info("Configuring operational account - type: {}, glAccountId: {}", type, glAccountId);
@@ -142,14 +147,15 @@ public class OperationalGLAccountService {
 
     @Transactional(readOnly = true)
     public Optional<OperationalGLConfig> getConfiguration(OperationalGLAccountType type) {
-        return operationalGLConfigRepository.findByConfigTypeAndIsActiveTrue(type);
+        return operationalGLConfigReadService.resolveActiveOperationalConfig(type);
     }
 
     @Transactional(readOnly = true)
     public List<OperationalGLConfig> getAllActiveConfigurations() {
-        return operationalGLConfigRepository.findByIsActiveTrue();
+        return operationalGLConfigReadService.findAllActive();
     }
 
+    @CacheEvict(value = "operationalGlConfig", allEntries = true)
     public void deactivateConfiguration(UUID configId, String deactivatedBy) {
         logger.info("Deactivating operational GL configuration: {}", configId);
 
@@ -162,6 +168,7 @@ public class OperationalGLAccountService {
         logger.info("Deactivated operational GL configuration: {}", configId);
     }
 
+    @CacheEvict(value = "operationalGlConfig", allEntries = true)
     public void activateConfiguration(UUID configId, String activatedBy) {
         logger.info("Activating operational GL configuration: {}", configId);
 
@@ -174,6 +181,7 @@ public class OperationalGLAccountService {
         logger.info("Activated operational GL configuration: {}", configId);
     }
 
+    @CacheEvict(value = "operationalGlConfig", allEntries = true)
     public int createStandardOperationalAccounts(String createdBy) {
         logger.info("Creating standard operational accounts by {}", createdBy);
 

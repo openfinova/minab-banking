@@ -172,6 +172,12 @@ public class CustomerInfoServiceImpl implements CustomerInfoService {
         return customerService.getLinkedIdentityUserId(customerId);
     }
 
+    @Override
+    @PreAuthorize("hasAuthority('service:customer:read')")
+    public Optional<UUID> getCustomerIdByLinkedIdentityUserId(UUID linkedIdentityUserId) {
+        return customerService.findCustomerIdByLinkedIdentityUserId(linkedIdentityUserId);
+    }
+
     // Helper method to convert Customer entity to CustomerInfo DTO
     private CustomerInfo toCustomerInfo(Customer customer) {
         CustomerInfo info = new CustomerInfo();

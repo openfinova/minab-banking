@@ -173,6 +173,7 @@ public class FeeManagementService {
         return savedRule;
     }
 
+    @CacheEvict(value = "feeRules", allEntries = true)
     public FeeRule updateFeeRule(UUID ruleId, FeeRule updatedRule) {
         logger.info("Updating fee rule: {}", ruleId);
 
@@ -198,6 +199,7 @@ public class FeeManagementService {
         return savedRule;
     }
 
+    @CacheEvict(value = "feeRules", allEntries = true)
     public void deleteFeeRule(UUID ruleId) {
         logger.info("Deleting fee rule: {}", ruleId);
 
@@ -299,16 +301,13 @@ public class FeeManagementService {
 
     // Fee Waiver Management Methods
 
+    @CacheEvict(value = "feeWaivers", allEntries = true)
     public FeeWaiver createFeeWaiver(FeeWaiver waiver) {
         if (waiver == null) {
             throw new IllegalArgumentException("Fee waiver cannot be null");
         }
 
         logger.info("Creating new fee waiver: {}", waiver.getWaiverName());
-
-        // Set audit fields
-        waiver.setCreatedBy("SYSTEM"); // In real implementation, get from security context
-        waiver.setUpdatedBy("SYSTEM");
 
         FeeWaiver savedWaiver = feeWaiverRepository.save(waiver);
         logger.info("Created fee waiver with ID: {}", savedWaiver.getId());
@@ -318,14 +317,14 @@ public class FeeManagementService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "feeWaivers", key = "#customerId")
-    public List<FeeWaiver> getActiveFeeWaivers(UUID accountId) {
-        logger.debug("Getting active fee waivers for account: {}", accountId);
+    public List<FeeWaiver> getActiveFeeWaivers(UUID customerId) {
+        logger.debug("Getting active fee waivers for customer: {}", customerId);
 
-        if (accountId == null) {
-            throw new IllegalArgumentException("Account ID cannot be null");
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer ID cannot be null");
         }
 
-        return feeWaiverRepository.findActiveWaiversForAccount(accountId, dateTimeService.now());
+        return feeWaiverRepository.findActiveWaiversForAccount(customerId, dateTimeService.now());
     }
 
     @Transactional(readOnly = true)

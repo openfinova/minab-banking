@@ -41,3 +41,6 @@ build/
 ### Spring profiles ###
 # Local developer config — contains dev-only secrets and local overrides.
 **/application-local.properties
+
+# Windows NUL device artefact
+nul

@@ -11,8 +11,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.openfinova.banking.identity.api.permission.BankingPermission;
 import com.openfinova.banking.identity.api.model.UserType;
+import com.openfinova.banking.identity.api.permission.BankingPermission;
 import com.openfinova.banking.identity.entity.BankingRole;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.repository.RoleRepository;
@@ -21,6 +21,10 @@ import com.openfinova.banking.identity.repository.UserRepository;
 /**
  * Seeds the database with the default role catalogue and a dev admin user on startup. Safe to run
  * multiple times -- skips any role/user that already exists.
+ *
+ * <p>On each run, the ADMIN role persisted permissions are merged with
+ * {@code EnumSet.allOf(BankingPermission.class)} so new enum constants automatically apply without
+ * using the guarded role-management APIs.
  *
  * Override or disable in production via {@code @Profile} or by replacing this bean.
  */
@@ -51,6 +55,7 @@ public class DataInitializer implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         seedRoles();
+        reconcileAdminPermissionsWithEnum();
         applyRoleHierarchy();
         seedDefaultUsers();
     }
@@ -78,7 +83,18 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.REPORT_GENERATE,
                         BankingPermission.ADMIN_USERS_READ,
                         BankingPermission.ADMIN_ROLES_READ,
-                        BankingPermission.ADMIN_DOA_READ));
+                        BankingPermission.ADMIN_DOA_READ,
+                        BankingPermission.COMPLIANCE_SCREENING_RUN,
+                        BankingPermission.COMPLIANCE_SCREENING_READ,
+                        BankingPermission.COMPLIANCE_ALERT_READ,
+                        BankingPermission.COMPLIANCE_ALERT_TRIAGE,
+                        BankingPermission.OPERATOR_NOTE_READ,
+                        BankingPermission.OPERATOR_NOTE_WRITE,
+                        BankingPermission.STAFF_NOTIFICATION_READ,
+                        BankingPermission.STAFF_NOTIFICATION_WRITE,
+                        BankingPermission.RECONCILIATION_READ,
+                        BankingPermission.RECONCILIATION_WRITE,
+                        BankingPermission.FEE_CAMPAIGN_WRITE));
 
         createSystemRole(
                 "AUDITOR",
@@ -91,6 +107,7 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.ACCOUNT_READ,
                         BankingPermission.GL_READ,
                         BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ,
                         BankingPermission.AUDIT_READ,
                         BankingPermission.REPORT_READ,
                         BankingPermission.REPORT_GENERATE,
@@ -108,7 +125,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_READ,
                         BankingPermission.LOAN_WRITE,
                         BankingPermission.ACCOUNT_READ,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "LOAN_SUPERVISOR",
@@ -124,7 +142,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_COLLECT_APPROVE,
                         BankingPermission.LOAN_RESTRUCTURE_APPROVE,
                         BankingPermission.ACCOUNT_READ,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "LOAN_CREDIT_SENIOR",
@@ -142,7 +161,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_DISBURSE_APPROVE,
                         BankingPermission.LOAN_COLLECT_APPROVE,
                         BankingPermission.ACCOUNT_READ,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "LOAN_OPERATIONS",
@@ -156,13 +176,18 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_COLLECT,
                         BankingPermission.ACCOUNT_READ,
                         BankingPermission.PAYMENT_INITIATE,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "GL_ACCOUNTANT",
                 "GL Accountant",
                 "Posts journal entries to the general ledger.",
-                EnumSet.of(BankingPermission.GL_READ, BankingPermission.GL_POST, BankingPermission.EXCHANGE_RATE_READ));
+                EnumSet.of(
+                        BankingPermission.GL_READ,
+                        BankingPermission.GL_POST,
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "GL_MANAGER",
@@ -172,7 +197,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.GL_READ,
                         BankingPermission.GL_POST,
                         BankingPermission.GL_APPROVE,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "BRANCH_MANAGER",
@@ -187,6 +213,7 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.LOAN_READ,
                         BankingPermission.PAYMENT_INITIATE,
                         BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ,
                         BankingPermission.REPORT_READ));
 
         createSystemRole(
@@ -207,7 +234,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.ACCOUNT_READ,
                         BankingPermission.ACCOUNT_TRANSFER,
                         BankingPermission.PAYMENT_INITIATE,
-                        BankingPermission.EXCHANGE_RATE_READ));
+                        BankingPermission.EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ));
 
         createSystemRole(
                 "TREASURY",
@@ -219,6 +247,8 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.PAYMENT_INITIATE,
                         BankingPermission.EXCHANGE_RATE_READ,
                         BankingPermission.EXCHANGE_RATE_WRITE,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_READ,
+                        BankingPermission.SERVICE_EXCHANGE_RATE_WRITE,
                         BankingPermission.GL_READ));
 
         createSystemRole(
@@ -234,6 +264,24 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.CUSTOMER_WRITE_OWN));
 
         log.info("Identity role catalogue seeded.");
+    }
+
+    /**
+     * ADMIN is defined as holding every {@link BankingPermission}. Existing deployments keep a
+     * snapshot in {@code identity_role_permissions}; merge in any new enum values on startup.
+     */
+    private void reconcileAdminPermissionsWithEnum() {
+        roleRepository.findByName("ADMIN").ifPresentOrElse(admin -> {
+            EnumSet<BankingPermission> fullCatalog = EnumSet.allOf(BankingPermission.class);
+            if (admin.getPermissions().containsAll(fullCatalog)) {
+                return;
+            }
+            EnumSet<BankingPermission> merged = EnumSet.copyOf(admin.getPermissions());
+            merged.addAll(fullCatalog);
+            admin.setPermissions(merged);
+            roleRepository.save(admin);
+            log.info("ADMIN permissions reconciled with BankingPermission enum ({} authorities).", merged.size());
+        }, () -> log.warn("ADMIN role not present; skipping permission catalogue reconcile."));
     }
 
     /**
@@ -283,6 +331,7 @@ public class DataInitializer implements ApplicationRunner {
 
     private void seedDefaultUsers() {
         if (userRepository.existsByUsername("admin")) {
+            log.info("Default admin user already exists.");
             return;
         }
 
