@@ -217,8 +217,8 @@ public class CustomerService {
             case CLOSED -> customer.close();
             case DECEASED -> customer.markDeceased();
             case PROSPECT, INACTIVE -> customer.setStatus(status);
-            case ANONYMIZED -> throw new IllegalStateException(
-                    "ANONYMIZED status can only be set by the anonymization pipeline");
+            case ANONYMIZED ->
+                throw new IllegalStateException("ANONYMIZED status can only be set by the anonymization pipeline");
             default -> throw new IllegalArgumentException(
                     "Invalid status transition from " + previousStatus + " to " + status);
         }

@@ -36,13 +36,13 @@ public class NotificationServiceImpl implements NotificationService {
         // 2. Dispatch to external channel if necessary (NO-OP implementation)
         switch (command.getChannel()) {
             case EMAIL -> logger.info(
-                        "NO-OP EMAIL PROVIDER: Sending email to {} with subject '{}'",
-                        command.getRecipientId(),
-                        command.getSubject());
+                    "NO-OP EMAIL PROVIDER: Sending email to {} with subject '{}'",
+                    command.getRecipientId(),
+                    command.getSubject());
             case SMS -> logger.info(
-                        "NO-OP SMS PROVIDER: Sending SMS to {} with subject '{}'",
-                        command.getRecipientId(),
-                        command.getSubject());
+                    "NO-OP SMS PROVIDER: Sending SMS to {} with subject '{}'",
+                    command.getRecipientId(),
+                    command.getSubject());
             case INBOX_ONLY -> {
             }
         }

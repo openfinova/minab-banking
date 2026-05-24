@@ -426,13 +426,13 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
      * @return list of transactions with events loaded
      */
     @Query("""
-        SELECT DISTINCT t FROM Transaction t
-        JOIN FETCH t.request r
-        LEFT JOIN FETCH t.events
-        WHERE t.id IN :transactionIds
-        """)
+            SELECT DISTINCT t FROM Transaction t
+            JOIN FETCH t.request r
+            LEFT JOIN FETCH t.events
+            WHERE t.id IN :transactionIds
+            """)
     List<Transaction> findByIdInWithEvents(@Param("transactionIds") List<UUID> transactionIds);
-    
+
     /**
      * Find multiple transactions by IDs with reservations fetched.
      * Prevents N+1 problems when loading transaction batches.
@@ -441,10 +441,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
      * @return list of transactions with reservations loaded
      */
     @Query("""
-        SELECT DISTINCT t FROM Transaction t
-        LEFT JOIN FETCH t.reservations
-        WHERE t.id IN :transactionIds
-        """)
+            SELECT DISTINCT t FROM Transaction t
+            LEFT JOIN FETCH t.reservations
+            WHERE t.id IN :transactionIds
+            """)
     List<Transaction> findByIdInWithReservations(@Param("transactionIds") List<UUID> transactionIds);
 
     /**
