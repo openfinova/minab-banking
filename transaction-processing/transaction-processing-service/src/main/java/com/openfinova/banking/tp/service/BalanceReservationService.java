@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ public class BalanceReservationService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public UUID reserveBalanceForTransaction(Transaction transaction, UUID accountId, BigDecimal amount,
             ReservationType type) {
         if (transaction == null) {
@@ -94,6 +96,7 @@ public class BalanceReservationService {
         }
 
         BalanceReservation saved = reservationRepository.save(reservation);
+        syncAccountReservationSnapshot(accountId);
         logger.info(
                 "Created transaction-integrated balance reservation {} for transaction {} on account {}",
                 saved.getId(),
@@ -108,6 +111,7 @@ public class BalanceReservationService {
      * so concurrent scheduler jobs (failTimedOutTransactions vs releaseExpiredReservations) do not
      * conflict when touching the same row.
      */
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public void releaseReservation(UUID reservationId) {
         logger.debug("Releasing reservation {}", reservationId);
 
@@ -119,19 +123,22 @@ public class BalanceReservationService {
             return;
         }
 
-        reservation.release("Manual release");
+        reservation.release("Manual release", dateTimeService.now());
         reservationRepository.save(reservation);
+        syncAccountReservationSnapshot(reservation.getAccountId());
         logger.info("Released reservation {}", reservationId);
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public void confirmReservation(UUID reservationId) {
         logger.debug("Confirming reservation {}", reservationId);
 
         BalanceReservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new IllegalArgumentException("Reservation not found: " + reservationId));
 
-        reservation.convertToPosting();
+        reservation.convertToPosting(dateTimeService.now());
         reservationRepository.save(reservation);
+        syncAccountReservationSnapshot(reservation.getAccountId());
 
         logger.info("Confirmed reservation {}", reservationId);
     }
@@ -146,7 +153,7 @@ public class BalanceReservationService {
             throw new IllegalArgumentException("Cannot modify reservation that is not active");
         }
 
-        if (reservation.hasExpired()) {
+        if (reservation.hasExpired(dateTimeService.now())) {
             throw new IllegalArgumentException("Cannot modify expired reservation");
         }
 
@@ -170,6 +177,7 @@ public class BalanceReservationService {
         reservation.setReleaseReason(reason);
 
         BalanceReservation saved = reservationRepository.save(reservation);
+        syncAccountReservationSnapshot(reservation.getAccountId());
         logger.info("Modified reservation {} to amount {}", reservationId, newAmount);
 
         return saved.getId();
@@ -204,6 +212,7 @@ public class BalanceReservationService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public List<BalanceReservation> getActiveReservations(UUID accountId) {
         logger.debug("Retrieving active reservations for account {}", accountId);
 
@@ -214,6 +223,7 @@ public class BalanceReservationService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public BigDecimal getTotalReservedAmount(UUID accountId) {
         logger.debug("Calculating total reserved amount for account {}", accountId);
 
@@ -238,7 +248,7 @@ public class BalanceReservationService {
         BalanceReservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new IllegalArgumentException("Reservation not found: " + reservationId));
 
-        boolean expired = reservation.hasExpired();
+        boolean expired = reservation.hasExpired(dateTimeService.now());
         logger.debug("Reservation {} expired status: {}", reservationId, expired);
 
         return expired;
@@ -252,10 +262,11 @@ public class BalanceReservationService {
 
         int expiredCount = 0;
         for (BalanceReservation reservation : expiredReservations) {
-            reservation.markExpired();
+            reservation.markExpired(dateTimeService.now());
             reservationRepository.save(reservation);
             expiredCount++;
         }
+        syncAccountReservationSnapshot(accountId);
 
         logger.info("Expired {} reservations for account {}", expiredCount, accountId);
     }
@@ -268,9 +279,14 @@ public class BalanceReservationService {
     public int releaseAllExpiredReservations() {
         LocalDateTime now = dateTimeService.now();
         List<BalanceReservation> expired = reservationRepository.findAllExpiredReservations(now);
+        List<UUID> touchedAccountIds = new ArrayList<>();
         for (BalanceReservation reservation : expired) {
-            reservation.markExpired();
+            reservation.markExpired(dateTimeService.now());
             reservationRepository.save(reservation);
+            touchedAccountIds.add(reservation.getAccountId());
+        }
+        for (UUID accountId : touchedAccountIds.stream().distinct().toList()) {
+            syncAccountReservationSnapshot(accountId);
         }
         if (!expired.isEmpty()) {
             logger.info("Released {} expired reservation(s) as of {}", expired.size(), now);
@@ -288,6 +304,7 @@ public class BalanceReservationService {
                 // Create reservation from request
                 BalanceReservation reservation = createReservationFromRequest(request);
                 BalanceReservation saved = reservationRepository.save(reservation);
+                syncAccountReservationSnapshot(request.getAccountId());
                 reservationIds.add(saved.getId());
 
                 logger.debug("Created batch reservation {} for account {}", saved.getId(), request.getAccountId());
@@ -312,8 +329,9 @@ public class BalanceReservationService {
         int releasedCount = 0;
         for (BalanceReservation reservation : reservations) {
             if (reservation.getStatus().isHoldingFunds()) {
-                reservation.release("Batch release");
+                reservation.release("Batch release", dateTimeService.now());
                 reservationRepository.save(reservation);
+                syncAccountReservationSnapshot(reservation.getAccountId());
                 releasedCount++;
             }
         }
@@ -329,8 +347,9 @@ public class BalanceReservationService {
         int confirmedCount = 0;
         for (BalanceReservation reservation : reservations) {
             if (reservation.getStatus().isHoldingFunds()) {
-                reservation.convertToPosting();
+                reservation.convertToPosting(dateTimeService.now());
                 reservationRepository.save(reservation);
+                syncAccountReservationSnapshot(reservation.getAccountId());
                 confirmedCount++;
             }
         }
@@ -393,6 +412,12 @@ public class BalanceReservationService {
         reservation.setExpiresAt(expiresAt);
 
         return reservation;
+    }
+
+    private void syncAccountReservationSnapshot(UUID accountId) {
+        BigDecimal totalReserved = reservationRepository.getTotalReservedAmount(accountId, dateTimeService.now());
+        customerAccountService
+                .syncTransactionReservedAmount(accountId, totalReserved != null ? totalReserved : BigDecimal.ZERO);
     }
 
     /**

@@ -12,6 +12,7 @@ import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.entity.IdentificationDocument;
 import com.openfinova.banking.customer.repository.CustomerRepository;
 import com.openfinova.banking.customer.repository.IdentificationDocumentRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Service class for managing customer identification documents in the core banking system.
@@ -27,6 +28,7 @@ public class IdentificationDocumentService {
 
     private final IdentificationDocumentRepository documentRepository;
     private final CustomerRepository customerRepository;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new IdentificationDocumentService with the necessary repositories.
@@ -35,9 +37,10 @@ public class IdentificationDocumentService {
      * @param customerRepository the repository used for accessing customer data
      */
     public IdentificationDocumentService(IdentificationDocumentRepository documentRepository,
-            CustomerRepository customerRepository) {
+            CustomerRepository customerRepository, DateTimeService dateTimeService) {
         this.documentRepository = documentRepository;
         this.customerRepository = customerRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -148,7 +151,7 @@ public class IdentificationDocumentService {
         }
         validateDocumentOwnership(document, customerId);
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
         document.setVerified(true);
         document.setDocumentStatus(DocumentStatus.VERIFIED);
         document.setVerifiedAt(now);
@@ -170,7 +173,7 @@ public class IdentificationDocumentService {
         if (document.isDeleted()) {
             throw new IllegalArgumentException("Identification document not found: " + documentId);
         }
-        document.setDeletedAt(LocalDateTime.now());
+        document.setDeletedAt(dateTimeService.now());
         documentRepository.save(document);
     }
 

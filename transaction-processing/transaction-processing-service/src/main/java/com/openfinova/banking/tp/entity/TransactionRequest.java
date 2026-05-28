@@ -6,7 +6,9 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
-import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.openfinova.banking.common.lib.converter.MapToJsonConverter;
 import com.openfinova.banking.common.lib.validation.ValidCurrency;
@@ -15,6 +17,7 @@ import com.openfinova.banking.tp.api.entity.TransactionType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -35,6 +38,7 @@ import jakarta.validation.constraints.Size;
  * idempotency controls.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "transaction_requests", indexes = {
         @Index(name = "idx_transaction_requests_idempotency", columnList = "idempotency_key"),
         @Index(name = "idx_transaction_requests_source_account", columnList = "source_account_id"),
@@ -92,10 +96,11 @@ public class TransactionRequest {
     @Size(max = 255, message = "Client reference must not exceed 255 characters")
     private String clientReference;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @CreatedBy
     @Column(name = "created_by", nullable = false, length = 100)
     @Size(max = 100, message = "Created by must not exceed 100 characters")
     private String createdBy;
@@ -113,12 +118,10 @@ public class TransactionRequest {
     public TransactionRequest() {
     }
 
-    public TransactionRequest(String idempotencyKey, TransactionType transactionType, BigDecimal amount,
-            String createdBy) {
+    public TransactionRequest(String idempotencyKey, TransactionType transactionType, BigDecimal amount) {
         this.idempotencyKey = idempotencyKey;
         this.transactionType = transactionType;
         this.amount = amount;
-        this.createdBy = createdBy;
     }
 
     // Business logic methods

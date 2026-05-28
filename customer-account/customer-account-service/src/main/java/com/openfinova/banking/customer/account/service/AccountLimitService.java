@@ -20,6 +20,7 @@ import com.openfinova.banking.customer.account.entity.AccountTransaction;
 import com.openfinova.banking.customer.account.repository.AccountLimitRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.AccountTransactionRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -41,6 +42,7 @@ public class AccountLimitService {
     private final AccountLimitRepository accountLimitRepository;
     private final AccountRepository accountRepository;
     private final AccountTransactionRepository accountTransactionRepository;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new AccountLimitService with required dependencies.
@@ -50,10 +52,11 @@ public class AccountLimitService {
      * @param accountTransactionRepository the repository for accessing transaction records
      */
     public AccountLimitService(AccountLimitRepository accountLimitRepository, AccountRepository accountRepository,
-            AccountTransactionRepository accountTransactionRepository) {
+            AccountTransactionRepository accountTransactionRepository, DateTimeService dateTimeService) {
         this.accountLimitRepository = accountLimitRepository;
         this.accountRepository = accountRepository;
         this.accountTransactionRepository = accountTransactionRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -117,7 +120,8 @@ public class AccountLimitService {
         accountRepository.findById(accountId)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountId));
 
-        List<AccountLimit> limits = accountLimitRepository.findActiveEffectiveLimitsByAccount(accountId);
+        List<AccountLimit> limits = accountLimitRepository
+                .findActiveEffectiveLimitsByAccount(accountId, dateTimeService.instant());
 
         logger.debug("Found {} effective limits for account {}", limits.size(), accountId);
 
@@ -142,7 +146,8 @@ public class AccountLimitService {
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountId));
 
         // Get all effective limits for the account
-        List<AccountLimit> effectiveLimits = accountLimitRepository.findActiveEffectiveLimitsByAccount(accountId);
+        List<AccountLimit> effectiveLimits = accountLimitRepository
+                .findActiveEffectiveLimitsByAccount(accountId, dateTimeService.instant());
 
         // Filter limits by type
         List<AccountLimit> applicableLimits = effectiveLimits.stream()
@@ -277,7 +282,7 @@ public class AccountLimitService {
         ValidationResult result = new ValidationResult(true);
 
         // Get the period boundaries
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
         LocalDateTime periodStart = limit.getLimitPeriod().getPeriodStart(now);
         LocalDateTime periodEnd = limit.getLimitPeriod().getPeriodEnd(now);
 

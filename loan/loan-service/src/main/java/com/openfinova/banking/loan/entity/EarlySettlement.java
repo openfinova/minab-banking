@@ -275,8 +275,8 @@ public class EarlySettlement {
     }
 
     // Business Logic
-    public boolean isValid() {
-        return validUntil != null && !validUntil.isBefore(LocalDate.now()) && SettlementStatus.QUOTE.equals(status);
+    public boolean isValid(LocalDate currentDate) {
+        return validUntil != null && !validUntil.isBefore(currentDate) && SettlementStatus.QUOTE.equals(status);
     }
 
     public boolean isSettled() {

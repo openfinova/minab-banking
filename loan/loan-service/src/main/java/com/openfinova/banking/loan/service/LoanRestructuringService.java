@@ -20,6 +20,7 @@ import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.entity.LoanRestructuring;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanRestructuringRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Implementation of LoanRestructuringService for managing loan modifications and restructuring.
@@ -100,11 +101,13 @@ public class LoanRestructuringService {
 
     private final LoanRestructuringRepository restructuringRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final DateTimeService dateTimeService;
 
     public LoanRestructuringService(LoanRestructuringRepository restructuringRepository,
-            LoanAccountRepository loanAccountRepository) {
+            LoanAccountRepository loanAccountRepository, DateTimeService dateTimeService) {
         this.restructuringRepository = restructuringRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -169,7 +172,7 @@ public class LoanRestructuringService {
         LoanRestructuring restructuring = new LoanRestructuring();
         restructuring.setLoanAccount(loanAccount);
         restructuring.setRestructuringType(restructuringType);
-        restructuring.setRestructuringDate(LocalDate.now());
+        restructuring.setRestructuringDate(dateTimeService.today());
         restructuring.setOldTenorMonths(loanAccount.getTenorMonths());
         restructuring.setNewTenorMonths(newTenorMonths);
         restructuring.setOldInterestRate(loanAccount.getInterestRate());
@@ -359,7 +362,7 @@ public class LoanRestructuringService {
         }
 
         loanAccount.setIsRestructured(true);
-        loanAccount.setRestructuredDate(LocalDate.now());
+        loanAccount.setRestructuredDate(dateTimeService.today());
 
         loanAccountRepository.save(loanAccount);
 

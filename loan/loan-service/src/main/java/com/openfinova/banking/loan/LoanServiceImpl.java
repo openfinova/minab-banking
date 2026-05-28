@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,7 +12,6 @@ import com.openfinova.banking.loan.api.LoanService;
 import com.openfinova.banking.loan.api.dto.LoanAccountResponse;
 import com.openfinova.banking.loan.api.dto.LoanDisbursementResponse;
 import com.openfinova.banking.loan.api.dto.LoanPaymentResponse;
-import com.openfinova.banking.loan.api.entity.LoanStatus;
 import com.openfinova.banking.loan.api.entity.PaymentMethod;
 import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.entity.LoanDisbursement;
@@ -45,40 +43,31 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public Optional<LoanAccountResponse> getLoanAccountById(UUID loanAccountId) {
         return loanAccountService.getLoanAccountById(loanAccountId).map(LoanAccountMapper::toResponse);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public Optional<LoanAccountResponse> getLoanAccountByNumber(String loanAccountNumber) {
         return loanAccountService.getLoanAccountByNumber(loanAccountNumber).map(LoanAccountMapper::toResponse);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public boolean loanAccountExists(UUID loanAccountId) {
         return loanAccountService.getLoanAccountById(loanAccountId).isPresent();
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public Optional<UUID> getCustomerIdForLoanAccount(UUID loanAccountId) {
         return loanAccountService.getLoanAccountById(loanAccountId).map(LoanAccount::getCustomerId);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public boolean isLoanAccountEligibleForRepayment(UUID loanAccountId) {
-        return loanAccountService.getLoanAccountById(loanAccountId).map(a -> {
-            LoanStatus s = a.getStatus();
-            return LoanStatus.ACTIVE.equals(s) || LoanStatus.RESTRUCTURED.equals(s);
-        }).orElse(false);
+        return loanAccountService.isLoanAccountEligibleForRepayment(loanAccountId);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public Optional<LoanDisbursementResponse> findDisbursementByReference(String disbursementReference) {
         return loanDisbursementService.getDisbursementByReference(disbursementReference)
                 .map(LoanDisbursementMapper::toResponse);
@@ -86,24 +75,15 @@ public class LoanServiceImpl implements LoanService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasAuthority('service:loan:write')")
     public LoanDisbursementResponse completeDisbursementAfterTransfer(UUID disbursementId, String transactionReference,
             String completedBy) {
         LoanDisbursement saved = loanDisbursementService
-                .completeDisbursementWithTransactionReference(disbursementId, transactionReference, completedBy);
-        UUID loanAccountId = saved.getLoanAccount().getId();
-        loanAccountService.getLoanAccountById(loanAccountId).ifPresent(account -> {
-            if (account.getDisbursementDate() == null && LoanStatus.APPROVED.equals(account.getStatus())) {
-                loanAccountService.disburseLoan(loanAccountId, saved.getDisbursementDate(), completedBy);
-            }
-        });
-        return LoanDisbursementMapper
-                .toResponse(loanDisbursementService.getDisbursementById(saved.getId()).orElse(saved));
+                .completeDisbursementAfterTransfer(disbursementId, transactionReference, completedBy);
+        return LoanDisbursementMapper.toResponse(saved);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasAuthority('service:loan:write')")
     public LoanDisbursementResponse failDisbursementAfterTransfer(UUID disbursementId, String failureReason,
             String failedBy) {
         LoanDisbursement failed = loanDisbursementService.failDisbursement(disbursementId, failureReason, failedBy);
@@ -111,14 +91,12 @@ public class LoanServiceImpl implements LoanService {
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:loan:read')")
     public boolean repaymentExistsForTransactionReference(String transactionReference) {
         return loanPaymentService.repaymentExistsForTransactionReference(transactionReference);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasAuthority('service:loan:write')")
     public LoanPaymentResponse recordRepaymentFromPaymentSystem(UUID loanAccountId, BigDecimal amount,
             LocalDate valueDate, PaymentMethod paymentMethod, String transactionReference, String recordedBy) {
         LoanPayment payment = loanPaymentService

@@ -40,11 +40,12 @@ import com.openfinova.banking.identity.entity.BankingRole;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
 import com.openfinova.banking.identity.event.UserAccountDeprovisionedEvent;
-import com.openfinova.banking.identity.exception.PasswordPolicyViolationException;
+import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
 import com.openfinova.banking.identity.repository.ApprovalWorkflowInstanceRepository;
 import com.openfinova.banking.identity.repository.RoleRepository;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.validation.GlApprovalRoleValidation;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import jakarta.persistence.criteria.Predicate;
 
@@ -80,6 +81,7 @@ public class UserManagementService {
     private final ApprovalWorkflowInstanceRepository workflowRepository;
     private final WorkflowEnforcementProperties enforcementProperties;
     private final ObjectProvider<CustomerInfoService> customerInfoServiceProvider;
+    private final DateTimeService dateTimeService;
 
     /** Resource type used when creating an approval workflow for a user role assignment. */
     public static final String RESOURCE_TYPE_USER_ROLE_ASSIGNMENT = "USER_ROLE_ASSIGNMENT";
@@ -89,7 +91,7 @@ public class UserManagementService {
             SecurityAuditService auditService, RoleAssignmentValidationService roleAssignmentValidationService,
             AccountLifecycleProperties lifecycleProperties, ApplicationEventPublisher eventPublisher,
             ApprovalWorkflowInstanceRepository workflowRepository, WorkflowEnforcementProperties enforcementProperties,
-            ObjectProvider<CustomerInfoService> customerInfoServiceProvider) {
+            ObjectProvider<CustomerInfoService> customerInfoServiceProvider, DateTimeService dateTimeService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
@@ -101,6 +103,7 @@ public class UserManagementService {
         this.workflowRepository = workflowRepository;
         this.enforcementProperties = enforcementProperties;
         this.customerInfoServiceProvider = customerInfoServiceProvider;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -152,8 +155,8 @@ public class UserManagementService {
         roleAssignmentValidationService.validate(auditor, user, initialRoles);
         user.setRoles(initialRoles);
 
-        user.setPasswordChangedAt(LocalDateTime.now());
-        user.setPasswordExpiresAt(LocalDateTime.now().plusDays(passwordPolicyService.getMaxAgeDays()));
+        user.setPasswordChangedAt(dateTimeService.now());
+        user.setPasswordExpiresAt(dateTimeService.now().plusDays(passwordPolicyService.getMaxAgeDays()));
         user.getPasswordHistory().add(encodedPassword);
 
         user.setProvisioningEligibilityNotes(request.getProvisioningEligibilityNotes());
@@ -501,7 +504,7 @@ public class UserManagementService {
         boolean wasEnabled = user.isEnabled();
         user.setEnabled(enabled);
         if (!enabled) {
-            user.setDisabledAt(LocalDateTime.now());
+            user.setDisabledAt(dateTimeService.now());
         } else {
             user.setDisabledAt(null);
         }
@@ -536,7 +539,7 @@ public class UserManagementService {
     public BankingUser lockUser(UUID userId, String reason, AuditActor auditor) {
         BankingUser user = getUser(userId);
         user.setAccountLocked(true);
-        user.setLockedAt(LocalDateTime.now());
+        user.setLockedAt(dateTimeService.now());
         user.setLockedReason(reason);
         BankingUser saved = userRepository.save(user);
         auditService.recordParticipating(
@@ -595,7 +598,7 @@ public class UserManagementService {
     public BankingUser softDeleteUser(UUID userId, AuditActor auditor) {
         BankingUser user = getUser(userId);
         user.setEnabled(false);
-        user.setDisabledAt(LocalDateTime.now());
+        user.setDisabledAt(dateTimeService.now());
         BankingUser saved = userRepository.save(user);
         auditService.recordParticipating(
                 SecurityAuditEventType.ACCOUNT_DISABLED,
@@ -695,7 +698,7 @@ public class UserManagementService {
         if (user.getProvisioningStatus() == AccountProvisioningStatus.DEPROVISIONED) {
             throw new IllegalStateException("Cannot suspend a deprovisioned user: " + userId);
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
         if (suspensionUntil != null && !suspensionUntil.isAfter(now)) {
             throw new IllegalArgumentException("suspensionUntil must be in the future");
         }
@@ -762,7 +765,7 @@ public class UserManagementService {
     @Transactional
     public void deprovisionUser(UUID userId, String reason, AuditActor auditor) {
         BankingUser user = getUser(userId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
         String username = user.getUsername();
         UUID customerPartyId = user.getCustomerPartyId();
 
@@ -835,8 +838,8 @@ public class UserManagementService {
         LocalDateTime previousExpiry = user.getPasswordExpiresAt();
         String encoded = passwordEncoder.encode(newPassword);
         user.setPasswordHash(encoded);
-        user.setPasswordChangedAt(LocalDateTime.now());
-        user.setPasswordExpiresAt(LocalDateTime.now().plusDays(passwordPolicyService.getMaxAgeDays()));
+        user.setPasswordChangedAt(dateTimeService.now());
+        user.setPasswordExpiresAt(dateTimeService.now().plusDays(passwordPolicyService.getMaxAgeDays()));
         user.setForcePasswordChange(false);
         addToPasswordHistory(user, encoded);
 
@@ -874,7 +877,7 @@ public class UserManagementService {
         BankingUser user = getUser(userId);
         LocalDateTime previousExpiry = user.getPasswordExpiresAt();
         user.setForcePasswordChange(true);
-        user.setPasswordExpiresAt(LocalDateTime.now());
+        user.setPasswordExpiresAt(dateTimeService.now());
         userRepository.save(user);
         auditService.recordParticipating(
                 SecurityAuditEventType.PASSWORD_FORCE_CHANGE_SET,
@@ -927,8 +930,8 @@ public class UserManagementService {
         LocalDateTime previousExpiry = user.getPasswordExpiresAt();
         String encoded = passwordEncoder.encode(newPassword);
         user.setPasswordHash(encoded);
-        user.setPasswordChangedAt(LocalDateTime.now());
-        user.setPasswordExpiresAt(LocalDateTime.now().plusDays(passwordPolicyService.getMaxAgeDays()));
+        user.setPasswordChangedAt(dateTimeService.now());
+        user.setPasswordExpiresAt(dateTimeService.now().plusDays(passwordPolicyService.getMaxAgeDays()));
         user.setForcePasswordChange(false);
         addToPasswordHistory(user, encoded);
 

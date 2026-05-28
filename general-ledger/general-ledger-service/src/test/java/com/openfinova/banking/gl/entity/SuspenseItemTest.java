@@ -12,15 +12,16 @@ import com.openfinova.banking.gl.api.entity.SuspenseStatus;
 import com.openfinova.banking.gl.testsupport.GlEntityFixtures;
 
 class SuspenseItemTest {
+    private static final LocalDate TODAY = LocalDate.of(2026, 1, 1);
 
     @Test
     void ageAndAgingBracket_followPostingDate() {
         SuspenseItem item = new SuspenseItem();
-        item.setPostingDate(LocalDate.now().minusDays(10));
+        item.setPostingDate(TODAY.minusDays(10));
         item.setGlTransaction(GlEntityFixtures.draftTransaction("S1"));
 
-        assertThat(item.getAgeDays()).isEqualTo(10);
-        assertThat(item.getAgingBracket()).isEqualTo(AgingBracket.RECENT_8_30_DAYS);
+        assertThat(item.getAgeDays(TODAY)).isEqualTo(10);
+        assertThat(item.getAgingBracket(TODAY)).isEqualTo(AgingBracket.RECENT_8_30_DAYS);
     }
 
     @Test
@@ -35,7 +36,13 @@ class SuspenseItemTest {
     @Test
     void workflow_startInvestigate_escalate_clear() {
         GLTransaction glTx = GlEntityFixtures.draftTransaction("S2");
-        SuspenseItem item = new SuspenseItem(glTx, new BigDecimal("100.00"), "USD", SuspenseReasonCode.OTHER, "x");
+        SuspenseItem item = new SuspenseItem(
+                glTx,
+                new BigDecimal("100.00"),
+                "USD",
+                SuspenseReasonCode.OTHER,
+                "x",
+                TODAY);
         GLTransaction clearing = GlEntityFixtures.draftTransaction("S3");
 
         item.startInvestigation("team-a");
@@ -45,13 +52,13 @@ class SuspenseItemTest {
         item.escalate();
         assertThat(item.getStatus()).isEqualTo(SuspenseStatus.ESCALATED);
 
-        item.markCleared("alice", clearing);
+        item.markCleared("alice", clearing, TODAY);
         assertThat(item.getStatus()).isEqualTo(SuspenseStatus.CLEARED);
         assertThat(item.getClearedBy()).isEqualTo("alice");
         assertThat(item.getClearingTransaction()).isSameAs(clearing);
 
-        SuspenseItem item2 = new SuspenseItem(glTx, BigDecimal.ONE, "USD", SuspenseReasonCode.SYSTEM_ERROR, "y");
-        item2.markAutoCleared(clearing);
+        SuspenseItem item2 = new SuspenseItem(glTx, BigDecimal.ONE, "USD", SuspenseReasonCode.SYSTEM_ERROR, "y", TODAY);
+        item2.markAutoCleared(clearing, TODAY);
         assertThat(item2.getStatus()).isEqualTo(SuspenseStatus.AUTO_CLEARED);
         assertThat(item2.getClearedBy()).isEqualTo("SYSTEM");
     }
@@ -59,7 +66,7 @@ class SuspenseItemTest {
     private static SuspenseItem itemWithReason(SuspenseReasonCode reason) {
         SuspenseItem item = new SuspenseItem();
         item.setReasonCode(reason);
-        item.setPostingDate(LocalDate.now());
+        item.setPostingDate(TODAY);
         item.setGlTransaction(GlEntityFixtures.draftTransaction("S0"));
         return item;
     }

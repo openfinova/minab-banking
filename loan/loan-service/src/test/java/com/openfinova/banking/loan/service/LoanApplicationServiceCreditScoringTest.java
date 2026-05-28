@@ -14,13 +14,14 @@ import org.junit.jupiter.api.Test;
 
 import com.openfinova.banking.loan.entity.LoanApplication;
 import com.openfinova.banking.loan.repository.LoanApplicationRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 class LoanApplicationServiceCreditScoringTest {
 
     @Test
     void performCreditScoring_zeroMonthlyIncome_doesNotDivideByZero() {
         LoanApplicationRepository repo = mock(LoanApplicationRepository.class);
-        LoanApplicationService service = new LoanApplicationService(repo);
+        LoanApplicationService service = new LoanApplicationService(repo, mock(DateTimeService.class));
 
         UUID id = UUID.randomUUID();
         LoanApplication app = new LoanApplication();

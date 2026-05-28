@@ -5,6 +5,7 @@ import com.openfinova.banking.customer.entity.ContactDetail;
 import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.repository.ContactDetailRepository;
 import com.openfinova.banking.customer.repository.CustomerRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,7 @@ public class ContactService {
 
     private final ContactDetailRepository contactRepository;
     private final CustomerRepository customerRepository;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new ContactService with the necessary repositories.
@@ -33,9 +35,11 @@ public class ContactService {
      * @param contactRepository the repository used for accessing and managing customer contact data
      * @param customerRepository the repository used for accessing customer data
      */
-    public ContactService(ContactDetailRepository contactRepository, CustomerRepository customerRepository) {
+    public ContactService(ContactDetailRepository contactRepository, CustomerRepository customerRepository,
+            DateTimeService dateTimeService) {
         this.contactRepository = contactRepository;
         this.customerRepository = customerRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -203,7 +207,7 @@ public class ContactService {
         if (contact.isDeleted()) {
             throw new IllegalArgumentException("Contact detail not found: " + contactId);
         }
-        contact.setDeletedAt(LocalDateTime.now());
+        contact.setDeletedAt(dateTimeService.now());
         contactRepository.save(contact);
     }
 

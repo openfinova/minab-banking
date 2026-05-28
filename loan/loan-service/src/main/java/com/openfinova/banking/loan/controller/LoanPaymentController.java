@@ -9,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.loan.api.dto.LoanPaymentAllocationRequest;
 import com.openfinova.banking.loan.api.dto.LoanPaymentRequest;
 import com.openfinova.banking.loan.api.dto.LoanPaymentResponse;
@@ -49,8 +52,10 @@ public class LoanPaymentController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('loan:collect', 'loan:write')")
     @Operation(summary = "Record a loan payment with automatic allocation")
-    public ResponseEntity<LoanPaymentResponse> recordPayment(@Valid @RequestBody LoanPaymentRequest request) {
+    public ResponseEntity<LoanPaymentResponse> recordPayment(@Valid @RequestBody LoanPaymentRequest request,
+            Authentication auth) {
 
         LoanPayment payment = paymentService.recordPayment(
                 request.getLoanAccountId(),
@@ -58,15 +63,16 @@ public class LoanPaymentController {
                 request.getPaymentDate(),
                 request.getPaymentMethod(),
                 request.getTransactionReference(),
-                "TODO_CURRENT_USER");
+                BankingPrincipal.from(auth).username());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(LoanPaymentMapper.toResponse(payment));
     }
 
     @PostMapping("/with-allocation")
+    @PreAuthorize("hasAnyAuthority('loan:collect', 'loan:write')")
     @Operation(summary = "Record a loan payment with manual allocation")
     public ResponseEntity<LoanPaymentResponse> recordPaymentWithAllocation(
-            @Valid @RequestBody LoanPaymentAllocationRequest request) {
+            @Valid @RequestBody LoanPaymentAllocationRequest request, Authentication auth) {
 
         LoanPayment payment = paymentService.recordPaymentWithAllocation(
                 request.getLoanAccountId(),
@@ -79,12 +85,13 @@ public class LoanPaymentController {
                 request.getPaymentType(),
                 request.getPaymentMethod(),
                 request.getTransactionReference(),
-                "TODO_CURRENT_USER");
+                BankingPrincipal.from(auth).username());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(LoanPaymentMapper.toResponse(payment));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get payment by ID")
     public ResponseEntity<LoanPaymentResponse> getPaymentById(@PathVariable UUID id) {
         return paymentService.getPaymentById(id).map(LoanPaymentMapper::toResponse).map(ResponseEntity::ok)
@@ -92,6 +99,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/reference/{paymentReference}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get payment by reference number")
     public ResponseEntity<LoanPaymentResponse> getPaymentByReference(@PathVariable String paymentReference) {
 
@@ -100,6 +108,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all payments for a loan account")
     public ResponseEntity<Page<LoanPaymentResponse>> getPaymentsByLoanAccount(@PathVariable UUID loanAccountId,
             Pageable pageable) {
@@ -109,6 +118,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/date-range")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get payments for a loan account within a date range")
     public ResponseEntity<Page<LoanPaymentResponse>> getPaymentsByDateRange(@PathVariable UUID loanAccountId,
             @Parameter(description = "Start date of the range") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
@@ -121,6 +131,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/type/{paymentType}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get payments by payment type")
     public ResponseEntity<Page<LoanPaymentResponse>> getPaymentsByType(@PathVariable PaymentType paymentType,
             Pageable pageable) {
@@ -130,6 +141,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/method/{paymentMethod}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get payments by payment method")
     public ResponseEntity<Page<LoanPaymentResponse>> getPaymentsByMethod(@PathVariable PaymentMethod paymentMethod,
             Pageable pageable) {
@@ -139,6 +151,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/reversed")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all reversed payments")
     public ResponseEntity<Page<LoanPaymentResponse>> getReversedPayments(Pageable pageable) {
         Page<LoanPayment> payments = paymentService.getReversedPayments(pageable);
@@ -146,15 +159,17 @@ public class LoanPaymentController {
     }
 
     @PostMapping("/{id}/reverse")
+    @PreAuthorize("hasAuthority('loan:collect')")
     @Operation(summary = "Reverse a payment")
     public ResponseEntity<LoanPaymentResponse> reversePayment(@PathVariable UUID id,
-            @RequestParam String reversalReason) {
+            @RequestParam String reversalReason, Authentication auth) {
 
-        LoanPayment payment = paymentService.reversePayment(id, reversalReason, "TODO_CURRENT_USER");
+        LoanPayment payment = paymentService.reversePayment(id, reversalReason, BankingPrincipal.from(auth).username());
         return ResponseEntity.ok(LoanPaymentMapper.toResponse(payment));
     }
 
     @GetMapping("/loan-account/{loanAccountId}/allocation")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate payment allocation using waterfall method")
     public ResponseEntity<PaymentAllocationResponse> calculatePaymentAllocation(@PathVariable UUID loanAccountId,
             @RequestParam BigDecimal paymentAmount) {
@@ -165,6 +180,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/total-payments")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate total payments for a loan account")
     public ResponseEntity<BigDecimal> calculateTotalPayments(@PathVariable UUID loanAccountId) {
         BigDecimal total = paymentService.calculateTotalPayments(loanAccountId);
@@ -172,6 +188,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/total-principal-paid")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate total principal paid for a loan account")
     public ResponseEntity<BigDecimal> calculateTotalPrincipalPaid(@PathVariable UUID loanAccountId) {
         BigDecimal total = paymentService.calculateTotalPrincipalPaid(loanAccountId);
@@ -179,6 +196,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/total-interest-paid")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate total interest paid for a loan account")
     public ResponseEntity<BigDecimal> calculateTotalInterestPaid(@PathVariable UUID loanAccountId) {
         BigDecimal total = paymentService.calculateTotalInterestPaid(loanAccountId);
@@ -186,6 +204,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/last-payment")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get the last payment for a loan account")
     public ResponseEntity<LoanPaymentResponse> getLastPayment(@PathVariable UUID loanAccountId) {
         return paymentService.getLastPayment(loanAccountId).map(LoanPaymentMapper::toResponse).map(ResponseEntity::ok)
@@ -193,6 +212,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/has-payments")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Check if a loan account has any payments")
     public ResponseEntity<Boolean> hasPayments(@PathVariable UUID loanAccountId) {
         boolean hasPayments = paymentService.hasPayments(loanAccountId);
@@ -200,6 +220,7 @@ public class LoanPaymentController {
     }
 
     @GetMapping("/loan-account/{loanAccountId}/count")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Count total payments for a loan account")
     public ResponseEntity<Long> countPayments(@PathVariable UUID loanAccountId) {
         long count = paymentService.countPayments(loanAccountId);

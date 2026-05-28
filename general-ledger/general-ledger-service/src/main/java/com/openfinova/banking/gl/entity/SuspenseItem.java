@@ -180,13 +180,13 @@ public class SuspenseItem {
     }
 
     public SuspenseItem(GLTransaction glTransaction, BigDecimal amount, String currency, SuspenseReasonCode reasonCode,
-            String description) {
+            String description, LocalDate postingDate) {
         this.glTransaction = glTransaction;
         this.amount = amount;
         this.currency = currency;
         this.reasonCode = reasonCode;
         this.description = description;
-        this.postingDate = LocalDate.now();
+        this.postingDate = postingDate;
         this.status = SuspenseStatus.PENDING;
     }
 
@@ -195,15 +195,15 @@ public class SuspenseItem {
     /**
      * Calculate age of suspense item in days from posting date.
      */
-    public long getAgeDays() {
-        return ChronoUnit.DAYS.between(postingDate, LocalDate.now());
+    public long getAgeDays(LocalDate evaluatedAt) {
+        return ChronoUnit.DAYS.between(postingDate, evaluatedAt);
     }
 
     /**
      * Get the aging bracket this item falls into.
      */
-    public AgingBracket getAgingBracket() {
-        return AgingBracket.fromAgeDays(getAgeDays());
+    public AgingBracket getAgingBracket(LocalDate evaluatedAt) {
+        return AgingBracket.fromAgeDays(getAgeDays(evaluatedAt));
     }
 
     /**
@@ -231,9 +231,9 @@ public class SuspenseItem {
     /**
      * Mark item as cleared.
      */
-    public void markCleared(String clearedBy, GLTransaction clearingTransaction) {
+    public void markCleared(String clearedBy, GLTransaction clearingTransaction, LocalDate clearedDate) {
         this.status = SuspenseStatus.CLEARED;
-        this.clearedDate = LocalDate.now();
+        this.clearedDate = clearedDate;
         this.clearedBy = clearedBy;
         this.clearingTransaction = clearingTransaction;
     }
@@ -241,9 +241,9 @@ public class SuspenseItem {
     /**
      * Mark item as auto-cleared.
      */
-    public void markAutoCleared(GLTransaction clearingTransaction) {
+    public void markAutoCleared(GLTransaction clearingTransaction, LocalDate clearedDate) {
         this.status = SuspenseStatus.AUTO_CLEARED;
-        this.clearedDate = LocalDate.now();
+        this.clearedDate = clearedDate;
         this.clearedBy = "SYSTEM";
         this.clearingTransaction = clearingTransaction;
     }
@@ -421,7 +421,6 @@ public class SuspenseItem {
     @Override
     public String toString() {
         return "SuspenseItem{" + "id=" + id + ", amount=" + amount + ", currency='" + currency + '\'' + ", status="
-                + status + ", reasonCode=" + reasonCode + ", postingDate=" + postingDate + ", ageDays=" + getAgeDays()
-                + '}';
+                + status + ", reasonCode=" + reasonCode + ", postingDate=" + postingDate + '}';
     }
 }

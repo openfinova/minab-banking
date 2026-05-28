@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +57,8 @@ public class FinancialReportService {
      * @param endDate   last day of the reporting period (inclusive)
      * @return populated {@link IncomeStatementResponse}
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public IncomeStatementResponse getIncomeStatement(LocalDate startDate, LocalDate endDate) {
         logger.info("Generating income statement from {} to {}", startDate, endDate);
 
@@ -131,6 +134,8 @@ public class FinancialReportService {
      * @param asOfDate snapshot date
      * @return populated {@link BalanceSheetResponse}
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public BalanceSheetResponse getBalanceSheet(LocalDate asOfDate) {
         logger.info("Generating balance sheet as of {}", asOfDate);
 
@@ -239,6 +244,8 @@ public class FinancialReportService {
      * @param endDate   last day of the reporting period (inclusive)
      * @return populated {@link CashFlowStatementResponse}
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public CashFlowStatementResponse getCashFlowStatement(LocalDate startDate, LocalDate endDate) {
         logger.info("Generating cash flow statement from {} to {}", startDate, endDate);
 

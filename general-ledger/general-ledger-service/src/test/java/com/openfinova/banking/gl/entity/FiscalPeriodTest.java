@@ -1,6 +1,7 @@
 package com.openfinova.banking.gl.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.openfinova.banking.gl.api.entity.FiscalPeriodStatus;
 
 class FiscalPeriodTest {
+    private static final LocalDateTime ACTION_TIME = LocalDateTime.of(2026, 1, 1, 9, 0);
 
     @Test
     void dateRange_rejectsStartAfterEnd() {
@@ -48,7 +50,7 @@ class FiscalPeriodTest {
         FiscalPeriod p = new FiscalPeriod("Q1", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 31));
         p.setStatus(FiscalPeriodStatus.OPEN);
 
-        p.close("user-a");
+        p.close("user-a", ACTION_TIME);
         assertThat(p.getStatus()).isEqualTo(FiscalPeriodStatus.CLOSED);
         assertThat(p.getClosedBy()).isEqualTo("user-a");
         assertThat(p.getClosedAt()).isNotNull();
@@ -56,7 +58,7 @@ class FiscalPeriodTest {
         p.lock();
         assertThat(p.getStatus()).isEqualTo(FiscalPeriodStatus.LOCKED);
 
-        p.reopen("user-b");
+        p.reopen("user-b", ACTION_TIME.plusHours(1));
         assertThat(p.getStatus()).isEqualTo(FiscalPeriodStatus.OPEN);
         assertThat(p.getClosedAt()).isNull();
         assertThat(p.getClosedBy()).isNull();

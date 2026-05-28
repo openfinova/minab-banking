@@ -6,8 +6,10 @@ import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -39,6 +41,7 @@ import java.util.UUID;
  * or regulatory reporting obligations.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "gl_suspense_escalations", indexes = {
         @Index(name = "idx_escalation_suspense", columnList = "suspense_item_id"),
         @Index(name = "idx_escalation_level", columnList = "escalation_level"),
@@ -129,14 +132,15 @@ public class SuspenseEscalation {
     @Column(name = "sla_breached", nullable = false)
     private Boolean slaBreached = false;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp
+    @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @CreatedBy
     @Column(name = "created_by", length = 100)
     @Size(max = 100, message = "Created by must not exceed 100 characters")
     private String createdBy;
@@ -147,10 +151,10 @@ public class SuspenseEscalation {
     }
 
     public SuspenseEscalation(SuspenseItem suspenseItem, EscalationLevel escalationLevel, String assignedTo,
-            LocalDate dueDate) {
+            LocalDate dueDate, LocalDate escalatedDate) {
         this.suspenseItem = suspenseItem;
         this.escalationLevel = escalationLevel;
-        this.escalatedDate = LocalDate.now();
+        this.escalatedDate = escalatedDate;
         this.assignedTo = assignedTo;
         this.dueDate = dueDate;
     }
@@ -160,9 +164,9 @@ public class SuspenseEscalation {
     /**
      * Mark this escalation as resolved.
      */
-    public void resolve(String resolvedBy, String resolutionNotes) {
+    public void resolve(String resolvedBy, String resolutionNotes, LocalDate resolvedDate) {
         this.isResolved = true;
-        this.resolvedDate = LocalDate.now();
+        this.resolvedDate = resolvedDate;
         this.resolvedBy = resolvedBy;
         this.resolutionNotes = resolutionNotes;
     }
@@ -170,8 +174,8 @@ public class SuspenseEscalation {
     /**
      * Check if SLA has been breached (past due date and not resolved).
      */
-    public boolean checkSLABreach() {
-        if (!isResolved && LocalDate.now().isAfter(dueDate)) {
+    public boolean checkSLABreach(LocalDate evaluatedAt) {
+        if (!isResolved && evaluatedAt.isAfter(dueDate)) {
             this.slaBreached = true;
             return true;
         }
@@ -181,15 +185,15 @@ public class SuspenseEscalation {
     /**
      * Days until due date (negative if overdue).
      */
-    public long getDaysUntilDue() {
-        return LocalDate.now().until(dueDate, java.time.temporal.ChronoUnit.DAYS);
+    public long getDaysUntilDue(LocalDate evaluatedAt) {
+        return evaluatedAt.until(dueDate, java.time.temporal.ChronoUnit.DAYS);
     }
 
     /**
      * Is this escalation overdue?
      */
-    public boolean isOverdue() {
-        return !isResolved && LocalDate.now().isAfter(dueDate);
+    public boolean isOverdue(LocalDate evaluatedAt) {
+        return !isResolved && evaluatedAt.isAfter(dueDate);
     }
 
     /**

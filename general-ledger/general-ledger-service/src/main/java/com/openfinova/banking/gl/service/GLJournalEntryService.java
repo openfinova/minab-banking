@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
@@ -60,6 +61,7 @@ public class GLJournalEntryService {
      * @param transactionId The UUID of the transaction.
      * @return List of journal entries.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     @Transactional(readOnly = true)
     public List<GLJournalEntry> getEntriesByTransaction(UUID transactionId) {
         logger.debug("Getting journal entries for transaction: {}", transactionId);
@@ -79,6 +81,7 @@ public class GLJournalEntryService {
      * @param accountId The UUID of the account.
      * @return List of journal entries for the account.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     @Transactional(readOnly = true)
     public List<GLJournalEntry> getEntriesByAccount(UUID accountId) {
         logger.debug("Getting journal entries for account: {}", accountId);
@@ -99,6 +102,7 @@ public class GLJournalEntryService {
      * @param entry The entry to validate.
      * @return true if the entry is valid.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     public boolean validateEntry(GLJournalEntry entry) {
         logger.debug("Validating journal entry: {}", entry);
 
@@ -248,6 +252,7 @@ public class GLJournalEntryService {
      * @param endDate The end date (inclusive).
      * @return List of journal entries for the account in the date range.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     @Transactional(readOnly = true)
     public List<GLJournalEntry> getEntriesByAccountAndDateRange(UUID accountId, LocalDate startDate,
             LocalDate endDate) {
@@ -271,6 +276,7 @@ public class GLJournalEntryService {
      * @param date The transaction date.
      * @return List of journal entries for the account on the date.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     @Transactional(readOnly = true)
     public List<GLJournalEntry> getEntriesByAccountAndDate(UUID accountId, LocalDate date) {
         logger.debug("Getting journal entries for account: {} on date: {}", accountId, date);
@@ -292,6 +298,7 @@ public class GLJournalEntryService {
      * @return List of journal entries matching the criteria.
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('gl:read')")
     public List<GLJournalEntry> getEntriesByAccountDateRangeAndCurrency(UUID accountId, LocalDate startDate,
             LocalDate endDate, String currency) {
         logger.debug(
@@ -322,6 +329,7 @@ public class GLJournalEntryService {
      * @param entryId The UUID of the journal entry.
      * @return Optional containing the journal entry if found.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     @Transactional(readOnly = true)
     public Optional<GLJournalEntry> getEntryById(UUID entryId) {
         logger.debug("Getting journal entry by ID: {}", entryId);

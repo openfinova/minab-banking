@@ -222,10 +222,9 @@ public class CustomerAddress {
     /**
      * Returns true if this address is currently active (not expired).
      */
-    public boolean isCurrentlyValid() {
-        LocalDate today = LocalDate.now();
-        boolean afterStart = validFrom == null || !today.isBefore(validFrom);
-        boolean beforeEnd = validTo == null || today.isBefore(validTo);
+    public boolean isCurrentlyValid(LocalDate currentDate) {
+        boolean afterStart = validFrom == null || !currentDate.isBefore(validFrom);
+        boolean beforeEnd = validTo == null || currentDate.isBefore(validTo);
         return afterStart && beforeEnd;
     }
 

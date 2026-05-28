@@ -1,9 +1,8 @@
 package com.openfinova.banking.identity.security;
 
-import java.time.Clock;
-
 import com.openfinova.banking.identity.config.PasswordPolicyProperties;
 import com.openfinova.banking.identity.repository.UserRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonParser;
@@ -23,10 +22,13 @@ public final class BankingUserDetailsDeserializer extends ValueDeserializer<Bank
 
     private final UserRepository userRepository;
     private final PasswordPolicyProperties passwordPolicy;
+    private final DateTimeService dateTimeService;
 
-    public BankingUserDetailsDeserializer(UserRepository userRepository, PasswordPolicyProperties passwordPolicy) {
+    public BankingUserDetailsDeserializer(UserRepository userRepository, PasswordPolicyProperties passwordPolicy,
+            DateTimeService dateTimeService) {
         this.userRepository = userRepository;
         this.passwordPolicy = passwordPolicy;
+        this.dateTimeService = dateTimeService;
     }
 
     @Override
@@ -43,7 +45,7 @@ public final class BankingUserDetailsDeserializer extends ValueDeserializer<Bank
                 () -> new IllegalStateException(
                         "Cannot recreate BankingUserDetails: user '" + username
                                 + "' not found (deleted or renamed). Clear stale oauth2_authorization rows or sign in again."));
-        return new BankingUserDetails(user, Clock.systemDefaultZone(), passwordPolicy);
+        return new BankingUserDetails(user, dateTimeService.clock(), passwordPolicy);
     }
 
     @Override

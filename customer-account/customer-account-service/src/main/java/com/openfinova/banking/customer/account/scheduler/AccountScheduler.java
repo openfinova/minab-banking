@@ -3,6 +3,7 @@ package com.openfinova.banking.customer.account.scheduler;
 import com.openfinova.banking.customer.account.service.AccountBalanceService;
 import com.openfinova.banking.customer.account.service.AccountHoldService;
 import com.openfinova.banking.customer.account.service.AccountService;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -29,12 +30,14 @@ public class AccountScheduler {
     private final AccountService accountService;
     private final AccountHoldService holdService;
     private final AccountBalanceService balanceService;
+    private final DateTimeService dateTimeService;
 
     public AccountScheduler(AccountService accountService, AccountHoldService holdService,
-            AccountBalanceService balanceService) {
+            AccountBalanceService balanceService, DateTimeService dateTimeService) {
         this.accountService = accountService;
         this.holdService = holdService;
         this.balanceService = balanceService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -46,7 +49,7 @@ public class AccountScheduler {
     public void processInterestAccrual() {
         log.info("Starting scheduled interest accrual");
         try {
-            LocalDate today = LocalDate.now();
+            LocalDate today = dateTimeService.today();
             int count = accountService.processInterestAccrual(today);
             log.info("Processed interest accrual for {} accounts", count);
         } catch (Exception e) {

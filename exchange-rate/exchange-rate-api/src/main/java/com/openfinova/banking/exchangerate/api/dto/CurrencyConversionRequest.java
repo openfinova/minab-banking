@@ -1,12 +1,14 @@
 package com.openfinova.banking.exchangerate.api.dto;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+import com.openfinova.banking.common.lib.validation.ValidCurrency;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import com.openfinova.banking.common.lib.validation.ValidCurrency;
 
 /**
  * Request DTO for currency conversion operations.
@@ -34,13 +36,6 @@ public class CurrencyConversionRequest {
 
     // Constructors
     public CurrencyConversionRequest() {
-    }
-
-    public CurrencyConversionRequest(BigDecimal amount, String fromCurrency, String toCurrency) {
-        this.amount = amount;
-        this.fromCurrency = fromCurrency;
-        this.toCurrency = toCurrency;
-        this.conversionDate = LocalDate.now();
     }
 
     public CurrencyConversionRequest(BigDecimal amount, String fromCurrency, String toCurrency,
@@ -77,7 +72,7 @@ public class CurrencyConversionRequest {
     }
 
     public LocalDate getConversionDate() {
-        return conversionDate != null ? conversionDate : LocalDate.now();
+        return conversionDate;
     }
 
     public void setConversionDate(LocalDate conversionDate) {

@@ -35,12 +35,13 @@ public class CustomerRiskProfile {
     public CustomerRiskProfile() {
     }
 
-    public CustomerRiskProfile(UUID customerId, RiskRating riskRating, boolean pepMatch, boolean sanctionMatch) {
+    public CustomerRiskProfile(UUID customerId, RiskRating riskRating, boolean pepMatch, boolean sanctionMatch,
+            LocalDateTime lastEvaluatedAt) {
         this.customerId = customerId;
         this.riskRating = riskRating;
         this.pepMatch = pepMatch;
         this.sanctionMatch = sanctionMatch;
-        this.lastEvaluatedAt = LocalDateTime.now();
+        this.lastEvaluatedAt = lastEvaluatedAt;
     }
 
     public UUID getCustomerId() {

@@ -139,8 +139,7 @@ public class GLEntityMapper {
         GLTransaction transaction = new GLTransaction(
                 command.getReferenceId(),
                 command.getDescription(),
-                command.getTransactionDate(),
-                command.getCreatedBy());
+                command.getTransactionDate());
         transaction.setCurrency(command.getCurrency());
 
         // Add journal entries

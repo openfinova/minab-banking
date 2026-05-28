@@ -14,6 +14,7 @@ import com.openfinova.banking.customer.account.api.entity.RelationshipType;
 import com.openfinova.banking.customer.account.testsupport.AccountTestFixtures;
 
 class AccountRelationshipTest {
+    private static final LocalDateTime BASE_TIME = LocalDateTime.of(2026, 1, 1, 0, 0);
 
     @Test
     void hasPermission_andPrimaryHolder() {
@@ -22,7 +23,7 @@ class AccountRelationshipTest {
                 a,
                 java.util.UUID.randomUUID(),
                 RelationshipType.PRIMARY_HOLDER,
-                "staff");
+                BASE_TIME);
         assertThat(primary.isPrimaryHolder()).isTrue();
         assertThat(primary.hasPermission(AccountPermission.VIEW)).isTrue();
 
@@ -30,7 +31,7 @@ class AccountRelationshipTest {
                 a,
                 java.util.UUID.randomUUID(),
                 RelationshipType.AUTHORIZED_USER,
-                "staff");
+                BASE_TIME);
         assertThat(auth.isPrimaryHolder()).isFalse();
         assertThat(auth.hasPermission(AccountPermission.TRANSACT)).isTrue();
         assertThat(auth.hasPermission(AccountPermission.ADMIN)).isFalse();
@@ -44,12 +45,12 @@ class AccountRelationshipTest {
         rel.setUserProfileId(java.util.UUID.randomUUID());
         rel.setRelationshipType(RelationshipType.SECONDARY_HOLDER);
         rel.setCreatedBy("staff");
-        rel.setEffectiveFrom(LocalDateTime.now().minusDays(1));
+        rel.setEffectiveFrom(BASE_TIME.minusDays(1));
         rel.setStatus(RelationshipStatus.ACTIVE);
-        assertThat(rel.isEffective()).isTrue();
+        assertThat(rel.isEffective(BASE_TIME)).isTrue();
 
-        rel.setEffectiveUntil(LocalDateTime.now().minusHours(1));
-        assertThat(rel.isEffective()).isFalse();
+        rel.setEffectiveUntil(BASE_TIME.minusHours(1));
+        assertThat(rel.isEffective(BASE_TIME)).isFalse();
     }
 
     @Test
@@ -59,7 +60,7 @@ class AccountRelationshipTest {
                 a,
                 java.util.UUID.randomUUID(),
                 RelationshipType.AUTHORIZED_USER,
-                "staff");
+                BASE_TIME);
         rel.setIsBeneficiary(true);
         rel.setBeneficiaryPercentage(null);
         assertThatThrownBy(rel::validateBeneficiaryPercentage).isInstanceOf(IllegalArgumentException.class);
@@ -84,7 +85,7 @@ class AccountRelationshipTest {
                 a,
                 java.util.UUID.randomUUID(),
                 RelationshipType.AUTHORIZED_USER,
-                "staff");
+                BASE_TIME);
         rel.setPermissions(new HashSet<>(rel.getPermissions()));
         rel.addPermission(AccountPermission.ADMIN);
         assertThat(rel.hasPermission(AccountPermission.ADMIN)).isTrue();

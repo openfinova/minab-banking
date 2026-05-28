@@ -101,7 +101,7 @@ public class AccountLimitController {
             @Parameter(description = "Limit type to check") @RequestParam LimitType limitType,
             @Parameter(description = "Transaction amount") @RequestParam BigDecimal amount) {
 
-        log.info("Checking limit for account {}: type={}, amount={}", id, limitType, amount);
+        log.info("Checking limit for account {}: type={}", id, limitType);
 
         ValidationResult result = limitService.checkLimit(id, limitType, amount);
 

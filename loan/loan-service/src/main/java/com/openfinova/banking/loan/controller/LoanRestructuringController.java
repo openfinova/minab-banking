@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.loan.api.dto.LoanRestructuringApprovalRequest;
 import com.openfinova.banking.loan.api.dto.LoanRestructuringProcessRequest;
 import com.openfinova.banking.loan.api.dto.LoanRestructuringRejectionRequest;
@@ -44,7 +46,7 @@ public class LoanRestructuringController {
     @PreAuthorize("hasAuthority('loan:restructure')")
     @Operation(summary = "Create a loan restructuring request")
     public ResponseEntity<LoanRestructuringResponse> createRestructuringRequest(@PathVariable UUID loanAccountId,
-            @Valid @RequestBody LoanRestructuringRequest request) {
+            @Valid @RequestBody LoanRestructuringRequest request, Authentication auth) {
 
         LoanRestructuring created = restructuringService.createRestructuringRequest(
                 loanAccountId,
@@ -53,7 +55,7 @@ public class LoanRestructuringController {
                 request.getNewInterestRate(),
                 request.getReason(),
                 request.getRequestedBy() != null && !request.getRequestedBy().isBlank() ? request.getRequestedBy()
-                        : "TODO_CURRENT_USER");
+                        : BankingPrincipal.from(auth).username());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(LoanRestructuringMapper.toResponse(created));
     }

@@ -11,6 +11,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -164,8 +165,11 @@ public class SuspenseClearingRule {
 
     /**
      * Check if this rule matches a suspense item.
+     *
+     * @param item the suspense item to evaluate
+     * @param evaluatedAt reference date for age-based rules
      */
-    public boolean matches(SuspenseItem item) {
+    public boolean matches(SuspenseItem item, LocalDate evaluatedAt) {
         if (!isActive) {
             return false;
         }
@@ -179,7 +183,7 @@ public class SuspenseClearingRule {
         return switch (ruleType) {
             case PATTERN_MATCH -> matchesPattern(item);
             case AMOUNT_THRESHOLD -> matchesAmountThreshold(item);
-            case AGE_THRESHOLD -> matchesAgeThreshold(item);
+            case AGE_THRESHOLD -> matchesAgeThreshold(item, evaluatedAt);
             case SOURCE_SYSTEM -> matchesSourceSystem(item);
             case STANDING_INSTRUCTION -> true; // Always matches if currency filter passes
         };
@@ -199,8 +203,8 @@ public class SuspenseClearingRule {
         return amountThreshold != null && item.getAmount().compareTo(amountThreshold) <= 0;
     }
 
-    private boolean matchesAgeThreshold(SuspenseItem item) {
-        return ageThresholdDays != null && item.getAgeDays() >= ageThresholdDays;
+    private boolean matchesAgeThreshold(SuspenseItem item, LocalDate evaluatedAt) {
+        return ageThresholdDays != null && item.getAgeDays(evaluatedAt) >= ageThresholdDays;
     }
 
     private boolean matchesSourceSystem(SuspenseItem item) {

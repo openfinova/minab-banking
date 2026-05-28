@@ -137,8 +137,8 @@ public class CustomerDataRetention {
     /**
      * Returns true if the retention period has expired and anonymization is permitted.
      */
-    public boolean isRetentionExpired() {
-        return !anonymized && LocalDate.now().isAfter(retentionExpiresAt);
+    public boolean isRetentionExpired(LocalDate currentDate) {
+        return !anonymized && currentDate.isAfter(retentionExpiresAt);
     }
 
     /**
@@ -147,9 +147,9 @@ public class CustomerDataRetention {
      * @param anonymizedBy user or system that performed the anonymization
      * @param jobReference optional batch job reference
      */
-    public void recordAnonymization(String anonymizedBy, String jobReference) {
+    public void recordAnonymization(String anonymizedBy, String jobReference, LocalDateTime anonymizedAt) {
         this.anonymized = true;
-        this.anonymizedAt = LocalDateTime.now();
+        this.anonymizedAt = anonymizedAt;
         this.anonymizedBy = anonymizedBy;
         this.anonymizationJobReference = jobReference;
     }

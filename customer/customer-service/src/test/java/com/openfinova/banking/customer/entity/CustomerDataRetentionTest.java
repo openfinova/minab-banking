@@ -1,6 +1,7 @@
 package com.openfinova.banking.customer.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,9 @@ import org.junit.jupiter.api.Test;
 import com.openfinova.banking.customer.testsupport.CustomerTestFixtures;
 
 class CustomerDataRetentionTest {
+
+    private static final LocalDate TODAY = LocalDate.of(2026, 5, 28);
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 5, 28, 12, 0);
 
     @Test
     void constructor_andExpiryRecalculationOnEndDateChange() {
@@ -25,12 +29,12 @@ class CustomerDataRetentionTest {
     void isRetentionExpired_andRecordAnonymization() {
         Customer c = CustomerTestFixtures.individual("RET2");
         CustomerDataRetention r = new CustomerDataRetention(c, LocalDate.of(2018, 1, 1), 5, "FATF");
-        assertThat(r.isRetentionExpired()).isTrue();
+        assertThat(r.isRetentionExpired(TODAY)).isTrue();
 
-        r.recordAnonymization("SYSTEM_SCHEDULER", "job-42");
+        r.recordAnonymization("SYSTEM_SCHEDULER", "job-42", NOW);
         assertThat(r.isAnonymized()).isTrue();
         assertThat(r.getAnonymizedBy()).isEqualTo("SYSTEM_SCHEDULER");
         assertThat(r.getAnonymizationJobReference()).isEqualTo("job-42");
-        assertThat(r.isRetentionExpired()).isFalse();
+        assertThat(r.isRetentionExpired(TODAY)).isFalse();
     }
 }

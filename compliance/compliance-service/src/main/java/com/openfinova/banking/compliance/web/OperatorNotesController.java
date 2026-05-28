@@ -11,8 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.openfinova.banking.compliance.entity.OperatorNote;
-import com.openfinova.banking.compliance.repository.OperatorNoteRepository;
+import com.openfinova.banking.compliance.dto.OperatorNoteResponse;
+import com.openfinova.banking.compliance.mapper.OperatorNoteMapper;
+import com.openfinova.banking.compliance.service.OperatorNoteService;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -21,10 +22,12 @@ import jakarta.validation.constraints.NotNull;
 @RequestMapping("/api/v1/notes")
 public class OperatorNotesController {
 
-    private final OperatorNoteRepository notes;
+    private final OperatorNoteService operatorNoteService;
+    private final OperatorNoteMapper operatorNoteMapper;
 
-    public OperatorNotesController(OperatorNoteRepository notes) {
-        this.notes = notes;
+    public OperatorNotesController(OperatorNoteService operatorNoteService, OperatorNoteMapper operatorNoteMapper) {
+        this.operatorNoteService = operatorNoteService;
+        this.operatorNoteMapper = operatorNoteMapper;
     }
 
     public record OperatorNoteBody(@NotBlank String entityType, @NotNull UUID entityId, @NotBlank String body) {
@@ -32,18 +35,14 @@ public class OperatorNotesController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('operator:note:read')")
-    public java.util.List<OperatorNote> list(@RequestParam String entityType, @RequestParam UUID entityId) {
-        return notes.findByEntityTypeIgnoreCaseAndEntityIdOrderByCreatedAtDesc(entityType, entityId);
+    public java.util.List<OperatorNoteResponse> list(@RequestParam String entityType, @RequestParam UUID entityId) {
+        return operatorNoteMapper.toResponseList(operatorNoteService.listNotes(entityType, entityId));
     }
 
     @PostMapping
     @PreAuthorize("hasAuthority('operator:note:write')")
-    public OperatorNote create(@RequestBody OperatorNoteBody body, Authentication authentication) {
-        OperatorNote n = new OperatorNote();
-        n.setEntityType(body.entityType());
-        n.setEntityId(body.entityId());
-        n.setBody(body.body());
-        n.setAuthorUsername(authentication != null ? authentication.getName() : "system");
-        return notes.save(n);
+    public OperatorNoteResponse create(@RequestBody OperatorNoteBody body, Authentication authentication) {
+        return operatorNoteMapper.toResponse(
+                operatorNoteService.createNote(body.entityType(), body.entityId(), body.body(), authentication));
     }
 }

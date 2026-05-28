@@ -51,7 +51,7 @@ public class AccountHoldController {
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody PlaceHoldRequest request) {
 
-        log.info("Placing hold on account {} for amount: {}", id, request.getAmount());
+        log.info("Placing hold on account {}", id);
 
         AccountHold hold = holdService
                 .placeHold(id, request.getAmount(), request.getCurrency(), request.getReason(), request.getExpiresAt());
@@ -90,7 +90,7 @@ public class AccountHoldController {
 
         BigDecimal totalHoldAmount = holdService.getTotalHoldAmount(id);
 
-        log.info("Total hold amount for account {}: {}", id, totalHoldAmount);
+        log.info("Total hold amount retrieved for account {}", id);
 
         return ResponseEntity.ok(Map.of("totalHoldAmount", totalHoldAmount));
     }

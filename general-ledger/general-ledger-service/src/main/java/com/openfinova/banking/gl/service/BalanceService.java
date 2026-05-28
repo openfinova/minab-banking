@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,11 +66,15 @@ public class BalanceService {
         this.dateTimeService = dateTimeService;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public BigDecimal getCurrentBalance(UUID accountId) {
         logger.debug("Getting current balance for GL account: {}", accountId);
         return calculateBalanceAtDate(accountId, dateTimeService.today());
     }
+
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
 
     @Transactional(readOnly = true)
     public BigDecimal getBalanceAtDate(UUID accountId, LocalDate date) {
@@ -123,6 +128,8 @@ public class BalanceService {
     public Optional<GLDailyBalance> getAccountLatestDailyBalance(UUID accountId) {
         return glDailyBalanceRepository.findFirstByGlAccount_IdOrderByBalanceDateDesc(accountId);
     }
+
+    @PreAuthorize("hasAnyAuthority('gl:approve', 'service:gl:write')")
 
     public void recalculateBalance(UUID accountId) {
         logger.info("Recalculating balance for GL account: {}", accountId);
@@ -179,6 +186,8 @@ public class BalanceService {
      * @return TrialBalance containing all account balances and totals
      * @throws IllegalArgumentException if asOfDate is null or invalid
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     @Transactional(readOnly = true)
     public TrialBalance getTrialBalance(LocalDate asOfDate) {
         logger.info("Generating trial balance as of: {}", asOfDate);
@@ -481,6 +490,8 @@ public class BalanceService {
      * @see #createDailySnapshot(UUID, LocalDate) for creating missing snapshots
      * @see DailyBalanceSnapshot for details on the returned balance information
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public List<DailyBalanceSnapshot> getBalanceHistory(UUID accountId, LocalDate startDate, LocalDate endDate) {
         logger.debug("Getting balance history for account: {} from {} to {}", accountId, startDate, endDate);
@@ -524,6 +535,8 @@ public class BalanceService {
      * @see #validateAllBalancesConsistency(LocalDate) for validating all accounts at once
      * @see #createDailySnapshot(UUID, LocalDate) for creating accurate snapshots
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public boolean validateBalanceConsistency(UUID accountId, LocalDate asOfDate) {
         logger.debug("Validating balance consistency for account: {} as of: {}", accountId, asOfDate);
@@ -568,6 +581,8 @@ public class BalanceService {
     /**
      * Validates the consistency of balance data between daily snapshots and real-time calculations for all GL accounts
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public boolean validateAllBalancesConsistency(LocalDate asOfDate) {
         logger.info("Validating balance consistency for all accounts as of: {}", asOfDate);
@@ -636,6 +651,8 @@ public class BalanceService {
      * @see #getBalanceAtDate(UUID, LocalDate) for individual balance calculations
      * @see #getAccountActivity(UUID, LocalDate) for daily activity details
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public GLAccountBalance getBalanceChange(UUID accountId, LocalDate startDate, LocalDate endDate) {
         BigDecimal startBalance = getBalanceAtDate(accountId, startDate.minusDays(1));
@@ -677,6 +694,8 @@ public class BalanceService {
      * @see #createDailySnapshot(UUID, LocalDate) for creating daily balance snapshots
      * @see #getBalanceChange(UUID, LocalDate, LocalDate) for period balance changes
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public GLAccountBalance getAccountActivity(UUID accountId, LocalDate activityDate) {
         logger.debug("Getting account activity for account: {} on date: {}", accountId, activityDate);
@@ -855,6 +874,8 @@ public class BalanceService {
      * @param accountId the UUID of the account
      * @return an Optional containing the account balance if found, empty otherwise
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<GLAccountBalance> getAccountBalance(UUID accountId) {
         logger.debug("Getting account balance for: {}", accountId);
@@ -897,6 +918,8 @@ public class BalanceService {
      * @param accountCode the account code
      * @return an Optional containing the account balance if found, empty otherwise
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<GLAccountBalance> getAccountBalanceByCode(String accountCode) {
         logger.debug("Getting account balance by code: {}", accountCode);
@@ -915,6 +938,8 @@ public class BalanceService {
      * @param accountIds list of account UUIDs
      * @return a map of account ID to account balance
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Map<UUID, GLAccountBalance> getAccountBalances(List<UUID> accountIds) {
         logger.debug("Getting account balances for {} accounts", accountIds.size());
@@ -936,6 +961,8 @@ public class BalanceService {
      * @param accountTypes list of account types to include in the report
      * @return a filtered trial balance report
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     @Transactional(readOnly = true)
     public TrialBalance getTrialBalanceByType(LocalDate asOfDate, List<GLAccountType> accountTypes) {
         logger.info("Generating trial balance by type as of: {} for types: {}", asOfDate, accountTypes);
@@ -987,6 +1014,8 @@ public class BalanceService {
      * @param date the specific date
      * @return an Optional containing the closing balance if available
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<BigDecimal> getClosingBalance(UUID accountId, LocalDate date) {
         logger.debug("Getting closing balance for account: {} on date: {}", accountId, date);
@@ -1006,6 +1035,8 @@ public class BalanceService {
      * @param asOfDate the specific date and time
      * @return the calculated balance as of the specified date/time
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public BigDecimal calculateBalanceAsOf(UUID accountId, LocalDateTime asOfDate) {
         logger.debug("Calculating balance as of: {} for account: {}", asOfDate, accountId);
@@ -1053,6 +1084,8 @@ public class BalanceService {
      * @param endDate The end date (inclusive).
      * @return The total debit amount.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public BigDecimal getTotalDebitsForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         logger.debug("Calculating total debits for account: {} from {} to {}", accountId, startDate, endDate);
@@ -1072,6 +1105,8 @@ public class BalanceService {
      * @param endDate The end date (inclusive).
      * @return The total credit amount.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public BigDecimal getTotalCreditsForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         logger.debug("Calculating total credits for account: {} from {} to {}", accountId, startDate, endDate);
@@ -1091,6 +1126,8 @@ public class BalanceService {
      * @param endDate The end date (inclusive).
      * @return The net balance amount.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public BigDecimal getNetBalanceForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         logger.debug("Calculating net balance for account: {} from {} to {}", accountId, startDate, endDate);
@@ -1109,6 +1146,8 @@ public class BalanceService {
      * @param endDate The end date (inclusive).
      * @return The count of journal entries.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public long countEntriesForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         logger.debug("Counting journal entries for account: {} from {} to {}", accountId, startDate, endDate);
@@ -1228,6 +1267,8 @@ public class BalanceService {
      *
      * @return The 3-letter ISO currency code.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public String getBaseCurrency() {
         return baseCurrency;
     }
@@ -1240,6 +1281,8 @@ public class BalanceService {
      * @param valueDate The date for picking the exchange rate.
      * @return The amount in base currency.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public BigDecimal convertToBaseCurrency(BigDecimal amount, String currency, LocalDate valueDate) {
         logger.debug("Converting {} {} to {} on date: {}", amount, currency, baseCurrency, valueDate);

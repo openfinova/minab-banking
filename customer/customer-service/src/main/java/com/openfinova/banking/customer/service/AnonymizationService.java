@@ -4,6 +4,7 @@ import com.openfinova.banking.customer.api.entity.CustomerStatus;
 import com.openfinova.banking.customer.api.event.CustomerLifecycleEvent;
 import com.openfinova.banking.customer.entity.*;
 import com.openfinova.banking.customer.repository.*;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,12 +57,13 @@ public class AnonymizationService {
     private final CustomerAuditLogRepository auditLogRepository;
     private final CustomerDataRetentionRepository retentionRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final DateTimeService dateTimeService;
     private final byte[] hmacSecret;
 
     public AnonymizationService(CustomerRepository customerRepository, CustomerAddressRepository addressRepository,
             ContactDetailRepository contactDetailRepository, IdentificationDocumentRepository documentRepository,
             CustomerAuditLogRepository auditLogRepository, CustomerDataRetentionRepository retentionRepository,
-            ApplicationEventPublisher eventPublisher,
+            ApplicationEventPublisher eventPublisher, DateTimeService dateTimeService,
             @Value("${customer.anonymization.hmac-secret:dev-default-change-in-production}") String hmacSecret) {
         this.customerRepository = customerRepository;
         this.addressRepository = addressRepository;
@@ -70,6 +72,7 @@ public class AnonymizationService {
         this.auditLogRepository = auditLogRepository;
         this.retentionRepository = retentionRepository;
         this.eventPublisher = eventPublisher;
+        this.dateTimeService = dateTimeService;
         this.hmacSecret = hmacSecret.getBytes(StandardCharsets.UTF_8);
     }
 
@@ -94,7 +97,7 @@ public class AnonymizationService {
         CustomerDataRetention retention = retentionRepository.findByCustomerId(customerId)
                 .orElseThrow(() -> new IllegalStateException("No retention record found for customer: " + customerId));
 
-        if (!retention.isRetentionExpired()) {
+        if (!retention.isRetentionExpired(dateTimeService.today())) {
             throw new IllegalStateException(
                     "Retention period has not yet expired for customer " + customerId + ". Expires: "
                             + retention.getRetentionExpiresAt());
@@ -138,7 +141,7 @@ public class AnonymizationService {
         auditLogRepository.save(auditEntry);
 
         // 7. Update the retention record
-        retention.recordAnonymization(anonymizedBy, jobReference);
+        retention.recordAnonymization(anonymizedBy, jobReference, dateTimeService.now());
         retentionRepository.save(retention);
 
         // 8. Notify identity module to revoke access for the linked identity user
@@ -154,7 +157,7 @@ public class AnonymizationService {
      */
     @Transactional(readOnly = true)
     public List<CustomerDataRetention> findDueForAnonymization() {
-        return retentionRepository.findByAnonymizedFalseAndRetentionExpiresAtBefore(LocalDate.now());
+        return retentionRepository.findByAnonymizedFalseAndRetentionExpiresAtBefore(dateTimeService.today());
     }
 
     /**

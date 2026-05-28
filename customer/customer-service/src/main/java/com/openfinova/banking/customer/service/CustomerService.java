@@ -1,6 +1,7 @@
 package com.openfinova.banking.customer.service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,8 +10,11 @@ import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.openfinova.banking.customer.api.dto.CustomerValidationResult;
 
 import com.openfinova.banking.customer.api.entity.CustomerRelationshipType;
 import com.openfinova.banking.customer.api.entity.CustomerStatus;
@@ -29,6 +33,7 @@ import com.openfinova.banking.customer.repository.CustomerRelationshipRepository
 import com.openfinova.banking.customer.repository.CustomerRepository;
 import com.openfinova.banking.customer.repository.IdentificationDocumentRepository;
 import com.openfinova.banking.customer.repository.KYCWorkflowRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Service class for managing customer profiles, relationships, and lifecycle operations
@@ -46,6 +51,7 @@ public class CustomerService {
     private final KYCWorkflowRepository kycWorkflowRepository;
     private final IdentificationDocumentRepository identificationDocumentRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new CustomerService with all required dependencies.
@@ -58,13 +64,14 @@ public class CustomerService {
      */
     public CustomerService(CustomerRepository customerRepository, CustomerRelationshipRepository relationshipRepository,
             KYCWorkflowRepository kycWorkflowRepository,
-            IdentificationDocumentRepository identificationDocumentRepository,
-            ApplicationEventPublisher eventPublisher) {
+            IdentificationDocumentRepository identificationDocumentRepository, ApplicationEventPublisher eventPublisher,
+            DateTimeService dateTimeService) {
         this.customerRepository = customerRepository;
         this.relationshipRepository = relationshipRepository;
         this.kycWorkflowRepository = kycWorkflowRepository;
         this.identificationDocumentRepository = identificationDocumentRepository;
         this.eventPublisher = eventPublisher;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -89,6 +96,7 @@ public class CustomerService {
      * @return an Optional containing the customer if found, or an empty Optional otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
     public Optional<Customer> getCustomerById(UUID id) {
         return customerRepository.findById(id);
     }
@@ -100,6 +108,7 @@ public class CustomerService {
      * @return an Optional containing the customer if found, or an empty Optional otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:pii:read', 'service:customer:read')")
     public Optional<Customer> getCustomerByTaxId(String taxId) {
         return customerRepository.findByTaxId(taxId);
     }
@@ -251,6 +260,7 @@ public class CustomerService {
      * @param username the username associated with the identity
      * @throws IllegalArgumentException if the customer is not found
      */
+    @PreAuthorize("hasAnyAuthority('customer:write', 'service:customer:write')")
     public void linkIdentityUser(UUID customerId, UUID identityUserId, String username) {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
@@ -264,6 +274,7 @@ public class CustomerService {
      *
      * @param customerId the unique identifier of the banking customer
      */
+    @PreAuthorize("hasAnyAuthority('customer:write', 'service:customer:write')")
     public void unlinkIdentityUser(UUID customerId) {
         customerRepository.findById(customerId).ifPresent(c -> {
             c.setLinkedIdentityUserId(null);
@@ -279,16 +290,87 @@ public class CustomerService {
      * @return an Optional containing the linked identity user ID if found, or an empty Optional
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
     public Optional<UUID> getLinkedIdentityUserId(UUID customerId) {
         return customerRepository.findById(customerId).map(Customer::getLinkedIdentityUserId);
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
     public Optional<UUID> findCustomerIdByLinkedIdentityUserId(UUID linkedIdentityUserId) {
         if (linkedIdentityUserId == null) {
             return Optional.empty();
         }
         return customerRepository.findByLinkedIdentityUserId(linkedIdentityUserId).map(Customer::getId);
+    }
+
+    /**
+     * Validates a customer for transaction processing by other modules.
+     *
+     * @param customerId the customer ID to validate
+     * @return validation result with status and any errors
+     */
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
+    public CustomerValidationResult validateCustomer(UUID customerId) {
+        Optional<Customer> customerOpt = customerRepository.findById(customerId);
+
+        if (customerOpt.isEmpty()) {
+            return CustomerValidationResult.failure(customerId, List.of("Customer not found: " + customerId));
+        }
+
+        Customer customer = customerOpt.get();
+        List<String> errors = new ArrayList<>();
+
+        if (customer.getStatus() != CustomerStatus.ACTIVE) {
+            errors.add("Customer is not active. Current status: " + customer.getStatus());
+        }
+
+        KYCStatus kycStatus = customer.getKycStatus();
+        if (kycStatus == KYCStatus.REJECTED) {
+            errors.add("Customer KYC verification has been rejected");
+        } else if (kycStatus == KYCStatus.EXPIRED) {
+            errors.add("Customer KYC verification has expired");
+        } else if (kycStatus == KYCStatus.PENDING) {
+            errors.add("Customer KYC verification is pending");
+        }
+
+        if (!errors.isEmpty()) {
+            return CustomerValidationResult.failure(customerId, errors);
+        }
+
+        return CustomerValidationResult
+                .success(customerId, customer.getStatus().name(), kycStatus != null ? kycStatus.name() : null);
+    }
+
+    /**
+     * Checks if a customer exists and is active.
+     */
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
+    public boolean isCustomerActive(UUID customerId) {
+        return getCustomerById(customerId).map(c -> c.getStatus() == CustomerStatus.ACTIVE).orElse(false);
+    }
+
+    /**
+     * Checks if a customer has completed KYC verification.
+     */
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
+    public boolean isKYCVerified(UUID customerId) {
+        return getCustomerById(customerId).map(c -> c.getKycStatus() == KYCStatus.VERIFIED).orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
+    public Optional<KYCStatus> getKycStatus(UUID customerId) {
+        return getCustomerById(customerId).map(Customer::getKycStatus);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")
+    public boolean customerExists(UUID customerId) {
+        return getCustomerById(customerId).isPresent();
     }
 
     /**
@@ -452,10 +534,10 @@ public class CustomerService {
 
         // Update workflow based on decision
         if (decision == KYCDecision.APPROVED) {
-            workflow.approve(reviewedBy, comments);
+            workflow.approve(reviewedBy, comments, dateTimeService.now());
             customer.setKycStatus(KYCStatus.VERIFIED);
         } else if (decision == KYCDecision.REJECTED) {
-            workflow.reject(reviewedBy, comments);
+            workflow.reject(reviewedBy, comments, dateTimeService.now());
             customer.setKycStatus(KYCStatus.REJECTED);
         } else {
             // REQUIRES_ADDITIONAL_INFO - keep in review
@@ -479,7 +561,7 @@ public class CustomerService {
     private void syncIdentificationDocumentsWithKycDecision(UUID customerId, KYCDecision decision, String reviewedBy) {
         List<IdentificationDocument> docs = identificationDocumentRepository
                 .findByCustomerIdAndDeletedAtIsNull(customerId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
         for (IdentificationDocument doc : docs) {
             DocumentStatus st = doc.getDocumentStatus();
             if (st != DocumentStatus.SUBMITTED && st != DocumentStatus.UNDER_REVIEW) {
@@ -542,7 +624,7 @@ public class CustomerService {
      * @return the total number of KYC workflows successfully expired
      */
     public int expireOutdatedKYC(int expirationMonths) {
-        LocalDateTime expirationDate = LocalDateTime.now().minusMonths(expirationMonths);
+        LocalDateTime expirationDate = dateTimeService.now().minusMonths(expirationMonths);
         List<KYCWorkflow> expiredWorkflows = kycWorkflowRepository
                 .findByStatusAndCompletedAtBefore(KYCStatus.VERIFIED, expirationDate);
 
@@ -641,7 +723,7 @@ public class CustomerService {
         CustomerRelationship relationship = relationshipRepository.findById(relationshipId)
                 .orElseThrow(() -> new IllegalArgumentException("Relationship not found: " + relationshipId));
 
-        relationship.deactivate(removedBy);
+        relationship.deactivate(removedBy, dateTimeService.now());
         relationshipRepository.save(relationship);
     }
 

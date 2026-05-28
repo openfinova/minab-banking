@@ -7,12 +7,33 @@ import com.openfinova.banking.customer.api.dto.CustomerInfo;
 import com.openfinova.banking.customer.api.dto.CustomerValidationResult;
 import com.openfinova.banking.customer.api.entity.KYCStatus;
 
+/**
+ * Public contract for read-only customer lookups and identity linkage used by other modules.
+ *
+ * <p>
+ * This facade is the only entry point for cross-module customer queries. Callers obtain party
+ * validation, KYC posture, and identity linkage without depending on customer-service internals.
+ * Identity writes ({@link #linkIdentityUser}, {@link #unlinkIdentityUser}) are invoked by the
+ * identity module after provisioning lifecycle events.
+ */
 public interface CustomerInfoService {
 
+    /**
+     * Validates whether the customer party may participate in banking operations.
+     *
+     * @param customerId the customer party identifier
+     * @return validation outcome with reasons when the party is not eligible
+     */
     CustomerValidationResult validateCustomer(UUID customerId);
 
+    /**
+     * Returns {@code true} when the customer exists and is in an active lifecycle state.
+     */
     boolean isCustomerActive(UUID customerId);
 
+    /**
+     * Returns {@code true} when KYC has been verified for the customer party.
+     */
     boolean isKYCVerified(UUID customerId);
 
     /**
@@ -21,12 +42,24 @@ public interface CustomerInfoService {
      */
     Optional<KYCStatus> getKycStatus(UUID customerId);
 
+    /**
+     * Returns the customer profile snapshot when the party exists.
+     */
     Optional<CustomerInfo> getCustomer(UUID customerId);
 
+    /**
+     * Returns {@code true} when a customer with the given tax identifier is already registered.
+     */
     boolean existsByTaxId(String taxId);
 
+    /**
+     * Resolves a customer by tax identifier when one exists.
+     */
     Optional<CustomerInfo> getCustomerByTaxId(String taxId);
 
+    /**
+     * Returns {@code true} when a customer record exists for the given party id.
+     */
     boolean customerExists(UUID customerId);
 
     /**

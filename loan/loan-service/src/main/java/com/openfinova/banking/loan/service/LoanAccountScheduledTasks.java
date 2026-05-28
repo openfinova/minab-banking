@@ -1,7 +1,6 @@
 package com.openfinova.banking.loan.service;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -24,6 +23,7 @@ import com.openfinova.banking.loan.repository.EarlySettlementRepository;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanProvisionRepository;
 import com.openfinova.banking.loan.repository.LoanScheduleRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Scheduled task implementations for loan account maintenance operations.
@@ -57,15 +57,18 @@ public class LoanAccountScheduledTasks {
     private final LoanProvisionRepository provisionRepository;
     private final EarlySettlementRepository settlementRepository;
     private final LoanAccountService loanAccountService;
+    private final DateTimeService dateTimeService;
 
     public LoanAccountScheduledTasks(LoanAccountRepository loanAccountRepository,
             LoanScheduleRepository scheduleRepository, LoanProvisionRepository provisionRepository,
-            EarlySettlementRepository settlementRepository, LoanAccountService loanAccountService) {
+            EarlySettlementRepository settlementRepository, LoanAccountService loanAccountService,
+            DateTimeService dateTimeService) {
         this.loanAccountRepository = loanAccountRepository;
         this.scheduleRepository = scheduleRepository;
         this.provisionRepository = provisionRepository;
         this.settlementRepository = settlementRepository;
         this.loanAccountService = loanAccountService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -112,16 +115,22 @@ public class LoanAccountScheduledTasks {
                     List<LoanSchedule> overdue = scheduleRepository.findOverdueSchedulesByLoanAccount(loan.getId());
                     if (!overdue.isEmpty()) {
                         LoanSchedule oldestOverdue = overdue.get(0);
-                        long daysPastDue = ChronoUnit.DAYS.between(oldestOverdue.getDueDate(), LocalDate.now());
+                        long daysPastDue = ChronoUnit.DAYS.between(oldestOverdue.getDueDate(), dateTimeService.today());
 
                         DelinquencyBucket bucket = DelinquencyBucket.fromDaysPastDue((int) daysPastDue);
-                        loanAccountRepository
-                                .updateDelinquencyStatus(loan.getId(), (int) daysPastDue, bucket, Instant.now());
+                        loanAccountRepository.updateDelinquencyStatus(
+                                loan.getId(),
+                                (int) daysPastDue,
+                                bucket,
+                                dateTimeService.instant());
                         updatedCount++;
                     }
                 } else if (loan.getDaysPastDue() != null && loan.getDaysPastDue() > 0) {
-                    loanAccountRepository
-                            .updateDelinquencyStatus(loan.getId(), 0, DelinquencyBucket.CURRENT, Instant.now());
+                    loanAccountRepository.updateDelinquencyStatus(
+                            loan.getId(),
+                            0,
+                            DelinquencyBucket.CURRENT,
+                            dateTimeService.instant());
                     updatedCount++;
                 }
             } catch (Exception e) {
@@ -466,7 +475,7 @@ public class LoanAccountScheduledTasks {
     public int cleanupOldLoans(int retentionYears) {
         log.info("Starting cleanup of old loans with retention period: {} years", retentionYears);
 
-        LocalDate cutoffDate = LocalDate.now().minusYears(retentionYears);
+        LocalDate cutoffDate = dateTimeService.today().minusYears(retentionYears);
         List<LoanAccount> oldClosedLoans = loanAccountRepository.findClosedLoansBeforeDate(cutoffDate);
         int cleanedCount = 0;
 

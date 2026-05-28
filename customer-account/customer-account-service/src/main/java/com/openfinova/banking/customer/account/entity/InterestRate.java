@@ -3,8 +3,11 @@ package com.openfinova.banking.customer.account.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -16,6 +19,7 @@ import java.util.UUID;
  * Allows for different rates (credit/debit) and effective periods.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "interest_rates", indexes = {
         @Index(name = "idx_interest_rates_account", columnList = "customer_account_id"),
         @Index(name = "idx_interest_rates_type", columnList = "rate_type"),
@@ -73,33 +77,34 @@ public class InterestRate {
     @Column(name = "effective_until")
     private LocalDateTime effectiveUntil;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @CreatedBy
     @Column(name = "created_by", length = 100)
     private String createdBy;
 
-    @UpdateTimestamp
+    @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @LastModifiedBy
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 
     public InterestRate() {
     }
 
-    public InterestRate(Account account, RateType type, BigDecimal rate) {
+    public InterestRate(Account account, RateType type, BigDecimal rate, LocalDateTime effectiveFrom) {
         this.customerAccount = account;
         this.rateType = type;
         this.annualPercentageRate = rate;
-        this.effectiveFrom = LocalDateTime.now();
+        this.effectiveFrom = effectiveFrom;
     }
 
-    public boolean isEffective() {
-        LocalDateTime now = LocalDateTime.now();
-        return !now.isBefore(effectiveFrom) && (effectiveUntil == null || !now.isAfter(effectiveUntil));
+    public boolean isEffective(LocalDateTime evaluatedAt) {
+        return !evaluatedAt.isBefore(effectiveFrom) && (effectiveUntil == null || !evaluatedAt.isAfter(effectiveUntil));
     }
 
     public UUID getId() {

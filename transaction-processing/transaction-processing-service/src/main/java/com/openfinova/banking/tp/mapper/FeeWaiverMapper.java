@@ -19,7 +19,7 @@ public class FeeWaiverMapper {
     /**
      * Maps create request to a persisted-ready entity (defaults, audit actor).
      */
-    public FeeWaiver toEntity(CreateFeeWaiverRequest request, String actor) {
+    public FeeWaiver toEntity(CreateFeeWaiverRequest request) {
         if (request == null) {
             return null;
         }
@@ -75,8 +75,6 @@ public class FeeWaiverMapper {
         if (waiver.getWaiverName() == null || waiver.getWaiverName().isBlank()) {
             waiver.setWaiverName("Fee waiver");
         }
-        waiver.setCreatedBy(actor);
-        waiver.setUpdatedBy(actor);
         return waiver;
     }
 

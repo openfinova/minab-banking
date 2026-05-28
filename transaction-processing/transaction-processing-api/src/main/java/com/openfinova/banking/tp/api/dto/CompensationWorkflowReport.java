@@ -1,12 +1,12 @@
 package com.openfinova.banking.tp.api.dto;
 
-import com.openfinova.banking.tp.api.entity.CompensationStatus;
-import com.openfinova.banking.tp.api.entity.TransactionType;
-
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+
+import com.openfinova.banking.tp.api.entity.CompensationStatus;
+import com.openfinova.banking.tp.api.entity.TransactionType;
 
 /**
  * DTO for compensation workflow reporting and analytics.
@@ -56,14 +56,13 @@ public class CompensationWorkflowReport {
 
     // Default constructor
     public CompensationWorkflowReport() {
-        this.reportGeneratedDate = LocalDate.now();
     }
 
     // Constructor with date range
-    public CompensationWorkflowReport(LocalDate startDate, LocalDate endDate) {
+    public CompensationWorkflowReport(LocalDate startDate, LocalDate endDate, LocalDate reportGeneratedDate) {
         this.reportStartDate = startDate;
         this.reportEndDate = endDate;
-        this.reportGeneratedDate = LocalDate.now();
+        this.reportGeneratedDate = reportGeneratedDate;
     }
 
     // Getters and setters

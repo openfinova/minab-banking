@@ -13,8 +13,10 @@ import com.openfinova.banking.loan.entity.Collateral;
 import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.repository.CollateralRepository;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,10 +43,13 @@ public class CollateralService {
 
     private final CollateralRepository collateralRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final DateTimeService dateTimeService;
 
-    public CollateralService(CollateralRepository collateralRepository, LoanAccountRepository loanAccountRepository) {
+    public CollateralService(CollateralRepository collateralRepository, LoanAccountRepository loanAccountRepository,
+            DateTimeService dateTimeService) {
         this.collateralRepository = collateralRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -60,6 +65,7 @@ public class CollateralService {
      * @return the registered collateral with generated reference
      * @throws IllegalArgumentException if collateral is null or registeredBy is null/empty
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Collateral registerCollateral(UUID loanAccountId, Collateral collateral, String registeredBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -91,6 +97,7 @@ public class CollateralService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<Collateral> getCollateralForLoanAccount(UUID loanAccountId, UUID collateralId) {
         return collateralRepository.findById(collateralId)
                 .filter(c -> c.getLoanAccount() != null && loanAccountId.equals(c.getLoanAccount().getId()));
@@ -103,6 +110,7 @@ public class CollateralService {
      * @return list of all collateral for the loan account (all statuses)
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<Collateral> getCollateralByLoanAccount(UUID loanAccountId) {
         return collateralRepository.findByLoanAccountId(loanAccountId);
     }
@@ -138,6 +146,7 @@ public class CollateralService {
      * @return page of collateral matching the specified status
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<Collateral> getCollateralByStatus(CollateralStatus status, Pageable pageable) {
         return collateralRepository.findByStatus(status, pageable);
     }
@@ -169,6 +178,7 @@ public class CollateralService {
      * @throws IllegalArgumentException if any parameter is invalid
      * @throws IllegalStateException if collateral is not in ACTIVE or UNDER_VALUATION status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Collateral updateValuation(UUID loanAccountId, UUID collateralId, BigDecimal valuationAmount,
             LocalDate valuationDate, String valuedBy) {
         if (loanAccountId == null) {
@@ -186,7 +196,7 @@ public class CollateralService {
         if (valuationDate == null) {
             throw new IllegalArgumentException("Valuation date cannot be null");
         }
-        if (valuationDate.isAfter(LocalDate.now())) {
+        if (valuationDate.isAfter(dateTimeService.today())) {
             throw new IllegalArgumentException("Valuation date cannot be in the future");
         }
         if (valuedBy == null || valuedBy.trim().isEmpty()) {
@@ -230,6 +240,7 @@ public class CollateralService {
      * @throws IllegalArgumentException if any parameter is invalid or collateral not found
      * @throws IllegalStateException if the status transition is not allowed
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Collateral updateCollateralStatus(UUID loanAccountId, UUID collateralId, CollateralStatus newStatus,
             String updatedBy) {
         if (loanAccountId == null) {
@@ -273,6 +284,7 @@ public class CollateralService {
      * @throws IllegalArgumentException if collateralId or releasedBy is invalid
      * @throws IllegalStateException if collateral is not in ACTIVE status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Collateral releaseCollateral(UUID loanAccountId, UUID collateralId, String releasedBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -294,7 +306,7 @@ public class CollateralService {
         }
 
         collateral.setStatus(CollateralStatus.RELEASED);
-        collateral.setReleaseDate(LocalDate.now());
+        collateral.setReleaseDate(dateTimeService.today());
 
         return collateralRepository.save(collateral);
     }
@@ -316,6 +328,7 @@ public class CollateralService {
      * @throws IllegalArgumentException if any parameter is invalid or liquidationAmount is negative
      * @throws IllegalStateException if collateral is not in ACTIVE status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Collateral liquidateCollateral(UUID loanAccountId, UUID collateralId, BigDecimal liquidationAmount,
             String liquidatedBy) {
         if (loanAccountId == null) {
@@ -425,6 +438,7 @@ public class CollateralService {
      * @return the count of collateral items (all statuses)
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countCollateralByLoanAccount(UUID loanAccountId) {
         return collateralRepository.countByLoanAccountId(loanAccountId);
     }

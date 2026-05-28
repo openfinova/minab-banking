@@ -5,12 +5,11 @@ import com.openfinova.banking.exchangerate.api.dto.CurrencyConversionResponse;
 import com.openfinova.banking.exchangerate.api.dto.ExchangeRateRequest;
 import com.openfinova.banking.exchangerate.api.dto.ExchangeRateResponse;
 import com.openfinova.banking.exchangerate.api.entity.RateType;
-import com.openfinova.banking.exchangerate.api.ExchangeRateService;
+import com.openfinova.banking.exchangerate.service.ExchangeRateManagementService;
 import com.openfinova.banking.exchangerate.sync.ExchangeRateSyncService;
 import com.openfinova.banking.exchangerate.sync.ExchangeRateSyncService.SyncResult;
 import com.openfinova.banking.exchangerate.sync.ManagedRatesViewService;
 import com.openfinova.banking.exchangerate.sync.ManagedRatesViewService.ManagedRatesView;
-import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,7 +22,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -53,13 +51,13 @@ public class ExchangeRateController {
 
     private static final Logger log = LoggerFactory.getLogger(ExchangeRateController.class);
 
-    private final ExchangeRateService exchangeRateService;
+    private final ExchangeRateManagementService exchangeRateManagementService;
     private final ExchangeRateSyncService exchangeRateSyncService;
     private final ManagedRatesViewService managedRatesViewService;
 
-    public ExchangeRateController(ExchangeRateService exchangeRateService,
+    public ExchangeRateController(ExchangeRateManagementService exchangeRateManagementService,
             ExchangeRateSyncService exchangeRateSyncService, ManagedRatesViewService managedRatesViewService) {
-        this.exchangeRateService = exchangeRateService;
+        this.exchangeRateManagementService = exchangeRateManagementService;
         this.exchangeRateSyncService = exchangeRateSyncService;
         this.managedRatesViewService = managedRatesViewService;
     }
@@ -79,7 +77,7 @@ public class ExchangeRateController {
                 request.getFromCurrency(),
                 request.getToCurrency());
 
-        CurrencyConversionResponse response = exchangeRateService.convertCurrency(request);
+        CurrencyConversionResponse response = exchangeRateManagementService.convertCurrency(request);
 
         log.info(
                 "Successfully converted: {} {} = {} {} (rate: {})",
@@ -104,7 +102,7 @@ public class ExchangeRateController {
 
         log.info("Fetching exchange rate: {} to {}, type: {}", sourceCurrency, targetCurrency, rateType);
 
-        BigDecimal rate = exchangeRateService.getExchangeRate(sourceCurrency, targetCurrency, rateType);
+        BigDecimal rate = exchangeRateManagementService.getExchangeRate(sourceCurrency, targetCurrency, rateType);
 
         return ResponseEntity.ok(
                 Map.of(
@@ -131,7 +129,7 @@ public class ExchangeRateController {
 
         log.info("Fetching exchange rate details: {} to {}, type: {}", sourceCurrency, targetCurrency, rateType);
 
-        ExchangeRateResponse response = exchangeRateService
+        ExchangeRateResponse response = exchangeRateManagementService
                 .getLatestExchangeRateDetails(sourceCurrency, targetCurrency, rateType);
 
         return ResponseEntity.ok(response);
@@ -156,7 +154,7 @@ public class ExchangeRateController {
                 date,
                 rateType);
 
-        BigDecimal rate = exchangeRateService.getExchangeRate(sourceCurrency, targetCurrency, date, rateType);
+        BigDecimal rate = exchangeRateManagementService.getExchangeRate(sourceCurrency, targetCurrency, date, rateType);
 
         return ResponseEntity.ok(
                 Map.of(
@@ -181,7 +179,7 @@ public class ExchangeRateController {
 
         log.info("Fetching supported currencies");
 
-        List<String> currencies = exchangeRateService.getSupportedCurrencies();
+        List<String> currencies = exchangeRateManagementService.getSupportedCurrencies();
 
         log.info("Found {} supported currencies", currencies.size());
 
@@ -197,7 +195,7 @@ public class ExchangeRateController {
 
         log.info("Checking if currency is supported: {}", currencyCode);
 
-        boolean supported = exchangeRateService.isCurrencySupported(currencyCode);
+        boolean supported = exchangeRateManagementService.isCurrencySupported(currencyCode);
 
         return ResponseEntity.ok(Map.of("currencyCode", currencyCode, "supported", supported));
     }
@@ -208,10 +206,7 @@ public class ExchangeRateController {
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Exchange rate created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid exchange rate data"),
             @ApiResponse(responseCode = "409", description = "Exchange rate already exists") })
-    public ResponseEntity<ExchangeRateResponse> createExchangeRate(Authentication authentication,
-            @Valid @RequestBody ExchangeRateRequest request) {
-
-        request.setCreatedBy(CallerContextResolver.resolveUsername(authentication));
+    public ResponseEntity<ExchangeRateResponse> createExchangeRate(@Valid @RequestBody ExchangeRateRequest request) {
 
         log.info(
                 "Creating exchange rate: {} to {} = {} for date: {}, type: {}",
@@ -221,7 +216,7 @@ public class ExchangeRateController {
                 request.getRateDate(),
                 request.getRateType());
 
-        ExchangeRateResponse response = exchangeRateService.createExchangeRate(request);
+        ExchangeRateResponse response = exchangeRateManagementService.createExchangeRate(request);
 
         log.info("Successfully created exchange rate with ID: {}", response.getId());
 
@@ -237,24 +232,20 @@ public class ExchangeRateController {
             @ApiResponse(responseCode = "400", description = "Invalid exchange rate data"),
             @ApiResponse(responseCode = "404", description = "Exchange rate not found"),
             @ApiResponse(responseCode = "409", description = "New natural key conflicts with an existing record") })
-    public ResponseEntity<ExchangeRateResponse> updateExchangeRateById(Authentication authentication,
+    public ResponseEntity<ExchangeRateResponse> updateExchangeRateById(
             @Parameter(description = "UUID of the exchange rate record to update", required = true) @PathVariable UUID id,
             @Valid @RequestBody ExchangeRateRequest request) {
 
-        String updatedBy = CallerContextResolver.resolveUsername(authentication);
-
         log.info(
-                "Updating exchange rate {}: {} to {} = {} for {}/{} by {}",
+                "Updating exchange rate {}: {} to {} = {} for {}/{}",
                 id,
                 request.getSourceCurrency(),
                 request.getTargetCurrency(),
                 request.getRate(),
                 request.getRateDate(),
-                request.getRateType(),
-                updatedBy);
+                request.getRateType());
 
-        request.setUpdatedBy(updatedBy);
-        ExchangeRateResponse response = exchangeRateService.updateExchangeRateById(id, request, updatedBy);
+        ExchangeRateResponse response = exchangeRateManagementService.updateExchangeRateById(id, request);
 
         log.info("Successfully updated exchange rate {}", id);
         return ResponseEntity.ok(response);
@@ -267,14 +258,12 @@ public class ExchangeRateController {
             + "Administrative operation.")
     @ApiResponses(value = { @ApiResponse(responseCode = "204", description = "Exchange rate deleted successfully"),
             @ApiResponse(responseCode = "404", description = "Exchange rate not found") })
-    public ResponseEntity<Void> deleteExchangeRate(Authentication authentication,
+    public ResponseEntity<Void> deleteExchangeRate(
             @Parameter(description = "UUID of the exchange rate record to delete", required = true) @PathVariable UUID id) {
 
-        String deletedBy = CallerContextResolver.resolveUsername(authentication);
+        log.info("Deleting exchange rate {}", id);
 
-        log.info("Deleting exchange rate {} by {}", id, deletedBy);
-
-        exchangeRateService.deleteExchangeRate(id, deletedBy);
+        exchangeRateManagementService.deleteExchangeRate(id);
 
         log.info("Successfully deleted exchange rate {}", id);
         return ResponseEntity.noContent().build();
@@ -300,7 +289,7 @@ public class ExchangeRateController {
                 endDate,
                 rateType);
 
-        List<ExchangeRateResponse> rates = exchangeRateService
+        List<ExchangeRateResponse> rates = exchangeRateManagementService
                 .getHistoricalRates(sourceCurrency, targetCurrency, startDate, endDate, rateType);
 
         log.info("Found {} historical rates", rates.size());
@@ -350,7 +339,8 @@ public class ExchangeRateController {
                 date,
                 rateType);
 
-        boolean exists = exchangeRateService.exchangeRateExists(sourceCurrency, targetCurrency, date, rateType);
+        boolean exists = exchangeRateManagementService
+                .exchangeRateExists(sourceCurrency, targetCurrency, date, rateType);
 
         return ResponseEntity.ok(Map.of("exists", exists));
     }

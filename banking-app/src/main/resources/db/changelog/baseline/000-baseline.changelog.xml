@@ -19,4 +19,20 @@
                  stripComments="false"
                  endDelimiter=";"/>
     </changeSet>
+
+    <changeSet id="accounts-add-transaction-reserved-amount" author="openfinova">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists schemaName="public" tableName="accounts"/>
+                <not>
+                    <columnExists schemaName="public" tableName="accounts" columnName="transaction_reserved_amount"/>
+                </not>
+            </and>
+        </preConditions>
+        <addColumn tableName="accounts">
+            <column name="transaction_reserved_amount" type="DECIMAL(19,4)" defaultValueNumeric="0.0000">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
 </databaseChangeLog>

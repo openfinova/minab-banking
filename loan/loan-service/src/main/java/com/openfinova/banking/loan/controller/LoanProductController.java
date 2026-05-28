@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -37,6 +38,7 @@ public class LoanProductController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Create a new loan product")
     public ResponseEntity<LoanProductResponse> createProduct(@Valid @RequestBody LoanProductRequest request) {
 
@@ -47,6 +49,7 @@ public class LoanProductController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Update an existing loan product")
     public ResponseEntity<LoanProductResponse> updateProduct(@PathVariable UUID id,
             @Valid @RequestBody LoanProductRequest request) {
@@ -58,6 +61,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan product by ID")
     public ResponseEntity<LoanProductResponse> getProductById(@PathVariable UUID id) {
         return productService.getProductById(id).map(LoanProductMapper::toResponse).map(ResponseEntity::ok)
@@ -65,6 +69,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/code/{productCode}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan product by product code")
     public ResponseEntity<LoanProductResponse> getProductByCode(@PathVariable String productCode) {
 
@@ -73,6 +78,7 @@ public class LoanProductController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all loan products with pagination")
     public ResponseEntity<Page<LoanProductResponse>> getAllProducts(
             @Parameter(description = "Include inactive products") @RequestParam(defaultValue = "false") boolean includeInactive,
@@ -85,6 +91,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/active")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all active loan products")
     public ResponseEntity<List<LoanProductResponse>> getAllActiveProducts() {
         List<LoanProduct> products = productService.getAllActiveProducts();
@@ -95,6 +102,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/type/{productType}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan products by type")
     public ResponseEntity<Page<LoanProductResponse>> getProductsByType(@PathVariable LoanProductType productType,
             Pageable pageable) {
@@ -104,6 +112,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/currency/{currency}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan products by currency")
     public ResponseEntity<Page<LoanProductResponse>> getProductsByCurrency(@PathVariable String currency,
             Pageable pageable) {
@@ -113,6 +122,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/search")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Find loan products matching criteria")
     public ResponseEntity<List<LoanProductResponse>> findMatchingProducts(@RequestParam BigDecimal amount,
             @RequestParam Integer tenorMonths, @RequestParam String currency) {
@@ -125,6 +135,7 @@ public class LoanProductController {
     }
 
     @PostMapping("/{id}/activate")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Activate a loan product")
     public ResponseEntity<LoanProductResponse> activateProduct(@PathVariable UUID id) {
         LoanProduct activated = productService.activateProduct(id);
@@ -132,6 +143,7 @@ public class LoanProductController {
     }
 
     @PostMapping("/{id}/deactivate")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Deactivate a loan product")
     public ResponseEntity<LoanProductResponse> deactivateProduct(@PathVariable UUID id) {
         LoanProduct deactivated = productService.deactivateProduct(id);
@@ -139,6 +151,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/{id}/validate")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Validate loan parameters against product")
     public ResponseEntity<ProductValidationResult> validateLoanParameters(@PathVariable UUID id,
             @RequestParam BigDecimal amount, @RequestParam Integer tenorMonths) {
@@ -149,6 +162,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/{id}/fees/processing")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate processing fee")
     public ResponseEntity<BigDecimal> calculateProcessingFee(@PathVariable UUID id,
             @RequestParam BigDecimal loanAmount) {
@@ -158,6 +172,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/{id}/fees/late")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate late payment fee")
     public ResponseEntity<BigDecimal> calculateLateFee(@PathVariable UUID id, @RequestParam BigDecimal overdueAmount) {
 
@@ -166,6 +181,7 @@ public class LoanProductController {
     }
 
     @GetMapping("/{id}/fees/prepayment")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate prepayment penalty")
     public ResponseEntity<BigDecimal> calculatePrepaymentPenalty(@PathVariable UUID id,
             @RequestParam BigDecimal prepaymentAmount) {
@@ -175,12 +191,14 @@ public class LoanProductController {
     }
 
     @GetMapping("/stats/count")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get count of active products")
     public ResponseEntity<Long> countActiveProducts() {
         return ResponseEntity.ok(productService.countActiveProducts());
     }
 
     @GetMapping("/stats/count/{productType}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get count of products by type")
     public ResponseEntity<Long> countProductsByType(@PathVariable LoanProductType productType) {
         return ResponseEntity.ok(productService.countProductsByType(productType));

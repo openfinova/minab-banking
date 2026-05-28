@@ -105,12 +105,12 @@ public class GLTransactionApproval {
     }
 
     public GLTransactionApproval(GLTransaction transaction, Integer approvalLevel, ApprovalAction action,
-            String approvedBy, String comments) {
+            String approvedBy, String comments, LocalDateTime approvalTimestamp) {
         this.transaction = transaction;
         this.approvalLevel = approvalLevel;
         this.action = action;
         this.approvedBy = approvedBy;
-        this.approvalTimestamp = LocalDateTime.now();
+        this.approvalTimestamp = approvalTimestamp;
         this.comments = comments;
     }
 

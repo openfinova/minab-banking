@@ -1,7 +1,9 @@
 package com.openfinova.banking.gl.entity;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -12,6 +14,9 @@ import com.openfinova.banking.gl.api.entity.GLTransactionStatus;
 import com.openfinova.banking.gl.testsupport.GlEntityFixtures;
 
 class GLTransactionTest {
+    private static final LocalDateTime SUBMITTED_AT = LocalDateTime.of(2026, 1, 1, 10, 0);
+    private static final Instant POSTED_AT = Instant.parse("2026-01-01T10:00:00Z");
+    private static final LocalDate VALUE_DATE = LocalDate.of(2026, 1, 1);
 
     @Test
     void sourceAndStatusPredicates() {
@@ -32,7 +37,7 @@ class GLTransactionTest {
     void lifecycle_submitApproveRejectCancel() {
         GLTransaction tx = GlEntityFixtures.draftTransaction("R3");
 
-        tx.submitForApproval("alice");
+        tx.submitForApproval("alice", SUBMITTED_AT);
         assertThat(tx.getStatus()).isEqualTo(GLTransactionStatus.PENDING_APPROVAL);
         assertThat(tx.getSubmittedBy()).isEqualTo("alice");
 
@@ -47,8 +52,8 @@ class GLTransactionTest {
         assertThat(draft2.getStatus()).isEqualTo(GLTransactionStatus.CANCELLED);
 
         GLTransaction draft3 = GlEntityFixtures.draftTransaction("R5");
-        draft3.submitForApproval("bob");
-        draft3.approveAndPost("checker");
+        draft3.submitForApproval("bob", SUBMITTED_AT);
+        draft3.approveAndPost("checker", POSTED_AT);
         assertThat(draft3.getStatus()).isEqualTo(GLTransactionStatus.POSTED);
         assertThat(draft3.getPostedBy()).isEqualTo("checker");
         assertThat(draft3.getPostingDate()).isNotNull();
@@ -57,26 +62,26 @@ class GLTransactionTest {
     @Test
     void approveAndPost_allowsDraft_orPendingApproval() {
         GLTransaction fromDraft = GlEntityFixtures.draftTransaction("R6");
-        fromDraft.approveAndPost("SYS");
+        fromDraft.approveAndPost("SYS", POSTED_AT);
         assertThat(fromDraft.isPosted()).isTrue();
 
         GLTransaction pending = GlEntityFixtures.draftTransaction("R7");
-        pending.submitForApproval("u");
-        pending.approveAndPost("a");
+        pending.submitForApproval("u", SUBMITTED_AT);
+        pending.approveAndPost("a", POSTED_AT);
         assertThat(pending.isPosted()).isTrue();
     }
 
     @Test
     void submitForApproval_requiresDraft() {
         GLTransaction tx = GlEntityFixtures.draftTransaction("R8");
-        tx.submitForApproval("u");
-        assertThatThrownBy(() -> tx.submitForApproval("again")).isInstanceOf(IllegalStateException.class);
+        tx.submitForApproval("u", SUBMITTED_AT);
+        assertThatThrownBy(() -> tx.submitForApproval("again", SUBMITTED_AT)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void markReversed_onlyWhenPostedAndNotAlreadyReversed() {
         GLTransaction original = GlEntityFixtures.draftTransaction("R9");
-        original.approveAndPost("p");
+        original.approveAndPost("p", POSTED_AT);
         GLTransaction reversal = GlEntityFixtures.draftTransaction("R10");
 
         original.markReversed(reversal);
@@ -94,9 +99,9 @@ class GLTransactionTest {
         GLTransaction tx = GlEntityFixtures.draftTransaction("R12");
         GLAccount a1 = GlEntityFixtures.usdAssetAccount();
         GLAccount a2 = GlEntityFixtures.usdLiabilityAccount();
-        GLJournalEntry e1 = GLJournalEntry.debit(a1, BigDecimal.TEN, "1", LocalDate.now());
-        GLJournalEntry e2 = GLJournalEntry.credit(a2, BigDecimal.TEN, "2", LocalDate.now());
-        GLJournalEntry e3 = GLJournalEntry.debit(a1, BigDecimal.ONE, "3", LocalDate.now());
+        GLJournalEntry e1 = GLJournalEntry.debit(a1, BigDecimal.TEN, "1", VALUE_DATE);
+        GLJournalEntry e2 = GLJournalEntry.credit(a2, BigDecimal.TEN, "2", VALUE_DATE);
+        GLJournalEntry e3 = GLJournalEntry.debit(a1, BigDecimal.ONE, "3", VALUE_DATE);
 
         tx.addGLJournalEntry(e1);
         tx.addGLJournalEntry(e2);

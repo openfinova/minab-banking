@@ -7,6 +7,7 @@ import com.openfinova.banking.gl.entity.GLTransaction;
 import com.openfinova.banking.gl.entity.GLTransactionApproval;
 import com.openfinova.banking.gl.repository.GLTransactionApprovalRepository;
 import com.openfinova.banking.gl.repository.GLTransactionRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -41,13 +42,15 @@ public class ApprovalWorkflowService {
     private final GLTransactionRepository transactionRepository;
     private final GLTransactionApprovalRepository approvalRepository;
     private final GLAuthorizationLimitQueryService authorizationLimitQueryService;
+    private final DateTimeService dateTimeService;
 
     public ApprovalWorkflowService(GLTransactionRepository transactionRepository,
             GLTransactionApprovalRepository approvalRepository,
-            GLAuthorizationLimitQueryService authorizationLimitQueryService) {
+            GLAuthorizationLimitQueryService authorizationLimitQueryService, DateTimeService dateTimeService) {
         this.transactionRepository = transactionRepository;
         this.approvalRepository = approvalRepository;
         this.authorizationLimitQueryService = authorizationLimitQueryService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -104,7 +107,7 @@ public class ApprovalWorkflowService {
                             + "Route them through GLTransactionService.submitTransactionForApproval() instead.");
         } else {
             // All manual entries require a separate checker approval (maker-checker principle).
-            transaction.submitForApproval(submitterUsername);
+            transaction.submitForApproval(submitterUsername, dateTimeService.now());
             transactionRepository.save(transaction);
             logger.info("Transaction {} submitted for approval by {}", transactionId, submitterUsername);
         }
@@ -173,7 +176,8 @@ public class ApprovalWorkflowService {
                 nextLevel,
                 ApprovalAction.APPROVED,
                 approverUsername,
-                comments);
+                comments,
+                dateTimeService.now());
         approval.setIpAddress(ipAddress);
         approvalRepository.save(approval);
 
@@ -253,7 +257,8 @@ public class ApprovalWorkflowService {
                 1, // Rejection stops at level 1
                 ApprovalAction.REJECTED,
                 rejecterUsername,
-                reason);
+                reason,
+                dateTimeService.now());
         rejection.setIpAddress(ipAddress);
         approvalRepository.save(rejection);
 

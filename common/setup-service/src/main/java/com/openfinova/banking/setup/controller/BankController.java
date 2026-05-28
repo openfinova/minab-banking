@@ -3,7 +3,7 @@ package com.openfinova.banking.setup.controller;
 import com.openfinova.banking.setup.api.dto.BankProperties;
 import com.openfinova.banking.setup.api.dto.BankInfoResponse;
 import com.openfinova.banking.setup.api.dto.CurrencyResponse;
-import com.openfinova.banking.setup.api.BankService;
+import com.openfinova.banking.setup.service.BankConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -27,10 +27,10 @@ public class BankController {
 
     private static final Logger log = LoggerFactory.getLogger(BankController.class);
 
-    private final BankService bankService;
+    private final BankConfigService bankConfigService;
 
-    public BankController(BankService bankService) {
-        this.bankService = bankService;
+    public BankController(BankConfigService bankConfigService) {
+        this.bankConfigService = bankConfigService;
     }
 
     @GetMapping("/details")
@@ -41,9 +41,9 @@ public class BankController {
     public ResponseEntity<BankProperties> getBankDetails() {
         log.info("Fetching bank details");
 
-        BankProperties bankProperties = bankService.getBankDetails();
+        BankProperties bankProperties = bankConfigService.getBankDetails();
 
-        log.info("Bank details retrieved: {}", bankProperties.getName());
+        log.info("Bank details retrieved successfully");
 
         return ResponseEntity.ok(bankProperties);
     }
@@ -56,7 +56,7 @@ public class BankController {
     public ResponseEntity<BankInfoResponse> getBankName() {
         log.info("Fetching bank name");
 
-        String bankName = bankService.getBankName();
+        String bankName = bankConfigService.getBankName();
 
         return ResponseEntity.ok(new BankInfoResponse(bankName));
     }
@@ -69,7 +69,7 @@ public class BankController {
     public ResponseEntity<CurrencyResponse> getBankCurrency() {
         log.info("Fetching bank currency");
 
-        String currency = bankService.getCurrency();
+        String currency = bankConfigService.getCurrency();
 
         return ResponseEntity.ok(new CurrencyResponse(currency));
     }

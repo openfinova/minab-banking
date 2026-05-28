@@ -16,6 +16,7 @@ import com.openfinova.banking.loan.dto.PaymentAllocation;
 import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanPaymentRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 class LoanPaymentServiceAllocationTest {
 
@@ -29,7 +30,8 @@ class LoanPaymentServiceAllocationTest {
                 mock(LoanPaymentRepository.class),
                 accountRepository,
                 mock(LoanScheduleService.class),
-                mock(ApplicationEventPublisher.class));
+                mock(ApplicationEventPublisher.class),
+                mock(DateTimeService.class));
     }
 
     @Test

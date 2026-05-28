@@ -14,21 +14,23 @@ import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.openfinova.banking.customer.account.api.dto.AccountBalanceView;
 import com.openfinova.banking.customer.account.api.dto.BalanceHistoryResponse;
 import com.openfinova.banking.customer.account.api.entity.AccountTransactionType;
+import com.openfinova.banking.customer.account.api.entity.LimitType;
 import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountTransaction;
 import com.openfinova.banking.customer.account.entity.GLAccountMapping;
+import com.openfinova.banking.customer.account.repository.AccountLimitRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.AccountTransactionRepository;
 import com.openfinova.banking.customer.account.repository.GLAccountMappingRepository;
 import com.openfinova.banking.gl.api.GeneralLedgerService;
 import com.openfinova.banking.setup.api.DateTimeService;
-import com.openfinova.banking.tp.api.TransactionProcessingService;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -52,7 +54,7 @@ import jakarta.persistence.EntityNotFoundException;
  *
  * This service centralizes balance calculations considering:
  * - AccountHolds (long-lived administrative holds) via AccountHoldService
- * - BalanceReservations (short-lived transaction holds) via TransactionProcessingFacade
+ * - Denormalized short-lived transaction reservations on Account.transactionReservedAmount
  *
  * This ensures consistent balance calculations across the system.
  *
@@ -67,10 +69,10 @@ public class AccountBalanceService {
     private static final Logger logger = LoggerFactory.getLogger(AccountBalanceService.class);
 
     private final AccountRepository accountRepository;
+    private final AccountLimitRepository accountLimitRepository;
     private final GLAccountMappingRepository glAccountMappingRepository;
     private final GeneralLedgerService generalLedgerFacade;
     private final AccountHoldService accountHoldService;
-    private final TransactionProcessingService transactionProcessingService;
     private final AccountTransactionRepository accountTransactionRepository;
     private final DateTimeService dateTimeService;
 
@@ -81,19 +83,18 @@ public class AccountBalanceService {
      * @param glAccountMappingRepository the repository for managing general ledger mappings
      * @param generalLedgerService the service for interacting with the general ledger
      * @param accountHoldService the service for managing account holds
-     * @param transactionProcessingService the service for handling transaction processing and reservations
      * @param accountTransactionRepository the repository for accessing transaction records
      * @param dateTimeService the service providing date and time utilities
      */
-    public AccountBalanceService(AccountRepository accountRepository,
+    public AccountBalanceService(AccountRepository accountRepository, AccountLimitRepository accountLimitRepository,
             GLAccountMappingRepository glAccountMappingRepository, GeneralLedgerService generalLedgerService,
-            AccountHoldService accountHoldService, TransactionProcessingService transactionProcessingService,
-            AccountTransactionRepository accountTransactionRepository, DateTimeService dateTimeService) {
+            AccountHoldService accountHoldService, AccountTransactionRepository accountTransactionRepository,
+            DateTimeService dateTimeService) {
         this.accountRepository = accountRepository;
+        this.accountLimitRepository = accountLimitRepository;
         this.glAccountMappingRepository = glAccountMappingRepository;
         this.generalLedgerFacade = generalLedgerService;
         this.accountHoldService = accountHoldService;
-        this.transactionProcessingService = transactionProcessingService;
         this.accountTransactionRepository = accountTransactionRepository;
         this.dateTimeService = dateTimeService;
     }
@@ -406,8 +407,7 @@ public class AccountBalanceService {
         view.setPendingCredits(BigDecimal.ZERO);
         view.setPendingDebits(BigDecimal.ZERO);
 
-        // Calculate reserved amount from active holds
-        BigDecimal reservedAmount = calculateReservedAmount(account.getId());
+        BigDecimal reservedAmount = calculateReservedAmount(account);
         view.setReservedAmount(reservedAmount);
 
         return view;
@@ -419,23 +419,23 @@ public class AccountBalanceService {
      * CENTRALIZED BALANCE CALCULATION:
      * This method combines both types of holds to provide a complete picture:
      * 1. AccountHolds - Long-lived administrative holds (court orders, fraud, etc.)
-     * 2. BalanceReservations - Short-lived transaction holds (payment processing, etc.)
+     * 2. BalanceReservations - Denormalized on account.transactionReservedAmount
      *
      * This ensures available balance calculations are consistent across the system.
      *
-     * @param customerAccountId the account ID
+     * @param account the account entity
      * @return total amount held/reserved (administrative holds + transaction reservations)
      */
-    private BigDecimal calculateReservedAmount(UUID customerAccountId) {
+    private BigDecimal calculateReservedAmount(Account account) {
+        UUID customerAccountId = account.getId();
         logger.debug("Calculating total reserved amount for account: {}", customerAccountId);
 
-        // Get administrative holds (long-lived)
         BigDecimal administrativeHolds = accountHoldService.getTotalHoldAmount(customerAccountId);
-
-        // Get transaction reservations (short-lived)
-        BigDecimal transactionReservations = transactionProcessingService.getTotalReservedAmount(customerAccountId);
-
-        BigDecimal totalReserved = administrativeHolds.add(transactionReservations);
+        BigDecimal transactionReservations = account.getTransactionReservedAmount() != null
+                ? account.getTransactionReservedAmount()
+                : BigDecimal.ZERO;
+        BigDecimal totalReserved = administrativeHolds
+                .add(transactionReservations != null ? transactionReservations : BigDecimal.ZERO);
 
         logger.debug(
                 "Account {} reserved amounts - Administrative holds: {}, Transaction reservations: {}, Total: {}",
@@ -445,6 +445,29 @@ public class AccountBalanceService {
                 totalReserved);
 
         return totalReserved;
+    }
+
+    private BigDecimal calculateReservedAmount(UUID customerAccountId) {
+        Account account = accountRepository.findById(customerAccountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account not found: " + customerAccountId));
+        return calculateReservedAmount(account);
+    }
+
+    /**
+     * Updates the denormalized transaction-reserved snapshot for the given account and refreshes
+     * available balance using the current administrative hold total.
+     */
+    public void syncTransactionReservedAmount(UUID accountId, BigDecimal reservedAmount) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountId));
+        BigDecimal normalizedReservedAmount = reservedAmount != null ? reservedAmount.max(BigDecimal.ZERO)
+                : BigDecimal.ZERO;
+        account.setTransactionReservedAmount(normalizedReservedAmount);
+
+        BigDecimal administrativeHolds = accountHoldService.getTotalHoldAmount(accountId);
+        account.setAvailableBalance(
+                account.getLedgerBalance().subtract(administrativeHolds.add(normalizedReservedAmount)));
+        accountRepository.save(account);
     }
 
     /**
@@ -668,5 +691,32 @@ public class AccountBalanceService {
         }
 
         return analysis;
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('account:read', 'service:account:read')")
+    public boolean hasSufficientBalance(UUID accountId, BigDecimal amount) {
+        return accountRepository.findById(accountId).map(account -> hasSufficientFunds(account, amount)).orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('account:read', 'service:account:read')")
+    public boolean hasSufficientBalanceUnderLock(UUID accountId, BigDecimal amount) {
+        return accountRepository.findByIdWithLock(accountId).map(account -> hasSufficientFunds(account, amount))
+                .orElse(false);
+    }
+
+    private boolean hasSufficientFunds(Account account, BigDecimal amount) {
+        BigDecimal available = account.getAvailableBalance();
+        BigDecimal overdraftLimit = getOverdraftLimit(account.getId());
+        BigDecimal effectiveLimit = available.add(overdraftLimit);
+        return effectiveLimit.compareTo(amount) >= 0;
+    }
+
+    private BigDecimal getOverdraftLimit(UUID accountId) {
+        return accountLimitRepository.findActiveEffectiveLimitsByAccount(accountId, dateTimeService.instant()).stream()
+                .filter(l -> l.getLimitType() == LimitType.OVERDRAFT_LIMIT)
+                .map(l -> l.getMaxAmount() != null ? l.getMaxAmount() : BigDecimal.ZERO).max(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
     }
 }

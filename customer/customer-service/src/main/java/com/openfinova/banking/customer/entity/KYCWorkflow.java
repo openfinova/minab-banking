@@ -86,21 +86,19 @@ public class KYCWorkflow {
         this.initiatedBy = submittedBy;
     }
 
-    public void approve(String reviewedBy, String comments) {
-        LocalDateTime now = LocalDateTime.now();
+    public void approve(String reviewedBy, String comments, LocalDateTime reviewedAt) {
         this.status = KYCStatus.VERIFIED;
         this.reviewedBy = reviewedBy;
-        this.reviewedAt = now;
-        this.completedAt = now;
+        this.reviewedAt = reviewedAt;
+        this.completedAt = reviewedAt;
         this.comments = comments;
     }
 
-    public void reject(String reviewedBy, String rejectionReason) {
-        LocalDateTime now = LocalDateTime.now();
+    public void reject(String reviewedBy, String rejectionReason, LocalDateTime reviewedAt) {
         this.status = KYCStatus.REJECTED;
         this.reviewedBy = reviewedBy;
-        this.reviewedAt = now;
-        this.completedAt = now;
+        this.reviewedAt = reviewedAt;
+        this.completedAt = reviewedAt;
         this.rejectionReason = rejectionReason;
     }
 

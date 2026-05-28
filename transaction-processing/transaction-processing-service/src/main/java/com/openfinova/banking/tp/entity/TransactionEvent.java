@@ -4,7 +4,9 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
-import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.openfinova.banking.common.lib.converter.MapToJsonConverter;
 import com.openfinova.banking.tp.api.entity.TransactionStatus;
@@ -12,6 +14,7 @@ import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -32,6 +35,7 @@ import jakarta.validation.constraints.Size;
  * Implements event sourcing pattern for complete audit trail.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "transaction_events", uniqueConstraints = @UniqueConstraint(columnNames = { "transaction_id",
         "event_sequence" }), indexes = {
                 @Index(name = "idx_transaction_events_transaction", columnList = "transaction_id, event_sequence"),
@@ -77,10 +81,11 @@ public class TransactionEvent {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @CreatedBy
     @Column(name = "created_by", length = 100)
     @Size(max = 100, message = "Created by must not exceed 100 characters")
     private String createdBy;
@@ -93,7 +98,6 @@ public class TransactionEvent {
         this.transaction = transaction;
         this.eventType = eventType;
         this.newStatus = newStatus;
-        this.createdBy = "SYSTEM";
     }
 
     // Business logic methods

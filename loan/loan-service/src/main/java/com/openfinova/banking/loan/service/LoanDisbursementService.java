@@ -9,11 +9,13 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.openfinova.banking.loan.api.entity.DisbursementMethod;
 import com.openfinova.banking.loan.api.entity.DisbursementStatus;
+import com.openfinova.banking.loan.api.entity.LoanStatus;
 import com.openfinova.banking.loan.dto.DisbursementValidationResult;
 import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.entity.LoanDisbursement;
@@ -73,11 +75,13 @@ public class LoanDisbursementService {
 
     private final LoanDisbursementRepository disbursementRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final LoanAccountService loanAccountService;
 
     public LoanDisbursementService(LoanDisbursementRepository disbursementRepository,
-            LoanAccountRepository loanAccountRepository) {
+            LoanAccountRepository loanAccountRepository, LoanAccountService loanAccountService) {
         this.disbursementRepository = disbursementRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.loanAccountService = loanAccountService;
     }
 
     /**
@@ -116,6 +120,7 @@ public class LoanDisbursementService {
      * @return the created disbursement with PENDING status
      * @throws IllegalArgumentException if loan account not found
      */
+    @PreAuthorize("hasAuthority('loan:disburse')")
     public LoanDisbursement createDisbursement(UUID loanAccountId, BigDecimal disbursementAmount,
             LocalDate disbursementDate, DisbursementMethod disbursementMethod, String destinationAccountNumber,
             String createdBy) {
@@ -141,6 +146,7 @@ public class LoanDisbursementService {
      * @return Optional containing the disbursement if found, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('loan:read', 'service:loan:read')")
     public Optional<LoanDisbursement> getDisbursementById(UUID id) {
         return disbursementRepository.findById(id);
     }
@@ -158,11 +164,13 @@ public class LoanDisbursementService {
      * @return Optional containing the disbursement if found, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('loan:read', 'service:loan:read')")
     public Optional<LoanDisbursement> getDisbursementByReference(String disbursementReference) {
         return disbursementRepository.findByDisbursementReference(disbursementReference);
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanDisbursement> getDisbursementForLoanAccount(UUID loanAccountId, UUID disbursementId) {
         return disbursementRepository.findById(disbursementId)
                 .filter(d -> d.getLoanAccount() != null && loanAccountId.equals(d.getLoanAccount().getId()));
@@ -189,6 +197,7 @@ public class LoanDisbursementService {
      * @return list of all disbursements for the loan account
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanDisbursement> getDisbursementsByLoanAccount(UUID loanAccountId) {
         return disbursementRepository.findByLoanAccountId(loanAccountId);
     }
@@ -230,6 +239,7 @@ public class LoanDisbursementService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanDisbursement> getDisbursementsByLoanAccountAndStatus(UUID loanAccountId, DisbursementStatus status,
             Pageable pageable) {
         return disbursementRepository.findByLoanAccount_IdAndStatus(loanAccountId, status, pageable);
@@ -275,6 +285,7 @@ public class LoanDisbursementService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanDisbursement> getDisbursementsByLoanAccountAndDateRange(UUID loanAccountId, LocalDate startDate,
             LocalDate endDate, Pageable pageable) {
         return disbursementRepository
@@ -282,6 +293,7 @@ public class LoanDisbursementService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countPendingDisbursementsForLoanAccount(UUID loanAccountId) {
         return disbursementRepository.countByLoanAccount_IdAndStatus(loanAccountId, DisbursementStatus.PENDING);
     }
@@ -312,6 +324,7 @@ public class LoanDisbursementService {
      * @throws IllegalArgumentException if disbursement not found
      * @throws IllegalStateException if disbursement is not in PENDING status
      */
+    @PreAuthorize("hasAuthority('loan:disburse:approve')")
     public LoanDisbursement processDisbursement(UUID disbursementId, String processedBy) {
         LoanDisbursement disbursement = disbursementRepository.findById(disbursementId)
                 .orElseThrow(() -> new IllegalArgumentException("Disbursement not found: " + disbursementId));
@@ -324,6 +337,7 @@ public class LoanDisbursementService {
         return disbursementRepository.save(disbursement);
     }
 
+    @PreAuthorize("hasAuthority('loan:disburse:approve')")
     public LoanDisbursement processDisbursementForLoanAccount(UUID loanAccountId, UUID disbursementId,
             String processedBy) {
         requireDisbursementOnLoan(loanAccountId, disbursementId);
@@ -361,12 +375,14 @@ public class LoanDisbursementService {
      * @return the disbursement with COMPLETED status
      * @throws IllegalArgumentException if disbursement not found
      */
+    @PreAuthorize("hasAuthority('loan:disburse:approve')")
     public LoanDisbursement completeDisbursementForLoanAccount(UUID loanAccountId, UUID disbursementId,
             String completedBy) {
         requireDisbursementOnLoan(loanAccountId, disbursementId);
         return completeDisbursement(disbursementId, completedBy);
     }
 
+    @PreAuthorize("hasAuthority('loan:disburse:approve')")
     public LoanDisbursement completeDisbursement(UUID disbursementId, String completedBy) {
         LoanDisbursement disbursement = disbursementRepository.findById(disbursementId)
                 .orElseThrow(() -> new IllegalArgumentException("Disbursement not found: " + disbursementId));
@@ -380,6 +396,7 @@ public class LoanDisbursementService {
      * Idempotent if already {@link DisbursementStatus#COMPLETED}.
      * Used by module facades (e.g. {@link com.openfinova.banking.loan.api.LoanService}) after TP confirms settlement.
      */
+    @PreAuthorize("hasAuthority('service:loan:write')")
     public LoanDisbursement completeDisbursementWithTransactionReference(UUID disbursementId,
             String transactionReference, String completedBy) {
         LoanDisbursement disbursement = disbursementRepository.findById(disbursementId)
@@ -394,6 +411,25 @@ public class LoanDisbursementService {
         }
         disbursement.setStatus(DisbursementStatus.COMPLETED);
         return disbursementRepository.save(disbursement);
+    }
+
+    /**
+     * Completes disbursement settlement and activates the loan account when first disbursement completes.
+     */
+    @PreAuthorize("hasAuthority('service:loan:write')")
+    public LoanDisbursement completeDisbursementAfterTransfer(UUID disbursementId, String transactionReference,
+            String completedBy) {
+        LoanDisbursement saved = completeDisbursementWithTransactionReference(
+                disbursementId,
+                transactionReference,
+                completedBy);
+        UUID loanAccountId = saved.getLoanAccount().getId();
+        loanAccountService.getLoanAccountById(loanAccountId).ifPresent(account -> {
+            if (account.getDisbursementDate() == null && LoanStatus.APPROVED.equals(account.getStatus())) {
+                loanAccountService.disburseLoan(loanAccountId, saved.getDisbursementDate(), completedBy);
+            }
+        });
+        return disbursementRepository.findById(saved.getId()).orElse(saved);
     }
 
     /**
@@ -438,12 +474,14 @@ public class LoanDisbursementService {
      * @return the disbursement with FAILED status
      * @throws IllegalArgumentException if disbursement not found
      */
+    @PreAuthorize("hasAuthority('loan:disburse')")
     public LoanDisbursement failDisbursementForLoanAccount(UUID loanAccountId, UUID disbursementId,
             String failureReason, String failedBy) {
         requireDisbursementOnLoan(loanAccountId, disbursementId);
         return failDisbursement(disbursementId, failureReason, failedBy);
     }
 
+    @PreAuthorize("hasAnyAuthority('loan:disburse', 'service:loan:write')")
     public LoanDisbursement failDisbursement(UUID disbursementId, String failureReason, String failedBy) {
         LoanDisbursement disbursement = disbursementRepository.findById(disbursementId)
                 .orElseThrow(() -> new IllegalArgumentException("Disbursement not found: " + disbursementId));
@@ -494,12 +532,14 @@ public class LoanDisbursementService {
      * @throws IllegalArgumentException if disbursement not found
      * @throws IllegalStateException if disbursement is not in PENDING status
      */
+    @PreAuthorize("hasAuthority('loan:disburse')")
     public LoanDisbursement cancelDisbursementForLoanAccount(UUID loanAccountId, UUID disbursementId,
             String cancellationReason, String cancelledBy) {
         requireDisbursementOnLoan(loanAccountId, disbursementId);
         return cancelDisbursement(disbursementId, cancellationReason, cancelledBy);
     }
 
+    @PreAuthorize("hasAuthority('loan:disburse')")
     public LoanDisbursement cancelDisbursement(UUID disbursementId, String cancellationReason, String cancelledBy) {
         LoanDisbursement disbursement = disbursementRepository.findById(disbursementId)
                 .orElseThrow(() -> new IllegalArgumentException("Disbursement not found: " + disbursementId));

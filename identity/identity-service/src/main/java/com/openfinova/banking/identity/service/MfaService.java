@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -18,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.openfinova.banking.identity.entity.BankingUser;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * TOTP (RFC 6238) multi-factor authentication service.
@@ -35,10 +35,12 @@ public class MfaService {
     private static final String BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
     private final PasswordEncoder passwordEncoder;
+    private final DateTimeService dateTimeService;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public MfaService(PasswordEncoder passwordEncoder) {
+    public MfaService(PasswordEncoder passwordEncoder, DateTimeService dateTimeService) {
         this.passwordEncoder = passwordEncoder;
+        this.dateTimeService = dateTimeService;
     }
 
     /** Generate a Base32-encoded TOTP shared secret. */
@@ -66,7 +68,7 @@ public class MfaService {
             return false;
         }
         byte[] key = base32Decode(base32Secret);
-        long currentStep = Instant.now().getEpochSecond() / TIME_STEP_SECONDS;
+        long currentStep = dateTimeService.instant().getEpochSecond() / TIME_STEP_SECONDS;
 
         for (int drift = -ALLOWED_DRIFT_STEPS; drift <= ALLOWED_DRIFT_STEPS; drift++) {
             String expected = generateTotpCode(key, currentStep + drift);

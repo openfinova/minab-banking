@@ -1,8 +1,9 @@
 package com.openfinova.banking.customer.controller;
 
 import com.openfinova.banking.customer.api.entity.CustomerRelationshipType;
-import com.openfinova.banking.customer.entity.Customer;
-import com.openfinova.banking.customer.entity.CustomerRelationship;
+import com.openfinova.banking.customer.dto.CustomerRelationshipResponse;
+import com.openfinova.banking.customer.dto.CustomerResponse;
+import com.openfinova.banking.customer.mapper.CustomerMapper;
 import com.openfinova.banking.customer.service.CustomerService;
 import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,7 +48,7 @@ public class CustomerRelationshipController {
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Relationship created successfully"),
             @ApiResponse(responseCode = "404", description = "Customer not found"),
             @ApiResponse(responseCode = "409", description = "Relationship already exists") })
-    public ResponseEntity<CustomerRelationship> createCustomerRelationship(Authentication authentication,
+    public ResponseEntity<CustomerRelationshipResponse> createCustomerRelationship(Authentication authentication,
             @Parameter(description = "Primary customer ID", required = true) @PathVariable UUID customerId,
             @Parameter(description = "Related customer ID") @RequestParam UUID relatedCustomerId,
             @Parameter(description = "Relationship type") @RequestParam CustomerRelationshipType relationshipType) {
@@ -61,28 +62,28 @@ public class CustomerRelationshipController {
                 relationshipType,
                 createdBy);
 
-        CustomerRelationship relationship = customerService
+        var relationship = customerService
                 .createCustomerRelationship(customerId, relatedCustomerId, relationshipType, createdBy);
 
         log.info("Successfully created relationship with ID: {}", relationship.getId());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(relationship);
+        return ResponseEntity.status(HttpStatus.CREATED).body(CustomerMapper.toRelationshipResponse(relationship));
     }
 
     @GetMapping
     @PreAuthorize("hasAuthority('customer:read')")
     @Operation(summary = "Get customer relationships", description = "Retrieves all relationships for a customer")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Relationships retrieved successfully") })
-    public ResponseEntity<List<CustomerRelationship>> getCustomerRelationships(
+    public ResponseEntity<List<CustomerRelationshipResponse>> getCustomerRelationships(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId) {
 
         log.info("Fetching relationships for customer: {}", customerId);
 
-        List<CustomerRelationship> relationships = customerService.getCustomerRelationships(customerId);
+        var relationships = customerService.getCustomerRelationships(customerId);
 
         log.info("Found {} relationships for customer: {}", relationships.size(), customerId);
 
-        return ResponseEntity.ok(relationships);
+        return ResponseEntity.ok(CustomerMapper.toRelationshipResponseList(relationships));
     }
 
     @GetMapping("/related-customers")
@@ -90,17 +91,17 @@ public class CustomerRelationshipController {
     @Operation(summary = "Get related customers", description = "Retrieves customers related to a specific customer with optional type filtering")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Related customers retrieved successfully") })
-    public ResponseEntity<List<Customer>> getRelatedCustomers(
+    public ResponseEntity<List<CustomerResponse>> getRelatedCustomers(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
             @Parameter(description = "Optional relationship type filter") @RequestParam(required = false) CustomerRelationshipType relationshipType) {
 
         log.info("Fetching related customers for: {}, type filter: {}", customerId, relationshipType);
 
-        List<Customer> relatedCustomers = customerService.getRelatedCustomers(customerId, relationshipType);
+        var relatedCustomers = customerService.getRelatedCustomers(customerId, relationshipType);
 
         log.info("Found {} related customers", relatedCustomers.size());
 
-        return ResponseEntity.ok(relatedCustomers);
+        return ResponseEntity.ok(relatedCustomers.stream().map(CustomerMapper::toCustomerResponse).toList());
     }
 
     @DeleteMapping("/{relationshipId}")

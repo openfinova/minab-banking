@@ -1,5 +1,7 @@
 package com.openfinova.banking.customer.account.mapper;
 
+import java.time.LocalDateTime;
+
 import com.openfinova.banking.customer.account.api.dto.AccountRelationshipResponse;
 import com.openfinova.banking.customer.account.entity.AccountRelationship;
 import org.springframework.stereotype.Component;
@@ -10,7 +12,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AccountRelationshipMapper {
 
-    public AccountRelationshipResponse toResponse(AccountRelationship relationship) {
+    public AccountRelationshipResponse toResponse(AccountRelationship relationship, LocalDateTime evaluatedAt) {
         if (relationship == null) {
             return null;
         }
@@ -25,7 +27,7 @@ public class AccountRelationshipMapper {
         response.setIsBeneficiary(relationship.getIsBeneficiary());
         response.setBeneficiaryPercentage(relationship.getBeneficiaryPercentage());
         // Map status to isActive boolean
-        response.setIsActive(relationship.isEffective());
+        response.setIsActive(relationship.isEffective(evaluatedAt));
         response.setCreatedAt(relationship.getCreatedAt());
         response.setCreatedBy(relationship.getCreatedBy());
 

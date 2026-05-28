@@ -27,13 +27,13 @@ public class VelocityLimitBreachDTO {
     }
 
     public VelocityLimitBreachDTO(UUID accountId, TransactionType transactionType, VelocityLimitPeriod limitPeriod,
-            BigDecimal attemptedAmount, String reason) {
+            BigDecimal attemptedAmount, String reason, LocalDateTime breachTimestamp) {
         this.accountId = accountId;
         this.transactionType = transactionType;
         this.limitPeriod = limitPeriod;
         this.attemptedAmount = attemptedAmount;
         this.reason = reason;
-        this.breachTimestamp = LocalDateTime.now();
+        this.breachTimestamp = breachTimestamp;
     }
 
     // Getters and setters

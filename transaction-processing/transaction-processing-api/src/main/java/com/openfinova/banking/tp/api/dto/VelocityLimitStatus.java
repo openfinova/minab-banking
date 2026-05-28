@@ -25,10 +25,10 @@ public class VelocityLimitStatus {
     public VelocityLimitStatus() {
     }
 
-    public VelocityLimitStatus(UUID accountId, TransactionType transactionType) {
+    public VelocityLimitStatus(UUID accountId, TransactionType transactionType, LocalDateTime statusTimestamp) {
         this.accountId = accountId;
         this.transactionType = transactionType;
-        this.statusTimestamp = LocalDateTime.now();
+        this.statusTimestamp = statusTimestamp;
     }
 
     // Getters and setters

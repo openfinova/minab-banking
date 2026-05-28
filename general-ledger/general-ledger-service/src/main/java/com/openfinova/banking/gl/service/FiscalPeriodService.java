@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import com.openfinova.banking.gl.api.entity.GLEntityType;
 import com.openfinova.banking.gl.entity.FiscalPeriod;
 import com.openfinova.banking.gl.mapper.FiscalPeriodMapper;
 import com.openfinova.banking.gl.repository.FiscalPeriodRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
 * Service implementation for managing fiscal periods in the general ledger system.
@@ -38,12 +40,14 @@ public class FiscalPeriodService {
     private final FiscalPeriodRepository fiscalPeriodRepository;
     private final AuditService auditService;
     private final FiscalPeriodMapper fiscalPeriodMapper;
+    private final DateTimeService dateTimeService;
 
     public FiscalPeriodService(FiscalPeriodRepository fiscalPeriodRepository, AuditService auditService,
-            FiscalPeriodMapper fiscalPeriodMapper) {
+            FiscalPeriodMapper fiscalPeriodMapper, DateTimeService dateTimeService) {
         this.fiscalPeriodRepository = fiscalPeriodRepository;
         this.auditService = auditService;
         this.fiscalPeriodMapper = fiscalPeriodMapper;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -51,6 +55,8 @@ public class FiscalPeriodService {
      *
      * @return a list of all fiscal periods ordered by start date
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<FiscalPeriod> getAllFiscalPeriods() {
         logger.debug("Getting all fiscal periods");
         return fiscalPeriodRepository.findAllByOrderByStartDateAscFiscalYearAscPeriodNumberAsc();
@@ -62,6 +68,8 @@ public class FiscalPeriodService {
      * @param date the date to find the active period for
      * @return Optional containing the active fiscal period, or empty if none found
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<FiscalPeriod> findActivePeriod(LocalDate date) {
         logger.debug("Finding active fiscal period for date: {}", date);
@@ -74,6 +82,8 @@ public class FiscalPeriodService {
      * @param status the fiscal period status to filter by
      * @return a list of fiscal periods with the specified status
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public List<FiscalPeriod> getFiscalPeriodsByStatus(FiscalPeriodStatus status) {
         logger.debug("Getting fiscal periods by status: {}", status);
         return fiscalPeriodRepository.findByStatus(status);
@@ -85,14 +95,24 @@ public class FiscalPeriodService {
      * @param date the date to find the fiscal period for
      * @return an Optional containing the fiscal period if found
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public Optional<FiscalPeriod> getFiscalPeriodForDate(LocalDate date) {
         logger.debug("Getting fiscal period for date: {}", date);
         return fiscalPeriodRepository.findActivePeriodForDate(date);
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public Optional<FiscalPeriod> getFiscalPeriodById(UUID id) {
         logger.debug("Getting fiscal period by ID: {}", id);
         return fiscalPeriodRepository.findById(id);
+    }
+
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+    @Transactional(readOnly = true)
+    public boolean isFiscalPeriodOpen(UUID periodId) {
+        return getFiscalPeriodById(periodId).map(period -> period.getStatus() == FiscalPeriodStatus.OPEN).orElse(false);
     }
 
     /**
@@ -103,6 +123,8 @@ public class FiscalPeriodService {
      * @param fiscalYear the fiscal year (e.g. 2024)
      * @return periods belonging to that year, sorted by periodNumber ascending
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     @Transactional(readOnly = true)
     public List<FiscalPeriod> getFiscalPeriodsByYear(int fiscalYear) {
         logger.debug("Getting fiscal periods for year: {}", fiscalYear);
@@ -117,6 +139,8 @@ public class FiscalPeriodService {
      * @param periodNumber the period number within the year (1–13)
      * @return the matching period, or empty if not found
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<FiscalPeriod> getFiscalPeriod(int fiscalYear, int periodNumber) {
         logger.debug("Getting fiscal period for year: {}, period: {}", fiscalYear, periodNumber);
@@ -142,7 +166,7 @@ public class FiscalPeriodService {
         FiscalPeriod period = fiscalPeriodRepository.findById(periodId)
                 .orElseThrow(() -> new IllegalArgumentException("Fiscal period not found: " + periodId));
 
-        period.close(closedBy);
+        period.close(closedBy, dateTimeService.now());
         fiscalPeriodRepository.save(period);
 
         Map<String, Object> newValues = Map.of(
@@ -179,6 +203,8 @@ public class FiscalPeriodService {
      * @return the persisted fiscal period with generated ID and OPEN status
      * @throws IllegalArgumentException if dates are invalid or overlap with an existing period
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public FiscalPeriod createFiscalPeriod(CreateFiscalPeriodRequest request) {
         logger.info(
                 "Creating fiscal period '{}' ({}/{}) from {} to {}",
@@ -230,6 +256,8 @@ public class FiscalPeriodService {
      * @throws IllegalArgumentException if the period is not found or reason is insufficient
      * @throws IllegalStateException if the period is locked
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public FiscalPeriod reopenFiscalPeriod(UUID periodId, String reopenedBy, String reason) {
         if (reopenedBy == null || reopenedBy.isBlank()) {
             throw new IllegalArgumentException("reopenedBy is required when reopening a fiscal period");
@@ -263,7 +291,7 @@ public class FiscalPeriodService {
                 "closedBy",
                 period.getClosedBy() != null ? period.getClosedBy() : "");
 
-        period.reopen(reopenedBy);
+        period.reopen(reopenedBy, dateTimeService.now());
         FiscalPeriod updatedPeriod = fiscalPeriodRepository.save(period);
 
         logger.info("Successfully reopened fiscal period: {}", periodId);
@@ -331,6 +359,8 @@ public class FiscalPeriodService {
      * @param postingDate the date to validate for posting
      * @return true if posting is allowed, false if the period is closed or doesn't exist
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public boolean isPostingAllowedForDate(LocalDate postingDate) {
         logger.debug("Checking if posting is allowed for date: {}", postingDate);
 

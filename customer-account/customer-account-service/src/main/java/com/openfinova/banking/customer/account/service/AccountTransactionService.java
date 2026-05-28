@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountTransaction;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.AccountTransactionRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /*
  * Implementation of AccountTransactionService for recording and retrieving
@@ -70,11 +72,13 @@ public class AccountTransactionService {
 
     private final AccountTransactionRepository accountTransactionRepository;
     private final AccountRepository accountRepository;
+    private final DateTimeService dateTimeService;
 
     public AccountTransactionService(AccountTransactionRepository accountTransactionRepository,
-            AccountRepository accountRepository) {
+            AccountRepository accountRepository, DateTimeService dateTimeService) {
         this.accountTransactionRepository = accountTransactionRepository;
         this.accountRepository = accountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /*
@@ -88,7 +92,7 @@ public class AccountTransactionService {
      *     AccountTransactionType.WITHDRAWAL,
      *     new BigDecimal("100.00"),
      *     "USD",
-     *     LocalDateTime.now(), // Transaction occurred now
+     *     dateTimeService.now(), // Transaction occurred now
      *     "ATM Withdrawal - Main St Branch",
      *     "ATM-2024-001234"
      * );
@@ -108,6 +112,7 @@ public class AccountTransactionService {
      * Later, after GL posting succeeds
      * accountTransactionService.updateGLTransactionLink(txn.getId(), glTransactionId);
      */
+    @PreAuthorize("hasAnyAuthority('account:write', 'service:account:write')")
     public AccountTransaction recordTransaction(UUID accountId, AccountTransactionType transactionType,
             BigDecimal amount, String currency, LocalDateTime transactionDate, String description, String referenceId) {
         logger.info(
@@ -127,7 +132,7 @@ public class AccountTransactionService {
         }
 
         // Use current time if no transaction date provided (though callers should provide it)
-        LocalDateTime effectiveTransactionDate = transactionDate != null ? transactionDate : LocalDateTime.now();
+        LocalDateTime effectiveTransactionDate = transactionDate != null ? transactionDate : dateTimeService.now();
 
         // Create the transaction entity using the constructor for required fields
         AccountTransaction transaction = new AccountTransaction(
@@ -176,7 +181,7 @@ public class AccountTransactionService {
      *
      * Step 1: Record the transaction (returns immediately)
      * AccountTransaction accountTxn = accountTransactionService.recordTransaction(
-     *     accountId, AccountTransactionType.DEPOSIT, amount, "USD", LocalDateTime.now(), "Branch deposit", null
+     *     accountId, AccountTransactionType.DEPOSIT, amount, "USD", dateTimeService.now(), "Branch deposit", null
      * );
      *
      * Step 2: Post to GL (may be asynchronous)
@@ -187,6 +192,7 @@ public class AccountTransactionService {
      *
      * Now the account transaction is marked as POSTED and linked to the GL
      */
+    @PreAuthorize("hasAnyAuthority('account:write', 'service:account:write')")
     public void updateGLTransactionLink(UUID accountTransactionId, UUID glTransactionId) {
         logger.info("Linking account transaction: {} to GL transaction: {}", accountTransactionId, glTransactionId);
 

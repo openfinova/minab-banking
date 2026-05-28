@@ -10,7 +10,6 @@
     <include file="db/changelog/setup-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/identity-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/customer-service.changelog.xml" relativeToChangelogFile="false"/>
-    <include file="db/changelog/customer-account-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/exchange-rate-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/general-ledger-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/transaction-processing-service.changelog.xml" relativeToChangelogFile="false"/>

@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.entity.LoanSchedule;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanScheduleRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Implementation of LoanScheduleService for managing loan repayment schedules and amortization.
@@ -100,10 +102,13 @@ public class LoanScheduleService {
 
     private final LoanScheduleRepository scheduleRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final DateTimeService dateTimeService;
 
-    public LoanScheduleService(LoanScheduleRepository scheduleRepository, LoanAccountRepository loanAccountRepository) {
+    public LoanScheduleService(LoanScheduleRepository scheduleRepository, LoanAccountRepository loanAccountRepository,
+            DateTimeService dateTimeService) {
         this.scheduleRepository = scheduleRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -160,6 +165,7 @@ public class LoanScheduleService {
      * @return list of generated schedule records in chronological order
      * @throws IllegalArgumentException if loan account not found or has invalid parameters
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public List<LoanSchedule> generateSchedule(UUID loanAccountId, String generatedBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan account not found: " + loanAccountId));
@@ -254,6 +260,7 @@ public class LoanScheduleService {
      * @return list of newly generated schedule records from effective date forward
      * @throws IllegalArgumentException if loan account not found or effective date invalid
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public List<LoanSchedule> regenerateSchedule(UUID loanAccountId, LocalDate effectiveDate, String regeneratedBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan account not found: " + loanAccountId));
@@ -320,6 +327,7 @@ public class LoanScheduleService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanSchedule> getScheduleForLoanAccount(UUID loanAccountId, UUID scheduleId) {
         return scheduleRepository.findById(scheduleId)
                 .filter(s -> s.getLoanAccount() != null && loanAccountId.equals(s.getLoanAccount().getId()));
@@ -354,6 +362,7 @@ public class LoanScheduleService {
      * @return page of schedule records for the loan account
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanSchedule> getSchedulesByLoanAccount(UUID loanAccountId, Pageable pageable) {
         return scheduleRepository.findByLoanAccountId(loanAccountId, pageable);
     }
@@ -401,6 +410,7 @@ public class LoanScheduleService {
      * @return list of schedules with the specified status
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanSchedule> getSchedulesByStatus(UUID loanAccountId, ScheduleStatus status) {
         return scheduleRepository.findByLoanAccountIdAndStatus(loanAccountId, status);
     }
@@ -423,6 +433,7 @@ public class LoanScheduleService {
      * @return list of pending (unpaid) schedules
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanSchedule> getPendingSchedules(UUID loanAccountId) {
         return scheduleRepository.findPendingSchedulesByLoanAccount(loanAccountId);
     }
@@ -445,6 +456,7 @@ public class LoanScheduleService {
      * @return list of overdue schedules ordered by due date
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanSchedule> getOverdueSchedules(UUID loanAccountId) {
         return scheduleRepository.findOverdueSchedulesByLoanAccount(loanAccountId);
     }
@@ -474,6 +486,7 @@ public class LoanScheduleService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanSchedule> getSchedulesDueBetweenForLoanAccount(UUID loanAccountId, LocalDate startDate,
             LocalDate endDate, Pageable pageable) {
         return scheduleRepository.findSchedulesDueBetweenForLoanAccount(loanAccountId, startDate, endDate, pageable);
@@ -598,6 +611,7 @@ public class LoanScheduleService {
         return applySchedulePaymentUpdate(schedule, principalPaid, interestPaid, feesPaid, penaltiesPaid);
     }
 
+    @PreAuthorize("hasAuthority('loan:collect')")
     public LoanSchedule updateSchedulePaymentForLoanAccount(UUID loanAccountId, UUID scheduleId,
             BigDecimal principalPaid, BigDecimal interestPaid, BigDecimal feesPaid, BigDecimal penaltiesPaid,
             String updatedBy) {
@@ -619,7 +633,7 @@ public class LoanScheduleService {
 
         if (totalPaid.compareTo(schedule.getTotalDue()) >= 0) {
             schedule.setStatus(ScheduleStatus.PAID);
-            schedule.setPaidDate(LocalDate.now());
+            schedule.setPaidDate(dateTimeService.today());
         } else {
             schedule.setStatus(ScheduleStatus.PARTIALLY_PAID);
         }
@@ -672,6 +686,7 @@ public class LoanScheduleService {
         return applyMarkSchedulePaid(schedule, paidDate);
     }
 
+    @PreAuthorize("hasAuthority('loan:collect')")
     public LoanSchedule markScheduleAsPaidForLoanAccount(UUID loanAccountId, UUID scheduleId, LocalDate paidDate,
             String updatedBy) {
         LoanSchedule schedule = scheduleRepository.findById(scheduleId)
@@ -723,6 +738,7 @@ public class LoanScheduleService {
         return applyOverdueUpdate(schedule, isOverdue, daysPastDue);
     }
 
+    @PreAuthorize("hasAnyAuthority('loan:write', 'loan:collect')")
     public LoanSchedule updateOverdueStatusForLoanAccount(UUID loanAccountId, UUID scheduleId, Boolean isOverdue,
             Integer daysPastDue) {
         LoanSchedule schedule = scheduleRepository.findById(scheduleId)
@@ -908,6 +924,7 @@ public class LoanScheduleService {
      * @return the number of schedules with the specified status
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countSchedulesByStatus(UUID loanAccountId, ScheduleStatus status) {
         return scheduleRepository.countByLoanAccountIdAndStatus(loanAccountId, status);
     }
@@ -941,6 +958,7 @@ public class LoanScheduleService {
      * @return the number of overdue schedules for the loan account
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countOverdueSchedules(UUID loanAccountId) {
         return scheduleRepository.countOverdueSchedulesByLoanAccount(loanAccountId);
     }

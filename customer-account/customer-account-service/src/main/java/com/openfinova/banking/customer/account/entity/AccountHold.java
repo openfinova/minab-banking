@@ -112,9 +112,9 @@ public class AccountHold {
         this.reason = reason;
     }
 
-    public boolean isActive() {
+    public boolean isActive(LocalDateTime evaluatedAt) {
         return status == com.openfinova.banking.customer.account.api.entity.HoldStatus.ACTIVE
-                && (expiresAt == null || LocalDateTime.now().isBefore(expiresAt));
+                && (expiresAt == null || evaluatedAt.isBefore(expiresAt));
     }
 
     public UUID getId() {

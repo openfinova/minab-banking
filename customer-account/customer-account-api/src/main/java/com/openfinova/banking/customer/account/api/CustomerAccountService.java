@@ -148,4 +148,15 @@ public interface CustomerAccountService {
      */
     UUID placeComplianceInvestigationHold(UUID accountId, BigDecimal amount, String currency, String reason,
             String externalReferenceId);
+
+    /**
+     * Persists the current transaction-reservation snapshot for an account.
+     *
+     * This value is denormalized on the account record to avoid runtime cross-module
+     * calls from Customer Account back to Transaction Processing during balance reads.
+     *
+     * @param accountId customer account identifier
+     * @param reservedAmount total active reservation amount from TP
+     */
+    void syncTransactionReservedAmount(UUID accountId, BigDecimal reservedAmount);
 }

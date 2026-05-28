@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,8 +31,9 @@ import com.openfinova.banking.identity.security.BankingUserDetails;
 import com.openfinova.banking.identity.security.BankingUserDetailsService;
 import com.openfinova.banking.identity.security.ClientIpResolver;
 import com.openfinova.banking.identity.service.PasswordPolicyService;
-import com.openfinova.banking.identity.exception.PasswordPolicyViolationException;
+import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
 import com.openfinova.banking.identity.service.SecurityAuditService;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,16 +59,19 @@ public class LoginEventHandlers {
     private final PasswordPolicyProperties passwordPolicyProps;
     private final PasswordPolicyService passwordPolicyService;
     private final BankingUserDetailsService userDetailsService;
+    private final DateTimeService dateTimeService;
 
     public LoginEventHandlers(UserRepository userRepository, SecurityAuditService auditService,
             LockoutProperties lockoutProps, PasswordPolicyProperties passwordPolicyProps,
-            PasswordPolicyService passwordPolicyService, BankingUserDetailsService userDetailsService) {
+            PasswordPolicyService passwordPolicyService, BankingUserDetailsService userDetailsService,
+            DateTimeService dateTimeService) {
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.lockoutProps = lockoutProps;
         this.passwordPolicyProps = passwordPolicyProps;
         this.passwordPolicyService = passwordPolicyService;
         this.userDetailsService = userDetailsService;
+        this.dateTimeService = dateTimeService;
     }
 
     public AuthenticationSuccessHandler successHandler() {
@@ -91,7 +96,7 @@ public class LoginEventHandlers {
             userRepository.findByUsername(username).ifPresent(user -> {
                 user.setFailedLoginAttempts(0);
                 user.setFailedLoginLockedUntil(null);
-                user.setLastLoginAt(LocalDateTime.now());
+                user.setLastLoginAt(dateTimeService.now());
                 user.setLastLoginIp(ip);
                 userRepository.save(user);
             });
@@ -120,16 +125,18 @@ public class LoginEventHandlers {
             String username = request.getParameter("username");
             String ip = ClientIpResolver.resolve(request);
             String ua = request.getHeader("User-Agent");
+            UUID userId = null;
 
             if (username != null && !username.isBlank()) {
                 Optional<BankingUser> optUser = userRepository.findByUsername(username);
                 if (optUser.isPresent()) {
                     BankingUser user = optUser.get();
+                    userId = user.getId();
                     int attempts = user.getFailedLoginAttempts() + 1;
                     user.setFailedLoginAttempts(attempts);
 
                     if (attempts >= lockoutProps.getMaxAttempts()) {
-                        LocalDateTime lockUntil = LocalDateTime.now()
+                        LocalDateTime lockUntil = dateTimeService.now()
                                 .plusMinutes(lockoutProps.getLockoutDurationMinutes());
                         user.setFailedLoginLockedUntil(lockUntil);
                         auditService.record(
@@ -140,13 +147,13 @@ public class LoginEventHandlers {
                                 ua,
                                 "Auto-locked after " + attempts + " failed attempts until " + lockUntil,
                                 AuditEventDetail.accountAutoLocked(attempts, lockUntil));
-                        log.warn("User {} auto-locked after {} failed login attempts", username, attempts);
+                        log.warn("User {} auto-locked after {} failed login attempts", userId, attempts);
                     }
                     userRepository.save(user);
                 }
             }
 
-            log.debug("Login failure for username={}", username, exception);
+            log.debug("Login failure for userId={}", userId, exception);
             auditService.record(
                     SecurityAuditEventType.LOGIN_FAILURE,
                     null,

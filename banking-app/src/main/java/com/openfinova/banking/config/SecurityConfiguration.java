@@ -48,31 +48,29 @@ public class SecurityConfiguration {
             PasswordManagementEnforcementFilter passwordManagementFilter,
             AuthenticationEntryPoint bankingBearerAuthenticationEntryPoint,
             AccessDeniedHandler bankingApiAccessDeniedHandler) throws Exception {
-        http.cors(
-                Customizer.withDefaults()).csrf(
-                        AbstractHttpConfigurer::disable)
-                .exceptionHandling(
-                        ex -> ex.authenticationEntryPoint(bankingBearerAuthenticationEntryPoint)
-                                .accessDeniedHandler(bankingApiAccessDeniedHandler))
+        http.cors(Customizer.withDefaults()).csrf(AbstractHttpConfigurer::disable).exceptionHandling(
+                ex -> ex.authenticationEntryPoint(bankingBearerAuthenticationEntryPoint)
+                        .accessDeniedHandler(bankingApiAccessDeniedHandler))
                 .authorizeHttpRequests(
-                        auth -> auth.requestMatchers(
-                                "/actuator/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/v3/api-docs/**",
-                                // Auth server endpoints are protected by the Order(1) chain; allow passthrough here
-                                "/oauth2/**",
-                                "/connect/**",
-                                "/.well-known/**",
-                                "/login",
-                                "/logout",
-                                "/logout/**",
-                                "/mfa/challenge",
-                                "/mfa/verify",
-                                "/logged-out",
-                                "/css/**",
-                                "/favicon.ico",
-                                "/error").permitAll().anyRequest().authenticated())
+                        auth -> auth
+                                // Health/metrics for orchestrators and load balancers — no customer data
+                                .requestMatchers("/actuator/**").permitAll()
+                                // OpenAPI/Swagger UI for local and CI API exploration
+                                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                                // OAuth2/OIDC protocol endpoints — authenticated by Authorization Server chain (Order 1)
+                                .requestMatchers("/oauth2/**", "/connect/**", "/.well-known/**").permitAll()
+                                // Server-rendered auth portal pages and static assets for login/MFA/logout flows
+                                .requestMatchers(
+                                        "/login",
+                                        "/logout",
+                                        "/logout/**",
+                                        "/mfa/challenge",
+                                        "/mfa/verify",
+                                        "/logged-out",
+                                        "/css/**",
+                                        "/favicon.ico",
+                                        "/error")
+                                .permitAll().anyRequest().authenticated())
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .jwt(jwt -> jwt.jwtAuthenticationConverter(bankingJwtAuthenticationConverter())))

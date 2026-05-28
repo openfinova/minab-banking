@@ -16,11 +16,13 @@ import com.openfinova.banking.loan.repository.InterestAccrualRepository;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanApplicationRepository;
 import com.openfinova.banking.loan.repository.LoanScheduleRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,17 +80,19 @@ public class LoanAccountService {
     private final InterestAccrualRepository interestAccrualRepository;
     private final LoanGeneralLedgerBridge loanGeneralLedgerBridge;
     private final ApplicationEventPublisher eventPublisher;
+    private final DateTimeService dateTimeService;
 
     public LoanAccountService(LoanAccountRepository loanAccountRepository,
             LoanApplicationRepository applicationRepository, LoanScheduleRepository scheduleRepository,
             InterestAccrualRepository interestAccrualRepository, LoanGeneralLedgerBridge loanGeneralLedgerBridge,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher, DateTimeService dateTimeService) {
         this.loanAccountRepository = loanAccountRepository;
         this.applicationRepository = applicationRepository;
         this.scheduleRepository = scheduleRepository;
         this.interestAccrualRepository = interestAccrualRepository;
         this.loanGeneralLedgerBridge = loanGeneralLedgerBridge;
         this.eventPublisher = eventPublisher;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -120,6 +124,7 @@ public class LoanAccountService {
      * @return the newly created loan account
      * @throws IllegalArgumentException if application not found, not approved, or loan already exists
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanAccount createLoanAccount(UUID applicationId, String createdBy) {
         LoanApplication application = applicationRepository.findById(applicationId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Application not found: %s", applicationId)));
@@ -155,6 +160,7 @@ public class LoanAccountService {
      * @return Optional containing the loan account if found, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('loan:read', 'service:loan:read')")
     public Optional<LoanAccount> getLoanAccountById(UUID id) {
         return loanAccountRepository.findById(id);
     }
@@ -169,8 +175,18 @@ public class LoanAccountService {
      * @return Optional containing the loan account if found, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('loan:read', 'service:loan:read')")
     public Optional<LoanAccount> getLoanAccountByNumber(String loanAccountNumber) {
         return loanAccountRepository.findByLoanAccountNumber(loanAccountNumber);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('loan:read', 'service:loan:read')")
+    public boolean isLoanAccountEligibleForRepayment(UUID loanAccountId) {
+        return getLoanAccountById(loanAccountId).map(account -> {
+            LoanStatus status = account.getStatus();
+            return LoanStatus.ACTIVE.equals(status) || LoanStatus.RESTRUCTURED.equals(status);
+        }).orElse(false);
     }
 
     /**
@@ -182,6 +198,7 @@ public class LoanAccountService {
      * @return list of all loan accounts for the customer
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanAccount> getLoanAccountsByCustomer(UUID customerId) {
         return loanAccountRepository.findByCustomerId(customerId);
     }
@@ -196,6 +213,7 @@ public class LoanAccountService {
      * @return page of loan accounts for the customer
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanAccount> getLoanAccountsByCustomer(UUID customerId, Pageable pageable) {
         return loanAccountRepository.findByCustomerId(customerId, pageable);
     }
@@ -213,6 +231,7 @@ public class LoanAccountService {
      * @return list of active loan accounts for the customer
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanAccount> getActiveLoanAccountsByCustomer(UUID customerId) {
         return loanAccountRepository.findByCustomerIdAndStatus(customerId, LoanStatus.ACTIVE);
     }
@@ -231,6 +250,7 @@ public class LoanAccountService {
      * @return page of loan accounts with the specified status
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanAccount> getLoanAccountsByStatus(LoanStatus status, Pageable pageable) {
         return loanAccountRepository.findByStatus(status, pageable);
     }
@@ -257,6 +277,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan account not found
      * @throws IllegalStateException if the status transition is not allowed
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanAccount updateLoanAccountStatus(UUID loanAccountId, LoanStatus newStatus, String reason,
             String updatedBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
@@ -303,6 +324,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan not found, date invalid, or disbursedBy missing
      * @throws IllegalStateException if loan already disbursed or cannot transition to ACTIVE
      */
+    @PreAuthorize("hasAnyAuthority('loan:disburse', 'service:loan:write')")
     public LoanAccount disburseLoan(UUID loanAccountId, LocalDate disbursementDate, String disbursedBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -313,12 +335,12 @@ public class LoanAccountService {
         }
 
         // Validate disbursement date is not in the future (allow today)
-        if (disbursementDate.isAfter(LocalDate.now())) {
+        if (disbursementDate.isAfter(dateTimeService.today())) {
             throw new IllegalArgumentException(
                     String.format(
                             "Disbursement date cannot be in the future. Provided: %s, Today: %s",
                             disbursementDate,
-                            LocalDate.now()));
+                            dateTimeService.today()));
         }
 
         // Validate disbursedBy is provided
@@ -378,6 +400,7 @@ public class LoanAccountService {
      * @param penaltiesDelta the change in penalties balance
      * @throws IllegalArgumentException if loan not found, deltas are null, or resulting balances are invalid
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public void updateOutstandingBalances(UUID loanAccountId, BigDecimal principalDelta, BigDecimal interestDelta,
             BigDecimal feesDelta, BigDecimal penaltiesDelta) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
@@ -459,6 +482,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan account not found
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateTotalOutstanding(UUID loanAccountId) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -561,6 +585,7 @@ public class LoanAccountService {
      * @return page of delinquent loan accounts
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanAccount> getDelinquentLoanAccounts(Pageable pageable) {
         return loanAccountRepository.findDelinquentAccounts(pageable);
     }
@@ -576,6 +601,7 @@ public class LoanAccountService {
      * @return page of loan accounts in the specified delinquency bucket
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanAccount> getLoanAccountsByDelinquencyBucket(DelinquencyBucket delinquencyBucket,
             Pageable pageable) {
         return loanAccountRepository.findByDelinquencyBucket(delinquencyBucket, pageable);
@@ -596,6 +622,7 @@ public class LoanAccountService {
      * @return page of loan accounts maturing within the specified date range
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanAccount> getLoanAccountsMaturingBetween(LocalDate startDate, LocalDate endDate, Pageable pageable) {
         return loanAccountRepository.findAccountsMaturingBetween(startDate, endDate, pageable);
     }
@@ -634,6 +661,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan not found, date invalid, or closedBy missing
      * @throws IllegalStateException if outstanding balance exists or status transition not allowed
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanAccount closeLoanAccount(UUID loanAccountId, LocalDate closureDate, String closedBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -716,6 +744,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan not found, date invalid, reason missing, or writtenOffBy missing
      * @throws IllegalStateException if status transition not allowed
      */
+    @PreAuthorize("hasAuthority('loan:write-off')")
     public LoanAccount writeOffLoan(UUID loanAccountId, LocalDate writeOffDate, String reason, String writtenOffBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -793,6 +822,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan not found or date invalid
      * @throws IllegalStateException if loan already restructured
      */
+    @PreAuthorize("hasAuthority('loan:restructure')")
     public LoanAccount markAsRestructured(UUID loanAccountId, LocalDate restructuredDate) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -855,6 +885,7 @@ public class LoanAccountService {
      * @return the newly created top-up loan account
      * @throws IllegalArgumentException if original loan not found
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanAccount createTopUpLoan(UUID originalLoanId, BigDecimal topUpAmount, String createdBy) {
         LoanAccount originalLoan = loanAccountRepository.findById(originalLoanId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Original loan not found: %s", originalLoanId)));
@@ -899,6 +930,7 @@ public class LoanAccountService {
      * @return the total outstanding principal across all customer loans
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateCustomerTotalExposure(UUID customerId) {
         return loanAccountRepository.sumOutstandingPrincipalByCustomer(customerId);
     }
@@ -916,6 +948,7 @@ public class LoanAccountService {
      * @return the count of active loan accounts for the customer
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countActiveLoansByCustomer(UUID customerId) {
         return loanAccountRepository.countActiveAccountsByCustomer(customerId);
     }
@@ -1058,6 +1091,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan account not found
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public LoanStatementResponse generateLoanStatement(UUID loanAccountId, LocalDate fromDate, LocalDate toDate) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -1093,6 +1127,7 @@ public class LoanAccountService {
      * @throws IllegalArgumentException if loan account not found
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public ValidationResult validateForClosure(UUID loanAccountId) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Loan account not found: %s", loanAccountId)));
@@ -1135,6 +1170,7 @@ public class LoanAccountService {
      * @param updatedBy the user performing the batch update
      * @return map of loan account ID to result message
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Map<UUID, String> batchUpdateLoanAccountStatus(List<UUID> loanAccountIds, LoanStatus newStatus,
             String reason, String updatedBy) {
         Map<UUID, String> results = new HashMap<>();

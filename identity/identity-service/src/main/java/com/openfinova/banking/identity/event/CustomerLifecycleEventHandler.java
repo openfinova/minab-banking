@@ -1,6 +1,5 @@
 package com.openfinova.banking.identity.event;
 
-import java.time.LocalDateTime;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -18,6 +17,7 @@ import com.openfinova.banking.identity.audit.SecurityAuditExtensions;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.service.SecurityAuditService;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Reacts to customer-party lifecycle status changes that should revoke access for the
@@ -44,10 +44,13 @@ public class CustomerLifecycleEventHandler {
 
     private final UserRepository userRepository;
     private final SecurityAuditService auditService;
+    private final DateTimeService dateTimeService;
 
-    public CustomerLifecycleEventHandler(UserRepository userRepository, SecurityAuditService auditService) {
+    public CustomerLifecycleEventHandler(UserRepository userRepository, SecurityAuditService auditService,
+            DateTimeService dateTimeService) {
         this.userRepository = userRepository;
         this.auditService = auditService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -81,7 +84,7 @@ public class CustomerLifecycleEventHandler {
                     event.getNewStatus());
 
             user.setEnabled(false);
-            user.setDisabledAt(LocalDateTime.now());
+            user.setDisabledAt(dateTimeService.now());
             userRepository.save(user);
 
             String details = "Automatically disabled: linked customer party " + event.getCustomerId()

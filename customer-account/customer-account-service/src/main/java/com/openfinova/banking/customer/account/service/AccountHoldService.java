@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,7 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountHold;
 import com.openfinova.banking.customer.account.repository.AccountHoldRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -46,6 +48,7 @@ public class AccountHoldService {
 
     private final AccountHoldRepository accountHoldRepository;
     private final AccountRepository accountRepository;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new AccountHoldService with required dependencies.
@@ -53,9 +56,11 @@ public class AccountHoldService {
      * @param accountHoldRepository the repository for managing account hold entities
      * @param accountRepository the repository for accessing account entities
      */
-    public AccountHoldService(AccountHoldRepository accountHoldRepository, AccountRepository accountRepository) {
+    public AccountHoldService(AccountHoldRepository accountHoldRepository, AccountRepository accountRepository,
+            DateTimeService dateTimeService) {
         this.accountHoldRepository = accountHoldRepository;
         this.accountRepository = accountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -78,6 +83,7 @@ public class AccountHoldService {
     /**
      * @param referenceId correlation id persisted on {@link AccountHold#setReferenceId(String)} (e.g. AML alert id)
      */
+    @PreAuthorize("hasAnyAuthority('account:write', 'service:account:write')")
     public AccountHold placeHold(UUID accountId, BigDecimal amount, String currency, String reason,
             LocalDateTime expiresAt, String referenceId) {
         logger.debug(
@@ -231,7 +237,8 @@ public class AccountHoldService {
 
         List<AccountHold> activeHolds = accountHoldRepository.findActiveHoldsByAccount(accountId);
 
-        BigDecimal totalHeld = activeHolds.stream().filter(AccountHold::isActive).map(AccountHold::getAmount)
+        LocalDateTime now = dateTimeService.now();
+        BigDecimal totalHeld = activeHolds.stream().filter(h -> h.isActive(now)).map(AccountHold::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         logger.debug("Total hold amount for account {}: {}", accountId, totalHeld);
@@ -247,7 +254,7 @@ public class AccountHoldService {
     public int processExpiredHolds() {
         logger.debug("Processing expired holds");
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
         List<AccountHold> expiredHolds = accountHoldRepository.findExpiredHolds(now);
 
         int expiredCount = 0;

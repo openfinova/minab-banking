@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +35,7 @@ public class GuarantorController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Add a guarantor to a loan account")
     public ResponseEntity<GuarantorResponse> addGuarantor(Authentication authentication,
             @PathVariable UUID loanAccountId, @Valid @RequestBody GuarantorRequest request) {
@@ -52,6 +54,7 @@ public class GuarantorController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get guarantor by ID")
     public ResponseEntity<GuarantorResponse> getGuarantorById(@PathVariable UUID loanAccountId, @PathVariable UUID id) {
 
@@ -60,6 +63,7 @@ public class GuarantorController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all guarantors for a loan account")
     public ResponseEntity<java.util.List<GuarantorResponse>> getGuarantorsByLoanAccount(
             @PathVariable UUID loanAccountId) {
@@ -69,6 +73,7 @@ public class GuarantorController {
     }
 
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get guarantors by status")
     public ResponseEntity<Page<GuarantorResponse>> getGuarantorsByStatus(@PathVariable UUID loanAccountId,
             @PathVariable GuarantorStatus status, Pageable pageable) {
@@ -79,6 +84,7 @@ public class GuarantorController {
     }
 
     @PostMapping("/{id}/verify")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Verify a guarantor")
     public ResponseEntity<GuarantorResponse> verifyGuarantor(Authentication authentication,
             @PathVariable UUID loanAccountId, @PathVariable UUID id,
@@ -91,6 +97,7 @@ public class GuarantorController {
     }
 
     @PostMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Update guarantor status")
     public ResponseEntity<GuarantorResponse> updateGuarantorStatus(Authentication authentication,
             @PathVariable UUID loanAccountId, @PathVariable UUID id,
@@ -104,6 +111,7 @@ public class GuarantorController {
     }
 
     @PostMapping("/{id}/release")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Release a guarantor from loan")
     public ResponseEntity<GuarantorResponse> releaseGuarantor(Authentication authentication,
             @PathVariable UUID loanAccountId, @PathVariable UUID id,
@@ -116,6 +124,7 @@ public class GuarantorController {
     }
 
     @PostMapping("/{id}/remove")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Remove a guarantor from loan")
     public ResponseEntity<Void> removeGuarantor(Authentication authentication, @PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody GuarantorRemovalRequest request) {
@@ -127,6 +136,7 @@ public class GuarantorController {
     }
 
     @GetMapping("/active/count")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Count active guarantors for a loan account")
     public ResponseEntity<Long> countActiveGuarantors(@PathVariable UUID loanAccountId) {
         long count = guarantorService.getActiveGuarantorsByLoanAccount(loanAccountId).size();

@@ -132,6 +132,14 @@ public class Account {
     @NotNull(message = "Available balance is required")
     private BigDecimal availableBalance = BigDecimal.ZERO;
 
+    /**
+     * Denormalized total of active short-lived transaction reservations managed by TP.
+     * Kept on the account row to avoid CustomerAccount -> TP read-time calls.
+     */
+    @Column(name = "transaction_reserved_amount", nullable = false, precision = 19, scale = 4)
+    @NotNull(message = "Transaction reserved amount is required")
+    private BigDecimal transactionReservedAmount = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "customerAccount", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @BatchSize(size = 20)
     @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
@@ -220,7 +228,7 @@ public class Account {
      * @param changedBy the user making the change
      * @throws IllegalStateException if the status transition is invalid
      */
-    public void changeStatus(AccountStatus newStatus, String reason, String changedBy) {
+    public void changeStatus(AccountStatus newStatus, String reason, String changedBy, LocalDateTime changedAt) {
         if (!status.canTransitionTo(newStatus)) {
             throw new IllegalStateException(
                     String.format("Invalid status transition from %s to %s", status, newStatus));
@@ -229,7 +237,7 @@ public class Account {
         this.status = newStatus;
 
         if (AccountStatus.CLOSED.equals(newStatus)) {
-            this.closedAt = LocalDateTime.now();
+            this.closedAt = changedAt;
             this.closureReason = reason;
         }
 
@@ -247,7 +255,6 @@ public class Account {
         mapping.setCustomerAccount(this);
         mapping.setGlAccountId(glAccountId);
         mapping.setMappingType(mappingType);
-        mapping.setCreatedAt(Instant.now());
 
         glAccountMappings.add(mapping);
     }
@@ -349,6 +356,14 @@ public class Account {
 
     public void setAvailableBalance(BigDecimal availableBalance) {
         this.availableBalance = availableBalance;
+    }
+
+    public BigDecimal getTransactionReservedAmount() {
+        return transactionReservedAmount;
+    }
+
+    public void setTransactionReservedAmount(BigDecimal transactionReservedAmount) {
+        this.transactionReservedAmount = transactionReservedAmount;
     }
 
     public List<GLAccountMapping> getGlAccountMappings() {

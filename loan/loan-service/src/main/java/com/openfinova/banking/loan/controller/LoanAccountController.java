@@ -12,6 +12,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.openfinova.banking.customer.account.api.dto.ValidationResult;
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.loan.api.dto.LoanAccountBalanceUpdateRequest;
 import com.openfinova.banking.loan.api.dto.LoanAccountBatchStatusUpdateRequest;
 import com.openfinova.banking.loan.api.dto.LoanAccountCloseRequest;
@@ -61,6 +63,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan account by ID")
     public ResponseEntity<LoanAccountResponse> getLoanAccountById(@PathVariable UUID id) {
         return accountService.getLoanAccountById(id).map(LoanAccountMapper::toResponse).map(ResponseEntity::ok)
@@ -68,6 +71,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/number/{loanAccountNumber}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan account by account number")
     public ResponseEntity<LoanAccountResponse> getLoanAccountByNumber(@PathVariable String loanAccountNumber) {
 
@@ -76,6 +80,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/customer/{customerId}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all loan accounts for a customer")
     public ResponseEntity<Page<LoanAccountResponse>> getLoanAccountsByCustomer(@PathVariable UUID customerId,
             Pageable pageable) {
@@ -85,6 +90,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/customer/{customerId}/active")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get active loan accounts for a customer")
     public ResponseEntity<List<LoanAccountResponse>> getActiveLoanAccountsByCustomer(@PathVariable UUID customerId) {
 
@@ -96,6 +102,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan accounts by status")
     public ResponseEntity<Page<LoanAccountResponse>> getLoanAccountsByStatus(@PathVariable LoanStatus status,
             Pageable pageable) {
@@ -105,6 +112,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/delinquent")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get delinquent loan accounts")
     public ResponseEntity<Page<LoanAccountResponse>> getDelinquentLoanAccounts(Pageable pageable) {
         Page<LoanAccount> accounts = accountService.getDelinquentLoanAccounts(pageable);
@@ -112,6 +120,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/delinquency-bucket/{bucket}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan accounts by delinquency bucket")
     public ResponseEntity<Page<LoanAccountResponse>> getLoanAccountsByDelinquencyBucket(
             @PathVariable DelinquencyBucket bucket, Pageable pageable) {
@@ -121,6 +130,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/maturing")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get loan accounts maturing within a date range")
     public ResponseEntity<Page<LoanAccountResponse>> getLoanAccountsMaturingBetween(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
@@ -131,6 +141,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/{id}/outstanding")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate total outstanding amount for a loan account")
     public ResponseEntity<BigDecimal> calculateTotalOutstanding(@PathVariable UUID id) {
         BigDecimal outstanding = accountService.calculateTotalOutstanding(id);
@@ -138,6 +149,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/customer/{customerId}/exposure")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Calculate total exposure for a customer across all loans")
     public ResponseEntity<BigDecimal> calculateCustomerTotalExposure(@PathVariable UUID customerId) {
         BigDecimal exposure = accountService.calculateCustomerTotalExposure(customerId);
@@ -145,6 +157,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/customer/{customerId}/count/active")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Count active loan accounts for a customer")
     public ResponseEntity<Long> countActiveLoansByCustomer(@PathVariable UUID customerId) {
         long count = accountService.countActiveLoansByCustomer(customerId);
@@ -152,6 +165,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/{id}/statement")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Generate loan statement for a specific period")
     public ResponseEntity<LoanStatementResponse> generateLoanStatement(@PathVariable UUID id,
             @Parameter(description = "Start date of the statement period") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
@@ -163,6 +177,7 @@ public class LoanAccountController {
     }
 
     @GetMapping("/{id}/validate-closure")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Validate if a loan account can be closed")
     public ResponseEntity<ValidationResult> validateForClosure(@PathVariable UUID id) {
         ValidationResult result = accountService.validateForClosure(id);
@@ -170,20 +185,27 @@ public class LoanAccountController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Create a new loan account from approved application")
-    public ResponseEntity<LoanAccountResponse> createLoanAccount(@Valid @RequestBody LoanAccountCreateRequest request) {
+    public ResponseEntity<LoanAccountResponse> createLoanAccount(@Valid @RequestBody LoanAccountCreateRequest request,
+            Authentication auth) {
 
-        LoanAccount account = accountService.createLoanAccount(request.getApplicationId(), "TODO_CURRENT_USER");
+        LoanAccount account = accountService
+                .createLoanAccount(request.getApplicationId(), BankingPrincipal.from(auth).username());
         return ResponseEntity.status(HttpStatus.CREATED).body(LoanAccountMapper.toResponse(account));
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Update loan account status")
     public ResponseEntity<LoanAccountResponse> updateLoanAccountStatus(@PathVariable UUID id,
-            @Valid @RequestBody LoanAccountStatusUpdateRequest request) {
+            @Valid @RequestBody LoanAccountStatusUpdateRequest request, Authentication auth) {
 
-        LoanAccount account = accountService
-                .updateLoanAccountStatus(id, request.getNewStatus(), request.getReason(), "TODO_CURRENT_USER");
+        LoanAccount account = accountService.updateLoanAccountStatus(
+                id,
+                request.getNewStatus(),
+                request.getReason(),
+                BankingPrincipal.from(auth).username());
         return ResponseEntity.ok(LoanAccountMapper.toResponse(account));
     }
 
@@ -191,18 +213,21 @@ public class LoanAccountController {
     @PreAuthorize("hasAuthority('loan:disburse')")
     @Operation(summary = "Initiate loan disbursement")
     public ResponseEntity<LoanAccountResponse> disburseLoan(@PathVariable UUID id,
-            @Valid @RequestBody LoanAccountDisburseRequest request) {
+            @Valid @RequestBody LoanAccountDisburseRequest request, Authentication auth) {
 
-        LoanAccount account = accountService.disburseLoan(id, request.getDisbursementDate(), "TODO_CURRENT_USER");
+        LoanAccount account = accountService
+                .disburseLoan(id, request.getDisbursementDate(), BankingPrincipal.from(auth).username());
         return ResponseEntity.ok(LoanAccountMapper.toResponse(account));
     }
 
     @PostMapping("/{id}/close")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Close a fully-paid loan account")
     public ResponseEntity<LoanAccountResponse> closeLoanAccount(@PathVariable UUID id,
-            @Valid @RequestBody LoanAccountCloseRequest request) {
+            @Valid @RequestBody LoanAccountCloseRequest request, Authentication auth) {
 
-        LoanAccount account = accountService.closeLoanAccount(id, request.getClosureDate(), "TODO_CURRENT_USER");
+        LoanAccount account = accountService
+                .closeLoanAccount(id, request.getClosureDate(), BankingPrincipal.from(auth).username());
         return ResponseEntity.ok(LoanAccountMapper.toResponse(account));
     }
 
@@ -210,37 +235,44 @@ public class LoanAccountController {
     @PreAuthorize("hasAuthority('loan:write-off')")
     @Operation(summary = "Write off a delinquent loan account")
     public ResponseEntity<LoanAccountResponse> writeOffLoan(@PathVariable UUID id,
-            @Valid @RequestBody LoanAccountWriteOffRequest request) {
+            @Valid @RequestBody LoanAccountWriteOffRequest request, Authentication auth) {
 
-        LoanAccount account = accountService
-                .writeOffLoan(id, request.getWriteOffDate(), request.getReason(), "TODO_CURRENT_USER");
+        LoanAccount account = accountService.writeOffLoan(
+                id,
+                request.getWriteOffDate(),
+                request.getReason(),
+                BankingPrincipal.from(auth).username());
         return ResponseEntity.ok(LoanAccountMapper.toResponse(account));
     }
 
     @PostMapping("/{id}/top-up")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Create a top-up loan for existing account")
     public ResponseEntity<LoanAccountResponse> createTopUpLoan(@PathVariable UUID id,
-            @Valid @RequestBody LoanAccountTopUpRequest request) {
+            @Valid @RequestBody LoanAccountTopUpRequest request, Authentication auth) {
 
-        LoanAccount account = accountService.createTopUpLoan(id, request.getTopUpAmount(), "TODO_CURRENT_USER");
+        LoanAccount account = accountService
+                .createTopUpLoan(id, request.getTopUpAmount(), BankingPrincipal.from(auth).username());
         return ResponseEntity.ok(LoanAccountMapper.toResponse(account));
     }
 
     @PostMapping("/batch/status-update")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Batch update status for multiple loan accounts")
     public ResponseEntity<Void> batchUpdateLoanAccountStatus(
-            @Valid @RequestBody LoanAccountBatchStatusUpdateRequest request) {
+            @Valid @RequestBody LoanAccountBatchStatusUpdateRequest request, Authentication auth) {
 
         accountService.batchUpdateLoanAccountStatus(
                 request.getLoanAccountIds(),
                 request.getNewStatus(),
                 request.getReason(),
-                "TODO_CURRENT_USER");
+                BankingPrincipal.from(auth).username());
 
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}/balances")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Update outstanding balances for a loan account")
     public ResponseEntity<LoanAccountResponse> updateOutstandingBalances(@PathVariable UUID id,
             @Valid @RequestBody LoanAccountBalanceUpdateRequest request) {

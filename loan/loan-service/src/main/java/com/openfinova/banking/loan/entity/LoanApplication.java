@@ -244,19 +244,19 @@ public class LoanApplication {
     }
 
     public void approve(BigDecimal approvedAmount, Integer approvedTenorMonths, BigDecimal approvedRate,
-            String approvedBy) {
+            String approvedBy, LocalDate approvalDate) {
         this.status = ApplicationStatus.APPROVED;
         this.approvedAmount = approvedAmount;
         this.approvedTenorMonths = approvedTenorMonths;
         this.approvedInterestRate = approvedRate;
-        this.approvalDate = LocalDate.now();
+        this.approvalDate = approvalDate;
         this.approvedBy = approvedBy;
     }
 
-    public void reject(String reason, String rejectedBy) {
+    public void reject(String reason, String rejectedBy, LocalDate rejectionDate) {
         this.status = ApplicationStatus.REJECTED;
         this.rejectionReason = reason;
-        this.rejectionDate = LocalDate.now();
+        this.rejectionDate = rejectionDate;
         this.rejectedBy = rejectedBy;
     }
 

@@ -13,6 +13,7 @@ import com.openfinova.banking.gl.repository.GLTransactionApprovalRepository;
 import com.openfinova.banking.gl.repository.GLTransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +55,8 @@ public class ApprovalService {
      * Returns all transactions in PENDING_APPROVAL status that the given user is
      * eligible to approve.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public List<PendingApprovalResponse> getPendingApprovalsForUser(String username, GLApprovalRole role) {
         log.info("Fetching pending approvals queue for user: {} with role: {}", username, role);
 
@@ -71,6 +74,8 @@ public class ApprovalService {
     /**
      * Returns the full approval-action history performed by the given user.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public List<ApprovalResponse> getApprovalActivityForUser(String username) {
         log.info("Fetching approval activity history for user: {}", username);
 
@@ -85,6 +90,8 @@ public class ApprovalService {
      * Returns all authorization limits configured for the given role.
      * Returns an empty list when none are found, letting the caller decide on the HTTP status.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public List<AuthorizationLimitResponse> getAuthorizationLimitsForRole(GLApprovalRole role) {
         log.info("Fetching authorization limits for role: {}", role);
 
@@ -100,6 +107,8 @@ public class ApprovalService {
      *
      * @return empty Optional when the transaction does not exist (caller maps to 404)
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public Optional<CanApproveResponse> checkCanApprove(UUID transactionId, String username, GLApprovalRole role) {
         log.info("Checking if user {} with role {} can approve transaction {}", username, role, transactionId);
 

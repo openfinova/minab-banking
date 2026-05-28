@@ -69,6 +69,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get all schedule installments for a loan account")
     public ResponseEntity<Page<LoanScheduleResponse>> getSchedulesByLoanAccount(@PathVariable UUID loanAccountId,
             Pageable pageable) {
@@ -78,6 +79,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping("/pending")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get pending installments for a loan account")
     public ResponseEntity<List<LoanScheduleResponse>> getPendingInstallments(@PathVariable UUID loanAccountId) {
 
@@ -89,6 +91,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping("/overdue")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get overdue installments for a loan account")
     public ResponseEntity<List<LoanScheduleResponse>> getOverdueInstallments(@PathVariable UUID loanAccountId) {
 
@@ -100,6 +103,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get installments by status")
     public ResponseEntity<List<LoanScheduleResponse>> getSchedulesByStatus(@PathVariable UUID loanAccountId,
             @PathVariable ScheduleStatus status) {
@@ -111,6 +115,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping("/due-between")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Get installments due between dates")
     public ResponseEntity<Page<LoanScheduleResponse>> getInstallmentsDueBetween(@PathVariable UUID loanAccountId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
@@ -154,6 +159,7 @@ public class LoanScheduleController {
     }
 
     @PostMapping("/{id}/update-overdue")
+    @PreAuthorize("hasAnyAuthority('loan:write', 'loan:collect')")
     @Operation(summary = "Update overdue status for an installment")
     public ResponseEntity<LoanScheduleResponse> updateOverdueStatus(@PathVariable UUID loanAccountId,
             @PathVariable UUID id, @Valid @RequestBody LoanScheduleOverdueUpdateRequest request) {
@@ -164,6 +170,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping("/pending/count")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Count pending installments for a loan account")
     public ResponseEntity<Long> countPendingInstallments(@PathVariable UUID loanAccountId) {
         long count = scheduleService.countSchedulesByStatus(loanAccountId, ScheduleStatus.PENDING);
@@ -171,6 +178,7 @@ public class LoanScheduleController {
     }
 
     @GetMapping("/overdue/count")
+    @PreAuthorize("hasAuthority('loan:read')")
     @Operation(summary = "Count overdue installments for a loan account")
     public ResponseEntity<Long> countOverdueInstallments(@PathVariable UUID loanAccountId) {
         long count = scheduleService.countOverdueSchedules(loanAccountId);

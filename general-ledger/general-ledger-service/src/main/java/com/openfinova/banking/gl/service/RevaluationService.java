@@ -4,11 +4,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,6 +82,8 @@ public class RevaluationService {
      * @param executedBy  The user or system performing the revaluation
      * @return The revaluation run entity containing summary information
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     @Transactional
     public GLRevaluationRun performRevaluation(LocalDate asOfDate, String triggerType, String executedBy) {
         logger.info(
@@ -137,14 +141,11 @@ public class RevaluationService {
     /**
      * Convenience method for backward compatibility – performs revaluation with default trigger.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
     @Transactional
     public void performRevaluation(LocalDate asOfDate) {
         performRevaluation(asOfDate, "MANUAL", "system");
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
 
     /**
      * Performs revaluation for a single account and posts the resulting journal entry.
@@ -292,5 +293,29 @@ public class RevaluationService {
                 baseCurrency);
 
         return transaction;
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('gl:read')")
+    public List<GLRevaluationRun> listRevaluationRuns(LocalDate from, LocalDate to) {
+        if (from != null && to != null) {
+            return glRevaluationRunRepository.findByRevaluationDateBetween(from, to);
+        }
+        return glRevaluationRunRepository.findAllOrderByExecutedAtDesc();
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('gl:read')")
+    public Optional<GLRevaluationRun> getRevaluationRun(UUID id) {
+        return glRevaluationRunRepository.findById(id);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('gl:read')")
+    public List<GLRevaluationDetail> getRevaluationRunDetails(UUID runId) {
+        if (!glRevaluationRunRepository.existsById(runId)) {
+            throw new IllegalArgumentException("Revaluation run not found: " + runId);
+        }
+        return glRevaluationDetailRepository.findByRevaluationRunId(runId);
     }
 }
