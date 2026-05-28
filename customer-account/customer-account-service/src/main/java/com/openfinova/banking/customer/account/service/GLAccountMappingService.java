@@ -5,8 +5,10 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.GLAccountMapping;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.GLAccountMappingRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,11 +87,13 @@ public class GLAccountMappingService {
 
     private final GLAccountMappingRepository glAccountMappingRepository;
     private final AccountRepository accountRepository;
+    private final DateTimeService dateTimeService;
 
     public GLAccountMappingService(GLAccountMappingRepository glAccountMappingRepository,
-            AccountRepository accountRepository) {
+            AccountRepository accountRepository, DateTimeService dateTimeService) {
         this.glAccountMappingRepository = glAccountMappingRepository;
         this.accountRepository = accountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -126,7 +130,7 @@ public class GLAccountMappingService {
         }
 
         // Create the mapping entity using the constructor for required fields
-        GLAccountMapping mapping = new GLAccountMapping(account, glAccountId, mappingType, createdBy);
+        GLAccountMapping mapping = new GLAccountMapping(account, glAccountId, mappingType);
         mapping.setIsActive(true); // Explicitly set active status
 
         // Persist the mapping - createdAt is set automatically
@@ -160,7 +164,7 @@ public class GLAccountMappingService {
         }
 
         // Use the entity's deactivate method which handles all the details
-        mapping.deactivate(reason, deactivatedBy);
+        mapping.deactivate(reason, deactivatedBy, dateTimeService.now());
 
         // Persist the changes - this is idempotent
         glAccountMappingRepository.save(mapping);
@@ -196,6 +200,7 @@ public class GLAccountMappingService {
      * @throws IllegalArgumentException if required parameters are missing
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('account:read', 'service:account:read')")
     public UUID getGLAccountIdForType(UUID accountId, GLAccountMappingType mappingType) {
         logger.debug("Retrieving GL account ID for account: {} type: {}", accountId, mappingType);
 

@@ -131,6 +131,7 @@ public class SecurityAuditEvent {
 
     @PreUpdate
     @PreRemove
+    // JPA lifecycle callback; method body is the guard — parameters are not referenced.
     @SuppressWarnings("unused")
     private void rejectMutation() {
         throw new UnsupportedOperationException("Security audit events are append-only");

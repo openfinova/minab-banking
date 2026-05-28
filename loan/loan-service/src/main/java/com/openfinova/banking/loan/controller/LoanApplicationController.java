@@ -142,6 +142,7 @@ public class LoanApplicationController {
     }
 
     @PostMapping("/{id}/evaluate-credit-score")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Evaluate credit score for a loan application")
     public ResponseEntity<LoanApplicationResponse> evaluateCreditScore(@PathVariable UUID id) {
         applicationService.performCreditScoring(id);
@@ -150,6 +151,7 @@ public class LoanApplicationController {
     }
 
     @PostMapping("/{id}/assess-risk")
+    @PreAuthorize("hasAuthority('loan:write')")
     @Operation(summary = "Assess risk for a loan application")
     public ResponseEntity<LoanApplicationResponse> assessRisk(@PathVariable UUID id) {
         applicationService.performRiskAssessment(id);

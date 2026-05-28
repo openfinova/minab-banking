@@ -25,15 +25,15 @@ public class BatchTransactionResult {
     public BatchTransactionResult() {
     }
 
-    public BatchTransactionResult(String batchReference, int totalRequests) {
+    public BatchTransactionResult(String batchReference, int totalRequests, LocalDateTime processingStartTime) {
         this.batchReference = batchReference;
         this.totalRequests = totalRequests;
-        this.processingStartTime = LocalDateTime.now();
+        this.processingStartTime = processingStartTime;
     }
 
     // Helper methods
-    public void markProcessingComplete() {
-        this.processingEndTime = LocalDateTime.now();
+    public void markProcessingComplete(LocalDateTime processingEndTime) {
+        this.processingEndTime = processingEndTime;
         if (processingStartTime != null) {
             this.processingDurationMs = java.time.Duration.between(processingStartTime, processingEndTime).toMillis();
         }

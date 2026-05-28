@@ -13,6 +13,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -134,6 +135,7 @@ public class LoanProductService {
      */
     @Transactional
     @CacheEvict(value = "loanProducts", allEntries = true)
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanProduct createProduct(LoanProduct product) {
         logger.info("Creating loan product: {}", product.getProductCode());
 
@@ -205,6 +207,7 @@ public class LoanProductService {
      */
     @Transactional
     @CacheEvict(value = "loanProducts", allEntries = true)
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanProduct updateProduct(UUID id, LoanProduct product) {
         logger.info("Updating loan product: {}", id);
 
@@ -266,6 +269,7 @@ public class LoanProductService {
      * @return Optional containing the product if found, empty otherwise
      */
     @Cacheable(value = "loanProducts", key = "#id")
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanProduct> getProductById(UUID id) {
         return productRepository.findById(id);
     }
@@ -285,6 +289,7 @@ public class LoanProductService {
      * @return Optional containing the product if found, empty otherwise
      */
     @Cacheable(value = "loanProducts", key = "#productCode")
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanProduct> getProductByCode(String productCode) {
         return productRepository.findByProductCode(productCode);
     }
@@ -307,6 +312,7 @@ public class LoanProductService {
      * @return list of all active products
      */
     @Cacheable(value = "loanProducts", key = "'active'")
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanProduct> getAllActiveProducts() {
         return productRepository.findActiveProducts();
     }
@@ -320,6 +326,7 @@ public class LoanProductService {
      * @param pageable pagination parameters
      * @return page of active products
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanProduct> getAllActiveProducts(Pageable pageable) {
         return productRepository.findActiveProducts(pageable);
     }
@@ -337,6 +344,7 @@ public class LoanProductService {
      * @param pageable pagination parameters
      * @return page of all products regardless of status
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanProduct> getAllProducts(Pageable pageable) {
         return productRepository.findAll(pageable);
     }
@@ -362,6 +370,7 @@ public class LoanProductService {
      * @param pageable pagination parameters
      * @return page of products of the specified type
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanProduct> getProductsByType(LoanProductType productType, Pageable pageable) {
         return productRepository.findByProductType(productType, pageable);
     }
@@ -380,6 +389,7 @@ public class LoanProductService {
      * @param pageable pagination parameters
      * @return page of products in the specified currency
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanProduct> getProductsByCurrency(String currency, Pageable pageable) {
         return productRepository.findByCurrency(currency, pageable);
     }
@@ -469,6 +479,7 @@ public class LoanProductService {
      * @param currency the loan currency
      * @return list of products matching all criteria
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<LoanProduct> findMatchingProducts(BigDecimal amount, Integer tenorMonths, String currency) {
         return getAllActiveProducts().stream().filter(p -> p.getCurrency().equals(currency))
                 .filter(p -> amount.compareTo(p.getMinAmount()) >= 0 && amount.compareTo(p.getMaxAmount()) <= 0)
@@ -508,6 +519,7 @@ public class LoanProductService {
      */
     @Transactional
     @CacheEvict(value = "loanProducts", allEntries = true)
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanProduct activateProduct(UUID id) {
         logger.info("Activating loan product: {}", id);
 
@@ -562,6 +574,7 @@ public class LoanProductService {
      */
     @Transactional
     @CacheEvict(value = "loanProducts", allEntries = true)
+    @PreAuthorize("hasAuthority('loan:write')")
     public LoanProduct deactivateProduct(UUID id) {
         logger.info("Deactivating loan product: {}", id);
 
@@ -679,6 +692,7 @@ public class LoanProductService {
      * @return ProductValidationResult with comprehensive validation details
      * @throws IllegalArgumentException if product not found
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public ProductValidationResult validateLoanParameters(UUID productId, BigDecimal amount, Integer tenorMonths) {
         LoanProduct product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -742,6 +756,7 @@ public class LoanProductService {
      * @return the calculated processing fee amount
      * @throws IllegalArgumentException if product not found
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateProcessingFee(UUID productId, BigDecimal loanAmount) {
         LoanProduct product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -797,6 +812,7 @@ public class LoanProductService {
      * @return the calculated late payment fee amount
      * @throws IllegalArgumentException if product not found
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateLateFee(UUID productId, BigDecimal overdueAmount) {
         LoanProduct product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -850,6 +866,7 @@ public class LoanProductService {
      * @return the calculated prepayment penalty amount (zero if no penalty)
      * @throws IllegalArgumentException if product not found
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculatePrepaymentPenalty(UUID productId, BigDecimal prepaymentAmount) {
         LoanProduct product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
@@ -919,6 +936,7 @@ public class LoanProductService {
      *
      * @return the count of active products
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countActiveProducts() {
         return productRepository.countActiveProducts();
     }
@@ -935,6 +953,7 @@ public class LoanProductService {
      * @param productType the product type to count
      * @return the count of products of the specified type
      */
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countProductsByType(LoanProductType productType) {
         return productRepository.countByProductType(productType);
     }

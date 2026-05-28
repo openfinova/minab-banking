@@ -3,7 +3,11 @@ package com.openfinova.banking.tp.api.event;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+/**
+ * Published after a transaction is posted. Consumed by compliance AML monitoring and other modules.
+ */
 public class TransactionCompletedEvent {
+
     private final UUID transactionId;
     private final UUID sourceAccountId;
     private final BigDecimal amount;

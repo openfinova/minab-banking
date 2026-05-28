@@ -4,6 +4,7 @@ import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.entity.CustomerAddress;
 import com.openfinova.banking.customer.repository.CustomerAddressRepository;
 import com.openfinova.banking.customer.repository.CustomerRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ public class AddressService {
 
     private final CustomerAddressRepository addressRepository;
     private final CustomerRepository customerRepository;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new AddressService with the necessary repositories.
@@ -31,9 +33,11 @@ public class AddressService {
      * @param addressRepository the repository used for accessing and managing customer address data
      * @param customerRepository the repository used for accessing customer data
      */
-    public AddressService(CustomerAddressRepository addressRepository, CustomerRepository customerRepository) {
+    public AddressService(CustomerAddressRepository addressRepository, CustomerRepository customerRepository,
+            DateTimeService dateTimeService) {
         this.addressRepository = addressRepository;
         this.customerRepository = customerRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -177,7 +181,7 @@ public class AddressService {
         if (address.isDeleted()) {
             throw new IllegalArgumentException("Address not found: " + addressId);
         }
-        address.setDeletedAt(LocalDateTime.now());
+        address.setDeletedAt(dateTimeService.now());
         addressRepository.save(address);
     }
 

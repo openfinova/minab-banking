@@ -10,6 +10,7 @@ import org.springframework.security.jackson.SecurityJacksonModules;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.security.BankingUserDetails;
 import com.openfinova.banking.identity.security.BankingUserDetailsDeserializer;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import tools.jackson.databind.JacksonModule;
 import tools.jackson.databind.json.JsonMapper;
@@ -69,8 +70,10 @@ public class OAuth2AuthorizationJacksonConfiguration {
      * @return a fully configured mapper with Spring Security modules and the custom
      *         {@link BankingUserDetailsDeserializer}
      */
+    @SuppressWarnings("unused")
     @Bean(name = OAUTH2_AUTHORIZATION_JSON_MAPPER_BEAN)
-    JsonMapper oauth2AuthorizationJsonMapper(UserRepository userRepository, PasswordPolicyProperties passwordPolicy) {
+    JsonMapper oauth2AuthorizationJsonMapper(UserRepository userRepository, PasswordPolicyProperties passwordPolicy,
+            DateTimeService dateTimeService) {
         // JWT claim values stored in metadata.token.claims include JDK collections (e.g. permissions
         // is List.copyOf(...) → java.util.ImmutableCollections$ListN), java.time types, and common
         // wrappers. The validator must allow these alongside our identity types, otherwise reading
@@ -83,7 +86,7 @@ public class OAuth2AuthorizationJacksonConfiguration {
         SimpleModule bankingPrincipal = new SimpleModule("banking-oauth2-banking-user-details");
         bankingPrincipal.addDeserializer(
                 BankingUserDetails.class,
-                new BankingUserDetailsDeserializer(userRepository, passwordPolicy));
+                new BankingUserDetailsDeserializer(userRepository, passwordPolicy, dateTimeService));
         modules.add(bankingPrincipal);
         return JsonMapper.builder().addModules(modules).build();
     }

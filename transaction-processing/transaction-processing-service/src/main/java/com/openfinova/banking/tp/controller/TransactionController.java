@@ -2,8 +2,8 @@ package com.openfinova.banking.tp.controller;
 
 import com.openfinova.banking.tp.api.dto.RefundRequest;
 import com.openfinova.banking.tp.api.dto.TransactionResponse;
+import com.openfinova.banking.tp.dto.TransactionEventResponse;
 import com.openfinova.banking.tp.entity.Transaction;
-import com.openfinova.banking.tp.entity.TransactionEvent;
 import com.openfinova.banking.tp.entity.TransactionRequest;
 import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import com.openfinova.banking.tp.api.entity.TransactionType;
@@ -78,9 +78,8 @@ public class TransactionController {
         request.setCreatedBy(CallerContextResolver.resolveUsername(authentication));
 
         log.info(
-                "Initiating transaction: type={}, amount={}, idempotencyKey={}",
+                "Initiating transaction: type={}, idempotencyKey={}",
                 request.getTransactionType(),
-                request.getAmount(),
                 request.getIdempotencyKey());
 
         Transaction transaction = transactionService.initiateTransaction(request);
@@ -171,16 +170,16 @@ public class TransactionController {
     @Operation(summary = "Get transaction history", description = "Retrieves the complete event history for a transaction, useful for auditing and customer support")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "History retrieved successfully"),
             @ApiResponse(responseCode = "404", description = "Transaction not found") })
-    public ResponseEntity<List<TransactionEvent>> getTransactionHistory(
+    public ResponseEntity<List<TransactionEventResponse>> getTransactionHistory(
             @Parameter(description = "Transaction ID", required = true) @PathVariable UUID id) {
 
         log.info("Fetching history for transaction: {}", id);
 
-        List<TransactionEvent> history = transactionService.getTransactionHistory(id);
+        var history = transactionService.getTransactionHistory(id);
 
         log.info("Found {} events for transaction: {}", history.size(), id);
 
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok(transactionMapper.toEventResponseList(history));
     }
 
     @PostMapping("/{id}/refund/full")
@@ -218,7 +217,7 @@ public class TransactionController {
             @Parameter(description = "Original transaction ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody RefundRequest request) {
 
-        log.info("Initiating partial refund of {} for transaction: {}", request.getRefundAmount(), id);
+        log.info("Initiating partial refund for transaction: {}", id);
 
         if (request.getRefundAmount() == null) {
             return ResponseEntity.badRequest().build();

@@ -29,6 +29,7 @@ import com.openfinova.banking.customer.account.entity.AccountRelationship;
 import com.openfinova.banking.customer.account.mapper.AccountRelationshipMapper;
 import com.openfinova.banking.customer.account.service.AccountRelationshipService;
 import com.openfinova.banking.identity.api.principal.CallerContextResolver;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,11 +51,13 @@ public class AccountRelationshipController {
 
     private final AccountRelationshipService relationshipService;
     private final AccountRelationshipMapper relationshipMapper;
+    private final DateTimeService dateTimeService;
 
     public AccountRelationshipController(AccountRelationshipService relationshipService,
-            AccountRelationshipMapper relationshipMapper) {
+            AccountRelationshipMapper relationshipMapper, DateTimeService dateTimeService) {
         this.relationshipService = relationshipService;
         this.relationshipMapper = relationshipMapper;
+        this.dateTimeService = dateTimeService;
     }
 
     @PostMapping("/{id}/relationships")
@@ -79,7 +82,8 @@ public class AccountRelationshipController {
 
         log.info("Successfully created relationship with ID: {}", relationship.getId());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(relationshipMapper.toResponse(relationship));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(relationshipMapper.toResponse(relationship, dateTimeService.now()));
     }
 
     @GetMapping("/{id}/relationships")
@@ -92,8 +96,8 @@ public class AccountRelationshipController {
         log.info("Fetching relationships for account: {}", id);
 
         List<AccountRelationship> relationships = relationshipService.getRelationshipsByAccount(id);
-        List<AccountRelationshipResponse> response = relationships.stream().map(relationshipMapper::toResponse)
-                .toList();
+        List<AccountRelationshipResponse> response = relationships.stream()
+                .map(relationship -> relationshipMapper.toResponse(relationship, dateTimeService.now())).toList();
 
         log.info("Found {} relationships for account: {}", response.size(), id);
 
@@ -156,7 +160,8 @@ public class AccountRelationshipController {
 
         log.info("Successfully added beneficiary with ID: {}", relationship.getId());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(relationshipMapper.toResponse(relationship));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(relationshipMapper.toResponse(relationship, dateTimeService.now()));
     }
 
     @DeleteMapping("/{id}/beneficiaries/{userProfileId}")
@@ -187,8 +192,8 @@ public class AccountRelationshipController {
         log.info("Fetching all accounts for user: {}", userProfileId);
 
         List<AccountRelationship> relationships = relationshipService.getRelationshipsByUserProfile(userProfileId);
-        List<AccountRelationshipResponse> response = relationships.stream().map(relationshipMapper::toResponse)
-                .toList();
+        List<AccountRelationshipResponse> response = relationships.stream()
+                .map(relationship -> relationshipMapper.toResponse(relationship, dateTimeService.now())).toList();
 
         log.info("Found {} account relationships for user: {}", response.size(), userProfileId);
 

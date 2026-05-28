@@ -10,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.tp.api.dto.CreateFeeRuleRequest;
 import com.openfinova.banking.tp.api.dto.CreateFeeWaiverRequest;
 import com.openfinova.banking.tp.api.dto.FeeRuleResponse;
@@ -162,13 +160,11 @@ public class FeeManagementController {
     @Operation(summary = "Create fee waiver", description = "Creates a new fee waiver for a customer")
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Fee waiver created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid waiver data") })
-    public ResponseEntity<FeeWaiverResponse> createFeeWaiver(@Valid @RequestBody CreateFeeWaiverRequest request,
-            Authentication authentication) {
+    public ResponseEntity<FeeWaiverResponse> createFeeWaiver(@Valid @RequestBody CreateFeeWaiverRequest request) {
 
         log.info("Creating fee waiver for customer: {}", request.getCustomerId());
 
-        String actor = BankingPrincipal.from(authentication).username();
-        FeeWaiver created = feeManagementService.createFeeWaiver(feeWaiverMapper.toEntity(request, actor));
+        FeeWaiver created = feeManagementService.createFeeWaiver(feeWaiverMapper.toEntity(request));
 
         log.info("Successfully created fee waiver with ID: {}", created.getId());
 

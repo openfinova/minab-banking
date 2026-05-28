@@ -6,7 +6,6 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import com.openfinova.banking.tp.api.entity.CompensationStepStatus;
 import com.openfinova.banking.tp.api.entity.CompensationStepType;
 
@@ -56,9 +55,9 @@ public class CompensationStep {
     /**
      * Marks the step as started
      */
-    public void markStarted() {
+    public void markStarted(LocalDateTime now) {
         this.status = CompensationStepStatus.IN_PROGRESS;
-        this.startedAt = LocalDateTime.now();
+        this.startedAt = now;
     }
 
     /**
@@ -66,9 +65,9 @@ public class CompensationStep {
      *
      * @param result the result of the step execution
      */
-    public void markCompleted(Map<String, Object> result) {
+    public void markCompleted(Map<String, Object> result, LocalDateTime now) {
         this.status = CompensationStepStatus.COMPLETED;
-        this.completedAt = LocalDateTime.now();
+        this.completedAt = now;
         this.result = result;
         this.errorMessage = null;
     }
@@ -78,9 +77,9 @@ public class CompensationStep {
      *
      * @param errorMessage the error message
      */
-    public void markFailed(String errorMessage) {
+    public void markFailed(String errorMessage, LocalDateTime now) {
         this.status = CompensationStepStatus.FAILED;
-        this.completedAt = LocalDateTime.now();
+        this.completedAt = now;
         this.errorMessage = errorMessage;
         this.retryCount++;
     }
@@ -90,9 +89,9 @@ public class CompensationStep {
      *
      * @param reason the reason for skipping
      */
-    public void markSkipped(String reason) {
+    public void markSkipped(String reason, LocalDateTime now) {
         this.status = CompensationStepStatus.SKIPPED;
-        this.completedAt = LocalDateTime.now();
+        this.completedAt = now;
         this.errorMessage = reason;
     }
 

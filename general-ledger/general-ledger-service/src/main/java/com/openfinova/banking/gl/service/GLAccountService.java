@@ -19,6 +19,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -102,6 +103,8 @@ public class GLAccountService {
      * @throws IllegalStateException if the parent account is invalid for hierarchy rules
      */
     @CacheEvict(value = "glAccounts", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public GLAccount createAccount(CreateGLAccountRequest glAccountRequest) {
         logger.info("Creating GL account with request: {}", glAccountRequest);
 
@@ -115,8 +118,7 @@ public class GLAccountService {
                 glAccountRequest.getCode(),
                 glAccountRequest.getName(),
                 glAccountRequest.getType(),
-                glAccountRequest.getCurrency(),
-                glAccountRequest.getCreatedBy());
+                glAccountRequest.getCurrency());
 
         // Set optional fields
         if (glAccountRequest.isContra()) {
@@ -181,6 +183,8 @@ public class GLAccountService {
      * @return an Optional containing the account if found, empty otherwise
      */
     @Cacheable(value = "glAccounts", key = "#id")
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public Optional<GLAccount> getAccountById(UUID id) {
         logger.debug("Getting GL account by ID: {}", id);
         return glAccountRepository.findById(id);
@@ -193,6 +197,8 @@ public class GLAccountService {
      * @return an Optional containing the account if found, empty otherwise
      */
     @Cacheable(value = "glAccounts", key = "#code", unless = "#code == null || #code.isBlank()")
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public Optional<GLAccount> findByCode(String code) {
         logger.debug("Finding GL account by code: {}", code);
         return glAccountRepository.findByCode(code);
@@ -220,6 +226,8 @@ public class GLAccountService {
      * @throws IllegalStateException if the account has active children
      */
     @CacheEvict(value = "glAccounts", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public GLAccount deactivateAccount(UUID id, String reason) {
         logger.info("Deactivating account: {} with reason: {}", id, reason);
 
@@ -256,8 +264,7 @@ public class GLAccountService {
         // Capture old status for audit
         GLAccountStatus oldStatus = account.getStatus();
 
-        account.markInactive(reason);
-        account.setUpdatedBy("system"); // TODO: replace with authenticated username
+        account.markInactive(reason, dateTimeService.today());
         GLAccount deactivatedAccount = glAccountRepository.save(account);
 
         logger.info("Successfully deactivated account ID: {} with reason: {}", id, reason);
@@ -293,6 +300,8 @@ public class GLAccountService {
      * @throws IllegalArgumentException if the account is not found
      */
     @CacheEvict(value = "glAccounts", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public GLAccount updateAccount(GLAccount account) {
         logger.info("Updating GL account with ID: {}", account.getId());
 
@@ -378,6 +387,8 @@ public class GLAccountService {
      *
      * @return a list of postable accounts ordered by account code
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public List<GLAccount> getPostableAccounts() {
         logger.debug("Getting all postable accounts");
         return glAccountRepository.findAllPostableAccounts();
@@ -389,6 +400,8 @@ public class GLAccountService {
      * @param accountId the UUID of the account to validate
      * @throws IllegalStateException if the account is not available for posting
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public void validateAccountForPosting(UUID accountId) {
         logger.debug("Validating account for posting: {}", accountId);
         if (!isAccountActiveForPosting(accountId)) {
@@ -402,6 +415,8 @@ public class GLAccountService {
      * @param accountId the UUID of the account to check
      * @return true if the account is active and postable, false otherwise
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public boolean isAccountActiveForPosting(UUID accountId) {
         logger.debug("Checking if account is active for posting: {}", accountId);
         Optional<GLAccount> account = getAccountById(accountId);
@@ -558,7 +573,6 @@ public class GLAccountService {
             account.setParent(newParentOpt.get());
         }
 
-        account.setUpdatedBy(movedBy);
         GLAccount updatedAccount = glAccountRepository.save(account);
         logger.info("Successfully moved account: {} to new parent: {}", accountId, newParentId);
 
@@ -777,6 +791,8 @@ public class GLAccountService {
      * @param pageable   pagination and sort
      * @return page of matching accounts
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     @Transactional(readOnly = true)
     public Page<GLAccount> filterAccounts(GLAccountType type, GLAccountStatus status, String currency,
             String searchTerm, Pageable pageable) {
@@ -822,6 +838,8 @@ public class GLAccountService {
      * @param status optional status filter
      * @return a list of accounts matching the criteria
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public List<GLAccount> getAccountsByType(GLAccountType accountType, GLAccountStatus status) {
         logger.debug("Getting accounts by type: {} with status filter: {}", accountType, status);
         if (status != null) {
@@ -831,12 +849,23 @@ public class GLAccountService {
         }
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+    public List<GLAccount> getAccountsByType(String accountType, String status) {
+        try {
+            return getAccountsByType(GLAccountType.valueOf(accountType), GLAccountStatus.valueOf(status));
+        } catch (IllegalArgumentException e) {
+            return java.util.Collections.emptyList();
+        }
+    }
+
     /**
      * Searches accounts by name or code using case-insensitive matching.
      *
      * @param searchTerm the search term to match against account name or code
      * @return a list of matching accounts
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public List<GLAccount> searchAccounts(String searchTerm) {
         logger.debug("Searching accounts with term: {}", searchTerm);
 
@@ -854,6 +883,8 @@ public class GLAccountService {
      * @param currency the currency code to filter by
      * @return a list of accounts in the specified currency
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public List<GLAccount> getAccountsByCurrency(String currency) {
         logger.debug("Getting accounts by currency: {}", currency);
         return glAccountRepository.findByCurrencyOrderByCode(currency, Pageable.unpaged()).getContent();
@@ -867,6 +898,8 @@ public class GLAccountService {
      * @param createdBy the user creating the chart
      * @return the number of accounts created
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public int createStandardChartOfAccounts(String currency, String createdBy) {
         logger.info("Creating standard chart of accounts for currency: {} by {}", currency, createdBy);
 
@@ -954,8 +987,7 @@ public class GLAccountService {
                             accountData.getCode(),
                             accountData.getName(),
                             accountData.getType(),
-                            accountData.getCurrency(),
-                            importedBy);
+                            accountData.getCurrency());
                 }
 
                 // Set account properties

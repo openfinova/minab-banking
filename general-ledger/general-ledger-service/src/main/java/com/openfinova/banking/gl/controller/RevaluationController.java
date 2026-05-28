@@ -17,10 +17,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.openfinova.banking.gl.entity.GLRevaluationDetail;
-import com.openfinova.banking.gl.entity.GLRevaluationRun;
-import com.openfinova.banking.gl.repository.GLRevaluationDetailRepository;
-import com.openfinova.banking.gl.repository.GLRevaluationRunRepository;
+import com.openfinova.banking.gl.dto.RevaluationDetailResponse;
+import com.openfinova.banking.gl.dto.RevaluationRunResponse;
+import com.openfinova.banking.gl.mapper.RevaluationMapper;
 import com.openfinova.banking.gl.service.RevaluationService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -45,15 +44,11 @@ public class RevaluationController {
     private static final Logger log = LoggerFactory.getLogger(RevaluationController.class);
 
     private final RevaluationService revaluationService;
-    private final GLRevaluationRunRepository revaluationRunRepository;
-    private final GLRevaluationDetailRepository revaluationDetailRepository;
+    private final RevaluationMapper revaluationMapper;
 
-    public RevaluationController(RevaluationService revaluationService,
-            GLRevaluationRunRepository revaluationRunRepository,
-            GLRevaluationDetailRepository revaluationDetailRepository) {
+    public RevaluationController(RevaluationService revaluationService, RevaluationMapper revaluationMapper) {
         this.revaluationService = revaluationService;
-        this.revaluationRunRepository = revaluationRunRepository;
-        this.revaluationDetailRepository = revaluationDetailRepository;
+        this.revaluationMapper = revaluationMapper;
     }
 
     @PostMapping
@@ -69,7 +64,7 @@ public class RevaluationController {
 
         log.info("Manual revaluation requested: asOfDate={} executedBy={}", asOfDate, executedBy);
 
-        GLRevaluationRun run = revaluationService.performRevaluation(asOfDate, "MANUAL", executedBy);
+        var run = revaluationService.performRevaluation(asOfDate, "MANUAL", executedBy);
 
         log.info(
                 "Revaluation completed: runId={} processed={} revalued={} adjustment={}",
@@ -105,19 +100,11 @@ public class RevaluationController {
     @Operation(summary = "List revaluation runs", description = "Returns all revaluation runs, optionally filtered to a date range. "
             + "Results are ordered most-recent first.")
     @ApiResponses({ @ApiResponse(responseCode = "200", description = "Run list returned") })
-    public ResponseEntity<List<GLRevaluationRun>> listRuns(
+    public ResponseEntity<List<RevaluationRunResponse>> listRuns(
             @Parameter(description = "Filter: runs on or after this date (ISO 8601)", example = "2026-01-01") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @Parameter(description = "Filter: runs on or before this date (ISO 8601)", example = "2026-12-31") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 
-        List<GLRevaluationRun> runs;
-
-        if (from != null && to != null) {
-            runs = revaluationRunRepository.findByRevaluationDateBetween(from, to);
-        } else {
-            runs = revaluationRunRepository.findAllOrderByExecutedAtDesc();
-        }
-
-        return ResponseEntity.ok(runs);
+        return ResponseEntity.ok(revaluationMapper.toRunResponseList(revaluationService.listRevaluationRuns(from, to)));
     }
 
     @GetMapping("/runs/{id}")
@@ -125,10 +112,10 @@ public class RevaluationController {
     @Operation(summary = "Get a revaluation run by ID", description = "Returns the summary (processed/revalued/failed counts, total adjustment) for a single run.")
     @ApiResponses({ @ApiResponse(responseCode = "200", description = "Run found"),
             @ApiResponse(responseCode = "404", description = "Run not found") })
-    public ResponseEntity<GLRevaluationRun> getRun(
+    public ResponseEntity<RevaluationRunResponse> getRun(
             @Parameter(description = "Revaluation run UUID", required = true) @PathVariable UUID id) {
 
-        return revaluationRunRepository.findById(id).map(ResponseEntity::ok)
+        return revaluationService.getRevaluationRun(id).map(revaluationMapper::toRunResponse).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -138,13 +125,14 @@ public class RevaluationController {
             + "for every account processed in the specified run.")
     @ApiResponses({ @ApiResponse(responseCode = "200", description = "Details returned"),
             @ApiResponse(responseCode = "404", description = "Run not found") })
-    public ResponseEntity<List<GLRevaluationDetail>> getRunDetails(
+    public ResponseEntity<List<RevaluationDetailResponse>> getRunDetails(
             @Parameter(description = "Revaluation run UUID", required = true) @PathVariable UUID id) {
 
-        if (!revaluationRunRepository.existsById(id)) {
+        try {
+            return ResponseEntity
+                    .ok(revaluationMapper.toDetailResponseList(revaluationService.getRevaluationRunDetails(id)));
+        } catch (IllegalArgumentException ex) {
             return ResponseEntity.notFound().build();
         }
-
-        return ResponseEntity.ok(revaluationDetailRepository.findByRevaluationRunId(id));
     }
 }

@@ -9,6 +9,7 @@ import com.openfinova.banking.gl.api.entity.EscalationLevel;
 import com.openfinova.banking.gl.testsupport.GlEntityFixtures;
 
 class SuspenseEscalationTest {
+    private static final LocalDate TODAY = LocalDate.of(2026, 1, 1);
 
     @Test
     void resolve_recordsResolution() {
@@ -19,9 +20,9 @@ class SuspenseEscalationTest {
         esc.setEscalationLevel(EscalationLevel.LEVEL_1_SUPERVISOR);
         esc.setEscalatedDate(LocalDate.of(2026, 1, 1));
         esc.setAssignedTo("supervisor");
-        esc.setDueDate(LocalDate.now().plusDays(7));
+        esc.setDueDate(TODAY.plusDays(7));
 
-        esc.resolve("resolver", "fixed");
+        esc.resolve("resolver", "fixed", TODAY);
         assertThat(esc.getIsResolved()).isTrue();
         assertThat(esc.getResolvedBy()).isEqualTo("resolver");
         assertThat(esc.getResolutionNotes()).isEqualTo("fixed");
@@ -31,15 +32,15 @@ class SuspenseEscalationTest {
     @Test
     void slaBreach_whenPastDueAndUnresolved() {
         SuspenseEscalation esc = new SuspenseEscalation();
-        esc.setDueDate(LocalDate.now().minusDays(1));
+        esc.setDueDate(TODAY.minusDays(1));
         esc.setIsResolved(false);
 
-        assertThat(esc.checkSLABreach()).isTrue();
+        assertThat(esc.checkSLABreach(TODAY)).isTrue();
         assertThat(esc.getSlaBreached()).isTrue();
-        assertThat(esc.isOverdue()).isTrue();
+        assertThat(esc.isOverdue(TODAY)).isTrue();
 
         esc.setIsResolved(true);
-        assertThat(esc.checkSLABreach()).isFalse();
+        assertThat(esc.checkSLABreach(TODAY)).isFalse();
     }
 
     @Test

@@ -1,40 +1,32 @@
 package com.openfinova.banking.setup;
 
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import com.openfinova.banking.setup.api.BankService;
 import com.openfinova.banking.setup.api.dto.BankProperties;
-import com.openfinova.banking.setup.config.BankConfigProperties;
+import com.openfinova.banking.setup.service.BankConfigService;
 
 @Service
 public class BankServiceImpl implements BankService {
 
-    private final BankConfigProperties config;
+    private final BankConfigService bankConfigService;
 
-    public BankServiceImpl(BankConfigProperties config) {
-        this.config = config;
+    public BankServiceImpl(BankConfigService bankConfigService) {
+        this.bankConfigService = bankConfigService;
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:setup:read')")
     public BankProperties getBankDetails() {
-        return new BankProperties(
-                config.getName(),
-                config.getCurrency(),
-                config.getSwiftCode(),
-                config.getCountryCode());
+        return bankConfigService.getBankDetails();
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:setup:read')")
     public String getBankName() {
-        return config.getName();
+        return bankConfigService.getBankName();
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:setup:read')")
     public String getCurrency() {
-        return config.getCurrency();
+        return bankConfigService.getCurrency();
     }
 }

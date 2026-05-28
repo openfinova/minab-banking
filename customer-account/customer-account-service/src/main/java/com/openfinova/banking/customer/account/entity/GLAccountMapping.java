@@ -2,7 +2,9 @@ package com.openfinova.banking.customer.account.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
-import org.hibernate.annotations.CreationTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -25,6 +27,7 @@ import java.util.UUID;
  * so from the GLAccountMapping entity's perspective, it's a Many-to-One relationship.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "gl_account_mappings", indexes = {
         @Index(name = "idx_gl_mappings_customer_account", columnList = "customer_account_id"),
         @Index(name = "idx_gl_mappings_gl_account", columnList = "gl_account_id"),
@@ -94,10 +97,11 @@ public class GLAccountMapping {
     @Column(name = "description", length = 255)
     private String description;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @CreatedBy
     @Column(name = "created_by", nullable = false, length = 100)
     private String createdBy;
 
@@ -114,11 +118,10 @@ public class GLAccountMapping {
     }
 
     public GLAccountMapping(Account customerAccount, UUID glAccountId,
-            com.openfinova.banking.customer.account.api.entity.GLAccountMappingType mappingType, String createdBy) {
+            com.openfinova.banking.customer.account.api.entity.GLAccountMappingType mappingType) {
         this.customerAccount = customerAccount;
         this.glAccountId = glAccountId;
         this.mappingType = mappingType;
-        this.createdBy = createdBy;
     }
 
     /**
@@ -136,9 +139,9 @@ public class GLAccountMapping {
      * @param reason        the reason for deactivation
      * @param deactivatedBy the user performing the deactivation
      */
-    public void deactivate(String reason, String deactivatedBy) {
+    public void deactivate(String reason, String deactivatedBy, LocalDateTime deactivatedAt) {
         this.isActive = false;
-        this.deactivatedAt = LocalDateTime.now();
+        this.deactivatedAt = deactivatedAt;
         this.deactivationReason = reason;
         this.deactivatedBy = deactivatedBy;
     }

@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import com.openfinova.banking.gl.api.GeneralLedgerService;
@@ -79,7 +78,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (account validation), TP module (transaction posting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLAccountDTO> getAccountById(UUID id) {
         return glAccountService.getAccountById(id).map(GLEntityMapper::toDTO);
     }
@@ -89,7 +87,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (account mapping), TP module (clearing accounts)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLAccountDTO> findByCode(String code) {
         return glAccountService.findByCode(code).map(GLEntityMapper::toDTO);
     }
@@ -99,7 +96,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (validation), TP module (transaction posting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean isAccountActiveForPosting(UUID accountId) {
         return glAccountService.isAccountActiveForPosting(accountId);
     }
@@ -109,7 +105,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (validation), TP module (transaction posting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public void validateAccountForPosting(UUID accountId) {
         glAccountService.validateAccountForPosting(accountId);
     }
@@ -119,7 +114,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (account setup), TP module (account mapping)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLAccountDTO> getPostableAccounts() {
         return GLEntityMapper.toAccountDTOList(glAccountService.getPostableAccounts());
     }
@@ -130,30 +124,18 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: TP module (fee and contra account resolution)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public UUID getOperationalGLAccount(OperationalGLAccountType type) {
         return operationalGLAccountService.getOperationalGLAccount(type);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public UUID getOperationalGLAccount(String operationalGLAccountType) {
-        try {
-            OperationalGLAccountType type = OperationalGLAccountType.valueOf(operationalGLAccountType);
-            return getOperationalGLAccount(type);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid operational GL account type: " + operationalGLAccountType);
-        }
+        return operationalGLAccountService.getOperationalGLAccount(operationalGLAccountType);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLAccountDTO> getAccountsByType(String accountType, String status) {
-        try {
-            return getAccountsByType(GLAccountType.valueOf(accountType), GLAccountStatus.valueOf(status));
-        } catch (IllegalArgumentException e) {
-            return java.util.Collections.emptyList();
-        }
+        return GLEntityMapper.toAccountDTOList(glAccountService.getAccountsByType(accountType, status));
     }
 
     /**
@@ -161,7 +143,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (account categorization), TP module (clearing accounts)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLAccountDTO> getAccountsByType(GLAccountType accountType, GLAccountStatus status) {
         return GLEntityMapper.toAccountDTOList(glAccountService.getAccountsByType(accountType, status));
     }
@@ -171,7 +152,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (multi-currency), TP module (currency-specific accounts)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLAccountDTO> getAccountsByCurrency(String currency) {
         return GLEntityMapper.toAccountDTOList(glAccountService.getAccountsByCurrency(currency));
     }
@@ -181,7 +161,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (account lookup), TP module (account discovery)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLAccountDTO> searchAccounts(String searchTerm) {
         return GLEntityMapper.toAccountDTOList(glAccountService.searchAccounts(searchTerm));
     }
@@ -193,7 +172,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * posts it through the service layer, and returns the result as a DTO.
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:write')")
     public GLTransactionDTO postTransaction(PostTransactionCommand command) {
         // Convert command to entity
         GLTransaction transaction = GLEntityMapper.toEntity(command, glAccountService);
@@ -210,7 +188,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: TP module (transaction lookup), Account module (transaction inquiry)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLTransactionDTO> getTransactionById(UUID id) {
         return glTransactionService.getTransactionById(id).map(GLEntityMapper::toDTO);
     }
@@ -220,7 +197,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: TP module (idempotency checks), Account module (transaction matching)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLTransactionDTO> getTransactionByReference(String referenceId) {
         return glTransactionService.getTransactionByReference(referenceId).map(GLEntityMapper::toDTO);
     }
@@ -231,7 +207,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Note: Validation is done by ID to avoid entity exposure.
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public void validateTransaction(UUID transactionId) {
         glTransactionService.getTransactionById(transactionId).ifPresent(glTransactionService::validateTransaction);
     }
@@ -241,7 +216,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: TP module (transaction reversals), Account module (error corrections)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:write')")
     public GLTransactionDTO reverseTransaction(UUID transactionId, String reason, String reversedBy) {
         return GLEntityMapper.toDTO(glTransactionService.reverseTransaction(transactionId, reason, reversedBy));
     }
@@ -251,7 +225,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: TP module (posting validation), Account module (transaction validation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean validateTransactionBalance(UUID transactionId) {
         return glTransactionService.validateTransactionBalance(transactionId);
     }
@@ -261,7 +234,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance inquiry), TP module (balance validation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal getCurrentBalance(UUID accountId) {
         return balanceService.getCurrentBalance(accountId);
     }
@@ -271,7 +243,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance history), TP module (reconciliation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal getBalanceAtDate(UUID accountId, LocalDate date) {
         return balanceService.getBalanceAtDate(accountId, date);
     }
@@ -281,7 +252,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (detailed balance), TP module (balance inquiry)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLAccountBalance> getAccountBalance(UUID accountId) {
         return balanceService.getAccountBalance(accountId);
     }
@@ -291,7 +261,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance lookup), TP module (account balance)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLAccountBalance> getAccountBalanceByCode(String accountCode) {
         return balanceService.getAccountBalanceByCode(accountCode);
     }
@@ -301,7 +270,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (batch balance inquiry), TP module (multi-account validation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Map<UUID, GLAccountBalance> getAccountBalances(List<UUID> accountIds) {
         return balanceService.getAccountBalances(accountIds);
     }
@@ -311,7 +279,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance validation), TP module (reconciliation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean validateBalanceConsistency(UUID accountId, LocalDate asOfDate) {
         return balanceService.validateBalanceConsistency(accountId, asOfDate);
     }
@@ -321,7 +288,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (system validation), TP module (end-of-day reconciliation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean validateAllBalancesConsistency(LocalDate asOfDate) {
         return balanceService.validateAllBalancesConsistency(asOfDate);
     }
@@ -331,7 +297,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance correction), TP module (error recovery)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:write')")
     public void recalculateBalance(UUID accountId) {
         balanceService.recalculateBalance(accountId);
     }
@@ -341,7 +306,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance analysis), TP module (activity reporting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public GLAccountBalance getBalanceChange(UUID accountId, LocalDate startDate, LocalDate endDate) {
         return balanceService.getBalanceChange(accountId, startDate, endDate);
     }
@@ -351,7 +315,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (activity inquiry), TP module (transaction analysis)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public GLAccountBalance getAccountActivity(UUID accountId, LocalDate activityDate) {
         return balanceService.getAccountActivity(accountId, activityDate);
     }
@@ -361,7 +324,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance trends), TP module (historical analysis)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<DailyBalanceSnapshot> getBalanceHistory(UUID accountId, LocalDate startDate, LocalDate endDate) {
         return balanceService.getBalanceHistory(accountId, startDate, endDate);
     }
@@ -371,7 +333,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (multi-currency balances), TP module (currency conversion)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal convertToBaseCurrency(BigDecimal amount, String currency, LocalDate valueDate) {
         return balanceService.convertToBaseCurrency(amount, currency, valueDate);
     }
@@ -381,7 +342,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (currency operations), TP module (base currency conversion)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public String getBaseCurrency() {
         return balanceService.getBaseCurrency();
     }
@@ -391,7 +351,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (activity analysis), TP module (transaction reporting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal getTotalDebitsForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         return balanceService.getTotalDebitsForAccount(accountId, startDate, endDate);
     }
@@ -401,7 +360,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (activity analysis), TP module (transaction reporting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal getTotalCreditsForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         return balanceService.getTotalCreditsForAccount(accountId, startDate, endDate);
     }
@@ -411,7 +369,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (net activity), TP module (balance calculation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal getNetBalanceForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         return balanceService.getNetBalanceForAccount(accountId, startDate, endDate);
     }
@@ -421,7 +378,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (activity counting), TP module (transaction volume)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public long countEntriesForAccount(UUID accountId, LocalDate startDate, LocalDate endDate) {
         return balanceService.countEntriesForAccount(accountId, startDate, endDate);
     }
@@ -432,7 +388,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Note: Validation is done by ID to avoid entity exposure.
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean validateEntry(UUID entryId) {
         return glJournalEntryService.getEntryById(entryId).map(glJournalEntryService::validateEntry).orElse(false);
     }
@@ -442,7 +397,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (transaction details), TP module (entry inquiry)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLJournalEntryDTO> getEntriesByTransaction(UUID transactionId) {
         return GLEntityMapper.toEntryDTOList(glJournalEntryService.getEntriesByTransaction(transactionId));
     }
@@ -452,7 +406,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (account activity), TP module (account inquiry)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLJournalEntryDTO> getEntriesByAccount(UUID accountId) {
         return GLEntityMapper.toEntryDTOList(glJournalEntryService.getEntriesByAccount(accountId));
     }
@@ -462,7 +415,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (activity history), TP module (transaction history)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLJournalEntryDTO> getEntriesByAccountAndDateRange(UUID accountId, LocalDate startDate,
             LocalDate endDate) {
         return GLEntityMapper
@@ -474,7 +426,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (daily activity), TP module (date-specific inquiry)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLJournalEntryDTO> getEntriesByAccountAndDate(UUID accountId, LocalDate date) {
         return GLEntityMapper.toEntryDTOList(glJournalEntryService.getEntriesByAccountAndDate(accountId, date));
     }
@@ -484,7 +435,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (entry details), TP module (entry lookup)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLJournalEntryDTO> getEntryById(UUID entryId) {
         return glJournalEntryService.getEntryById(entryId).map(GLEntityMapper::toDTO);
     }
@@ -494,7 +444,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (period validation), TP module (posting validation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<FiscalPeriodDTO> findActivePeriod(LocalDate date) {
         return fiscalPeriodService.findActivePeriod(date).map(GLEntityMapper::toDTO);
     }
@@ -504,7 +453,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (period inquiry), TP module (date validation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<FiscalPeriodDTO> getFiscalPeriodForDate(LocalDate date) {
         return fiscalPeriodService.getFiscalPeriodForDate(date).map(GLEntityMapper::toDTO);
     }
@@ -514,7 +462,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (posting validation), TP module (transaction validation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean isPostingAllowedForDate(LocalDate postingDate) {
         return fiscalPeriodService.isPostingAllowedForDate(postingDate);
     }
@@ -524,7 +471,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (period management), TP module (period inquiry)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<FiscalPeriodDTO> getFiscalPeriodsByStatus(FiscalPeriodStatus status) {
         return GLEntityMapper.toPeriodDTOList(fiscalPeriodService.getFiscalPeriodsByStatus(status));
     }
@@ -534,7 +480,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (balance validation), TP module (transaction reconciliation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public AccountReconciliationResult performBalanceReconciliationForAccount(UUID accountId, LocalDate date) {
         return glSnapshotService.performBalanceReconciliationForAccount(accountId, date);
     }
@@ -544,7 +489,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (period reconciliation), TP module (batch reconciliation)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BalanceReconciliationReport performBalanceReconciliationForPeriod(LocalDate startDate, LocalDate endDate) {
         return glSnapshotService.performBalanceReconciliationForPeriod(startDate, endDate);
     }
@@ -554,7 +498,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (data validation), TP module (integrity checks)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public ValidationResult validateSnapshotIntegrity(LocalDate date) {
         return glSnapshotService.validateSnapshotIntegrity(date);
     }
@@ -564,7 +507,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (compliance reporting), TP module (audit reporting)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public SnapshotsComplianceReport generateComplianceReport(LocalDate startDate, LocalDate endDate) {
         return glSnapshotService.generateComplianceReport(startDate, endDate);
     }
@@ -574,7 +516,6 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (precise balance), TP module (real-time balance)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public BigDecimal calculateBalanceAsOf(UUID accountId, LocalDateTime asOfDate) {
         return balanceService.calculateBalanceAsOf(accountId, asOfDate);
     }
@@ -584,53 +525,42 @@ public class GeneralLedgerServiceImpl implements GeneralLedgerService {
      * Used by: Account module (end-of-day balance), TP module (settlement balance)
      */
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<BigDecimal> getClosingBalance(UUID accountId, LocalDate date) {
         return balanceService.getClosingBalance(accountId, date);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLJournalEntryDTO> getJournalEntriesByTransaction(UUID transactionId) {
-        return glJournalEntryService.getEntriesByTransaction(transactionId).stream()
-                .map(entry -> new GLJournalEntryDTO()).collect(java.util.stream.Collectors.toList());
+        return getEntriesByTransaction(transactionId);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<GLJournalEntryDTO> getJournalEntriesByAccount(UUID accountId, LocalDate fromDate, LocalDate toDate) {
-        return glJournalEntryService.getEntriesByAccount(accountId).stream()
-                .filter(entry -> !entry.getValueDate().isBefore(fromDate) && !entry.getValueDate().isAfter(toDate))
-                .map(entry -> new GLJournalEntryDTO()).collect(java.util.stream.Collectors.toList());
+        return GLEntityMapper
+                .toEntryDTOList(glJournalEntryService.getEntriesByAccountAndDateRange(accountId, fromDate, toDate));
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<GLJournalEntryDTO> getJournalEntryById(UUID entryId) {
         return glJournalEntryService.getEntryById(entryId).map(GLEntityMapper::toDTO);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public List<DailyBalanceSnapshot> getDailyBalances(UUID accountId, LocalDate fromDate, LocalDate toDate) {
         return getBalanceHistory(accountId, fromDate, toDate);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<FiscalPeriodDTO> getCurrentFiscalPeriod() {
         return findActivePeriod(dateTimeService.today());
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public boolean isFiscalPeriodOpen(UUID periodId) {
-        return fiscalPeriodService.getFiscalPeriodById(periodId)
-                .map(period -> period.getStatus() == FiscalPeriodStatus.OPEN).orElse(false);
+        return fiscalPeriodService.isFiscalPeriodOpen(periodId);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:gl:read')")
     public Optional<FiscalPeriodDTO> getFiscalPeriodById(UUID id) {
         return fiscalPeriodService.getFiscalPeriodById(id).map(GLEntityMapper::toDTO);
     }

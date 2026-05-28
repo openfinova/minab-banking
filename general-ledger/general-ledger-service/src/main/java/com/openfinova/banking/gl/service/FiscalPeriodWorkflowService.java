@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -112,6 +113,8 @@ public class FiscalPeriodWorkflowService {
      * @throws IllegalArgumentException if the fiscal period does not exist
      * @throws IllegalStateException    if any pre-close validation fails
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public void closePeriod(UUID periodId, String closedBy, String reason) {
         logger.info("Closing fiscal period: {} by {}", periodId, closedBy);
 

@@ -1,10 +1,10 @@
 package com.openfinova.banking.tp.entity;
 
+import static com.openfinova.banking.tp.testsupport.TpEntityTestFixtures.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -24,13 +24,13 @@ class BalanceReservationTest {
                 new BigDecimal("10.0000"),
                 "USD",
                 ReservationType.DEBIT_HOLD,
-                LocalDateTime.now().plusHours(2),
+                NOW.plusHours(2),
                 "k1",
                 "r1");
-        r.release("user cancelled");
+        r.release("user cancelled", NOW);
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.RELEASED);
         assertThat(r.getReleaseReason()).isEqualTo("user cancelled");
-        assertThatThrownBy(() -> r.release("again")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> r.release("again", NOW)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -42,11 +42,11 @@ class BalanceReservationTest {
                 new BigDecimal("10.0000"),
                 "USD",
                 ReservationType.DEBIT_HOLD,
-                LocalDateTime.now().plusHours(2),
+                NOW.plusHours(2),
                 "k2",
                 "r2");
-        r.release("x");
-        r.markExpired();
+        r.release("x", NOW);
+        r.markExpired(NOW);
         assertThat(r.getStatus()).isEqualTo(ReservationStatus.RELEASED);
     }
 
@@ -59,10 +59,10 @@ class BalanceReservationTest {
                 new BigDecimal("10.0000"),
                 "USD",
                 ReservationType.DEBIT_HOLD,
-                LocalDateTime.now().minusMinutes(1),
+                NOW.minusMinutes(1),
                 "k3",
                 "r3");
-        assertThat(past.hasExpired()).isTrue();
+        assertThat(past.hasExpired(NOW)).isTrue();
 
         BalanceReservation future = new BalanceReservation(
                 tx,
@@ -70,10 +70,10 @@ class BalanceReservationTest {
                 new BigDecimal("10.0000"),
                 "USD",
                 ReservationType.DEBIT_HOLD,
-                LocalDateTime.now().plusHours(1),
+                NOW.plusHours(1),
                 "k4",
                 "r4");
-        assertThat(future.hasExpired()).isFalse();
+        assertThat(future.hasExpired(NOW)).isFalse();
     }
 
     @Test
@@ -85,9 +85,9 @@ class BalanceReservationTest {
                 new BigDecimal("10.0000"),
                 "USD",
                 ReservationType.CREDIT_HOLD,
-                LocalDateTime.now().plusHours(1),
+                NOW.plusHours(1),
                 "k5",
                 "r5");
-        assertThat(r.getEffectiveAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(r.getEffectiveAmount(NOW)).isEqualByComparingTo(BigDecimal.ZERO);
     }
 }

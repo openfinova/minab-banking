@@ -15,6 +15,7 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountRelationship;
 import com.openfinova.banking.customer.account.repository.AccountRelationshipRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,7 @@ public class AccountRelationshipService {
 
     private final AccountRelationshipRepository accountRelationshipRepository;
     private final AccountRepository accountRepository;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructs a new AccountRelationshipService with required dependencies.
@@ -48,9 +50,10 @@ public class AccountRelationshipService {
      * @param accountRepository the repository for accessing account entities
      */
     public AccountRelationshipService(AccountRelationshipRepository accountRelationshipRepository,
-            AccountRepository accountRepository) {
+            AccountRepository accountRepository, DateTimeService dateTimeService) {
         this.accountRelationshipRepository = accountRelationshipRepository;
         this.accountRepository = accountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -88,7 +91,11 @@ public class AccountRelationshipService {
         }
 
         // Create the relationship
-        AccountRelationship relationship = new AccountRelationship(account, userProfileId, relationshipType, createdBy);
+        AccountRelationship relationship = new AccountRelationship(
+                account,
+                userProfileId,
+                relationshipType,
+                dateTimeService.now());
         relationship.setStatus(RelationshipStatus.ACTIVE);
 
         AccountRelationship savedRelationship = accountRelationshipRepository.save(relationship);
@@ -257,7 +264,7 @@ public class AccountRelationshipService {
         }
 
         relationship.setStatus(RelationshipStatus.INACTIVE);
-        relationship.setEffectiveUntil(LocalDateTime.now());
+        relationship.setEffectiveUntil(dateTimeService.now());
         accountRelationshipRepository.save(relationship);
 
         logger.info(
@@ -346,7 +353,7 @@ public class AccountRelationshipService {
                 account,
                 request.getUserProfileId(),
                 RelationshipType.BENEFICIARY,
-                createdBy);
+                dateTimeService.now());
         relationship.setStatus(RelationshipStatus.ACTIVE);
         relationship.setBeneficiary(request.getPercentage());
 

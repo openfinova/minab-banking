@@ -4,13 +4,16 @@ import com.openfinova.banking.customer.api.entity.DataSubjectRequestStatus;
 import com.openfinova.banking.customer.api.entity.DataSubjectRequestType;
 import com.openfinova.banking.customer.entity.*;
 import com.openfinova.banking.customer.repository.*;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -37,13 +40,16 @@ public class DataSubjectRequestService {
     private final CustomerRepository customerRepository;
     private final CustomerDataRetentionRepository retentionRepository;
     private final CustomerAuditLogRepository auditLogRepository;
+    private final DateTimeService dateTimeService;
 
     public DataSubjectRequestService(DataSubjectRequestRepository dsarRepository, CustomerRepository customerRepository,
-            CustomerDataRetentionRepository retentionRepository, CustomerAuditLogRepository auditLogRepository) {
+            CustomerDataRetentionRepository retentionRepository, CustomerAuditLogRepository auditLogRepository,
+            DateTimeService dateTimeService) {
         this.dsarRepository = dsarRepository;
         this.customerRepository = customerRepository;
         this.retentionRepository = retentionRepository;
         this.auditLogRepository = auditLogRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -60,13 +66,18 @@ public class DataSubjectRequestService {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
-        DataSubjectRequest request = new DataSubjectRequest(customer, requestType, channel, customerNotes);
+        DataSubjectRequest request = new DataSubjectRequest(
+                customer,
+                requestType,
+                channel,
+                customerNotes,
+                dateTimeService.today());
         request.setReferenceNumber(generateReferenceNumber(requestType));
 
         // For ERASURE requests: check if a retention obligation exists
         if (requestType == DataSubjectRequestType.ERASURE) {
             retentionRepository.findByCustomerId(customerId).ifPresent(retention -> {
-                if (!retention.isAnonymized() && !retention.isRetentionExpired()) {
+                if (!retention.isAnonymized() && !retention.isRetentionExpired(dateTimeService.today())) {
                     // Cannot erase yet — defer to retention expiry
                     request.defer(
                             retention.getRetentionExpiresAt(),
@@ -116,7 +127,7 @@ public class DataSubjectRequestService {
     public DataSubjectRequest fulfill(UUID requestId, String handledBy) {
         DataSubjectRequest request = findOrThrow(requestId);
         assertNotTerminal(request);
-        request.markFulfilled(handledBy);
+        request.markFulfilled(handledBy, dateTimeService.today());
 
         auditLogRepository.save(
                 new CustomerAuditLog(
@@ -138,7 +149,7 @@ public class DataSubjectRequestService {
     public DataSubjectRequest reject(UUID requestId, String reason, String handledBy) {
         DataSubjectRequest request = findOrThrow(requestId);
         assertNotTerminal(request);
-        request.reject(reason, handledBy);
+        request.reject(reason, handledBy, dateTimeService.today());
 
         auditLogRepository.save(
                 new CustomerAuditLog(
@@ -177,7 +188,7 @@ public class DataSubjectRequestService {
     public DataSubjectRequest extendDeadline(UUID requestId, int additionalDays, String handledBy) {
         DataSubjectRequest request = findOrThrow(requestId);
         assertNotTerminal(request);
-        request.extendDeadline(additionalDays);
+        request.extendDeadline(additionalDays, dateTimeService.today());
         request.setHandledBy(handledBy);
         return dsarRepository.save(request);
     }
@@ -191,12 +202,39 @@ public class DataSubjectRequestService {
 
     @Transactional(readOnly = true)
     public List<DataSubjectRequest> getOverdueRequests() {
-        return dsarRepository.findOverdueRequests(LocalDate.now());
+        return dsarRepository.findOverdueRequests(dateTimeService.today());
     }
 
     @Transactional(readOnly = true)
     public List<DataSubjectRequest> getDeferredRequestsReadyForProcessing() {
-        return dsarRepository.findReadyToProcessDeferredRequests(LocalDate.now());
+        return dsarRepository.findReadyToProcessDeferredRequests(dateTimeService.today());
+    }
+
+    @PreAuthorize("hasAuthority('customer:pii:read')")
+    public boolean retentionRecordExists(UUID customerId) {
+        return retentionRepository.existsByCustomerId(customerId);
+    }
+
+    @PreAuthorize("hasAuthority('customer:pii:read')")
+    public CustomerDataRetention createRetentionRecord(UUID customerId, LocalDate relationshipEndedAt,
+            int retentionYears, String legalBasis) {
+        if (retentionRepository.existsByCustomerId(customerId)) {
+            throw new IllegalStateException("Retention record already exists for customer: " + customerId);
+        }
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
+        CustomerDataRetention retention = new CustomerDataRetention(
+                customer,
+                relationshipEndedAt,
+                retentionYears,
+                legalBasis);
+        return retentionRepository.save(retention);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('customer:pii:read')")
+    public Optional<CustomerDataRetention> getRetentionRecord(UUID customerId) {
+        return retentionRepository.findByCustomerId(customerId);
     }
 
     // ---- Private helpers ----

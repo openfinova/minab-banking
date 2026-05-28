@@ -174,13 +174,13 @@ public class BalanceReservation {
      * @param reason the reason for release
      * @throws IllegalStateException if reservation is not active
      */
-    public void release(String reason) {
+    public void release(String reason, LocalDateTime now) {
         if (!status.isHoldingFunds()) {
             throw new IllegalStateException("Cannot release reservation that is not active");
         }
 
         this.status = ReservationStatus.RELEASED;
-        this.releasedAt = LocalDateTime.now();
+        this.releasedAt = now;
         this.releaseReason = reason;
     }
 
@@ -189,13 +189,13 @@ public class BalanceReservation {
      *
      * @throws IllegalStateException if reservation is not active
      */
-    public void convertToPosting() {
+    public void convertToPosting(LocalDateTime now) {
         if (!status.isHoldingFunds()) {
             throw new IllegalStateException("Cannot convert reservation that is not active");
         }
 
         this.status = ReservationStatus.CONVERTED;
-        this.releasedAt = LocalDateTime.now();
+        this.releasedAt = now;
         this.releaseReason = "Converted to GL posting";
     }
 
@@ -203,12 +203,12 @@ public class BalanceReservation {
      * Marks this reservation as EXPIRED. Idempotent: if already not ACTIVE (e.g. RELEASED by
      * failTimedOutTransactions), no-op to avoid conflicts when both schedulers touch the same row.
      */
-    public void markExpired() {
+    public void markExpired(LocalDateTime now) {
         if (!status.isHoldingFunds()) {
             return;
         }
         this.status = ReservationStatus.EXPIRED;
-        this.releasedAt = LocalDateTime.now();
+        this.releasedAt = now;
         this.releaseReason = "Reservation timeout expired";
     }
 
@@ -217,8 +217,8 @@ public class BalanceReservation {
      *
      * @return true if current time is past expiration time
      */
-    public boolean hasExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+    public boolean hasExpired(LocalDateTime now) {
+        return now.isAfter(expiresAt);
     }
 
     /**
@@ -226,8 +226,8 @@ public class BalanceReservation {
      *
      * @return true if reservation is active and not expired
      */
-    public boolean isHoldingFunds() {
-        return status.isHoldingFunds() && !hasExpired();
+    public boolean isHoldingFunds(LocalDateTime now) {
+        return status.isHoldingFunds() && !hasExpired(now);
     }
 
     /**
@@ -235,8 +235,8 @@ public class BalanceReservation {
      *
      * @return true if this reservation reduces available balance
      */
-    public boolean affectsAvailableBalance() {
-        return isHoldingFunds() && reservationType.reducesAvailableBalance();
+    public boolean affectsAvailableBalance(LocalDateTime now) {
+        return isHoldingFunds(now) && reservationType.reducesAvailableBalance();
     }
 
     /**
@@ -244,8 +244,8 @@ public class BalanceReservation {
      *
      * @return reserved amount if it affects balance, zero otherwise
      */
-    public BigDecimal getEffectiveAmount() {
-        return affectsAvailableBalance() ? reservedAmount : BigDecimal.ZERO;
+    public BigDecimal getEffectiveAmount(LocalDateTime now) {
+        return affectsAvailableBalance(now) ? reservedAmount : BigDecimal.ZERO;
     }
 
     // Getters and Setters

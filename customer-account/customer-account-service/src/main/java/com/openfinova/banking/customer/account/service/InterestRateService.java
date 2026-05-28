@@ -9,6 +9,7 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.InterestRate;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.InterestRateRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -33,10 +34,13 @@ public class InterestRateService {
 
     private final InterestRateRepository interestRateRepository;
     private final AccountRepository accountRepository;
+    private final DateTimeService dateTimeService;
 
-    public InterestRateService(InterestRateRepository interestRateRepository, AccountRepository accountRepository) {
+    public InterestRateService(InterestRateRepository interestRateRepository, AccountRepository accountRepository,
+            DateTimeService dateTimeService) {
         this.interestRateRepository = interestRateRepository;
         this.accountRepository = accountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -102,7 +106,7 @@ public class InterestRateService {
         accountRepository.findById(accountId)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountId));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
 
         // Use repository query to efficiently fetch only current rates
         List<InterestRate> currentRates = interestRateRepository.findCurrentRatesByAccount(accountId, now);
@@ -128,7 +132,7 @@ public class InterestRateService {
         accountRepository.findById(accountId)
                 .orElseThrow(() -> new EntityNotFoundException("Account not found: " + accountId));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = dateTimeService.now();
 
         // Use repository query to find the most recent effective rate of the specified type
         return interestRateRepository.findCurrentRateByAccountAndType(accountId, rateType, now).orElse(null);

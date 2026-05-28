@@ -9,6 +9,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
 import com.openfinova.banking.loan.api.dto.LoanDisbursementCancellationRequest;
 import com.openfinova.banking.loan.api.dto.LoanDisbursementCompletionRequest;
 import com.openfinova.banking.loan.api.dto.LoanDisbursementFailureRequest;
@@ -51,7 +53,7 @@ public class LoanDisbursementController {
     @PreAuthorize("hasAuthority('loan:disburse')")
     @Operation(summary = "Create a new loan disbursement")
     public ResponseEntity<LoanDisbursementResponse> createDisbursement(@PathVariable UUID loanAccountId,
-            @Valid @RequestBody LoanDisbursementRequest request) {
+            @Valid @RequestBody LoanDisbursementRequest request, Authentication auth) {
 
         LoanDisbursement created = disbursementService.createDisbursement(
                 loanAccountId,
@@ -60,7 +62,7 @@ public class LoanDisbursementController {
                 request.getDisbursementMethod(),
                 request.getDestinationAccountNumber(),
                 request.getCreatedBy() != null && !request.getCreatedBy().isBlank() ? request.getCreatedBy()
-                        : "TODO_CURRENT_USER");
+                        : BankingPrincipal.from(auth).username());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(LoanDisbursementMapper.toResponse(created));
     }

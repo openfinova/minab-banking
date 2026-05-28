@@ -85,9 +85,9 @@ public class CustomerRelationship {
     }
 
     // Business Logic
-    public void deactivate(String removedBy) {
+    public void deactivate(String removedBy, LocalDateTime removedAt) {
         this.active = false;
-        this.removedAt = LocalDateTime.now();
+        this.removedAt = removedAt;
         this.removedBy = removedBy;
     }
 

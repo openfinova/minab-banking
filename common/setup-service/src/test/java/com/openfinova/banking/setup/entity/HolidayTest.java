@@ -1,7 +1,6 @@
 package com.openfinova.banking.setup.entity;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
@@ -30,7 +29,7 @@ class HolidayTest {
     }
 
     @Test
-    void onCreate_stampsTimestampsAndAlignsYearWithDate() {
+    void onCreate_alignsYearWithDate() {
         Holiday h = new Holiday();
         h.setDate(LocalDate.of(2026, 7, 4));
         h.setYear(1900);
@@ -38,20 +37,15 @@ class HolidayTest {
         h.onCreate();
 
         assertThat(h.getYear()).isEqualTo(2026);
-        assertThat(h.getCreatedAt()).isNotNull();
-        assertThat(h.getUpdatedAt()).isNotNull();
     }
 
     @Test
-    void onUpdate_refreshesUpdatedAtAndYear() {
+    void onUpdate_alignsYearWithDate() {
         Holiday h = new Holiday(LocalDate.of(2026, 5, 1), "DE", "BE", "May Day");
-        h.onCreate();
-        LocalDateTime afterCreate = h.getUpdatedAt();
 
         h.setDate(LocalDate.of(2027, 5, 1));
         h.onUpdate();
 
         assertThat(h.getYear()).isEqualTo(2027);
-        assertThat(h.getUpdatedAt()).isNotNull().isAfterOrEqualTo(afterCreate);
     }
 }

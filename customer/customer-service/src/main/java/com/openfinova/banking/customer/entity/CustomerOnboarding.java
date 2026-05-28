@@ -125,11 +125,7 @@ public class CustomerOnboarding {
 
     // Business logic
 
-    public void advanceTo(OnboardingStatus newStatus) {
-        advanceTo(newStatus, null);
-    }
-
-    public void advanceTo(OnboardingStatus newStatus, String outcomeReason) {
+    public void advanceTo(OnboardingStatus newStatus, String outcomeReason, LocalDateTime changedAt) {
         OnboardingStatus current = this.status;
 
         switch (newStatus) {
@@ -140,7 +136,7 @@ public class CustomerOnboarding {
             case KYC_COMPLETED -> {
                 if (current != OnboardingStatus.KYC_IN_PROGRESS)
                     throw new IllegalStateException("Can only advance to KYC_COMPLETED from KYC_IN_PROGRESS");
-                this.kycCompletedAt = LocalDateTime.now();
+                this.kycCompletedAt = changedAt;
             }
             case ACCOUNT_SETUP -> {
                 if (current != OnboardingStatus.KYC_COMPLETED)
@@ -149,18 +145,22 @@ public class CustomerOnboarding {
             case WELCOME_KIT_SENT -> {
                 if (current != OnboardingStatus.ACCOUNT_SETUP)
                     throw new IllegalStateException("Can only advance to WELCOME_KIT_SENT from ACCOUNT_SETUP");
-                this.welcomeKitSentAt = LocalDateTime.now();
+                this.welcomeKitSentAt = changedAt;
             }
             case COMPLETED -> {
                 if (current != OnboardingStatus.WELCOME_KIT_SENT && current != OnboardingStatus.ACCOUNT_SETUP)
                     throw new IllegalStateException("Cannot complete onboarding from status: " + current);
-                this.completedAt = LocalDateTime.now();
+                this.completedAt = changedAt;
             }
             case ABANDONED, REJECTED -> this.outcomeReason = outcomeReason;
             default -> throw new IllegalArgumentException("Invalid onboarding status transition: " + newStatus);
         }
 
         this.status = newStatus;
+    }
+
+    public void advanceTo(OnboardingStatus newStatus, LocalDateTime changedAt) {
+        advanceTo(newStatus, null, changedAt);
     }
 
     public boolean isCompleted() {

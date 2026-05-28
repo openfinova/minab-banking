@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,10 +59,7 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
         this.balanceReservationMapper = balanceReservationMapper;
     }
 
-    // ── Transaction Lifecycle ──────────────────────────────────────────────
-
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public TransactionResponse initiateTransaction(TransactionRequestDTO requestDTO) {
         logger.info("Facade: initiating transaction with idempotency key: {}", requestDTO.getIdempotencyKey());
         TransactionRequest request = mapToTransactionRequest(requestDTO);
@@ -72,7 +68,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public TransactionResponse processTransaction(UUID transactionId) {
         logger.info("Facade: processing transaction: {}", transactionId);
         Transaction transaction = transactionService.processTransaction(transactionId);
@@ -80,7 +75,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public TransactionResponse completeTransaction(UUID transactionId) {
         logger.info("Facade: completing transaction: {}", transactionId);
         Transaction transaction = transactionService.completeTransaction(transactionId);
@@ -88,7 +82,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public TransactionResponse failTransaction(UUID transactionId, String reason, String errorCode) {
         logger.warn("Facade: failing transaction: {} reason: {}", transactionId, reason);
         Transaction transaction = transactionService.failTransaction(transactionId, reason, errorCode);
@@ -97,7 +90,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public TransactionResponse getTransactionById(UUID id) {
         logger.debug("Facade: getting transaction: {}", id);
         Transaction transaction = transactionService.getTransactionById(id);
@@ -106,7 +98,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public String getTransactionStatus(UUID transactionId) {
         logger.debug("Facade: getting transaction status: {}", transactionId);
         return transactionService.getTransactionStatus(transactionId).name();
@@ -114,16 +105,12 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public Optional<TransactionResponse> findExistingTransaction(String idempotencyKey) {
         logger.debug("Facade: finding existing transaction for key: {}", idempotencyKey);
         return transactionService.findExistingTransaction(idempotencyKey).map(transactionMapper::toResponse);
     }
 
-    // ── Balance Reservations ───────────────────────────────────────────────
-
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public UUID reserveBalanceForTransaction(UUID transactionId, UUID accountId, BigDecimal amount,
             String reservationType) {
         logger.info(
@@ -137,14 +124,12 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public void releaseReservation(UUID reservationId) {
         logger.info("Facade: releasing reservation: {}", reservationId);
         balanceReservationService.releaseReservation(reservationId);
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public void confirmReservation(UUID reservationId) {
         logger.info("Facade: confirming reservation: {}", reservationId);
         balanceReservationService.confirmReservation(reservationId);
@@ -152,7 +137,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public BigDecimal getTotalReservedAmount(UUID accountId) {
         logger.debug("Facade: getting total reserved amount for account: {}", accountId);
         return balanceReservationService.getTotalReservedAmount(accountId);
@@ -160,18 +144,14 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public List<BalanceReservationResponse> getActiveReservations(UUID accountId) {
         logger.debug("Facade: getting active reservations for account: {}", accountId);
         return balanceReservationService.getActiveReservations(accountId).stream()
                 .map(balanceReservationMapper::toResponse).collect(Collectors.toList());
     }
 
-    // ── Velocity Limits ────────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public boolean checkLimits(UUID accountId, String transactionType, BigDecimal amount, String currency) {
         logger.debug("Facade: checking limits for account: {} type: {}", accountId, transactionType);
         TransactionType type = TransactionType.valueOf(transactionType);
@@ -179,7 +159,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
     }
 
     @Override
-    @PreAuthorize("hasAuthority('service:transaction:write')")
     public void incrementUsage(UUID accountId, String transactionType, BigDecimal amount, String currency) {
         logger.debug("Facade: incrementing usage for account: {} type: {}", accountId, transactionType);
         TransactionType type = TransactionType.valueOf(transactionType);
@@ -188,7 +167,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public VelocityLimitStatus getCurrentLimitStatus(UUID accountId, String transactionType) {
         logger.debug("Facade: getting limit status for account: {} type: {}", accountId, transactionType);
         TransactionType type = TransactionType.valueOf(transactionType);
@@ -197,7 +175,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public BigDecimal getRemainingLimit(UUID accountId, String transactionType, String limitPeriod) {
         logger.debug(
                 "Facade: getting remaining limit for account: {} type: {} period: {}",
@@ -209,11 +186,8 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
         return velocityLimitService.getRemainingLimit(accountId, type, period);
     }
 
-    // ── Fee Management ─────────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public BigDecimal calculateFees(UUID transactionId) {
         logger.debug("Facade: calculating fees for transaction: {}", transactionId);
         Transaction transaction = transactionService.getTransactionById(transactionId);
@@ -222,7 +196,6 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public FeeCalculationResult calculateDetailedFees(UUID transactionId) {
         logger.debug("Facade: calculating detailed fees for transaction: {}", transactionId);
         Transaction transaction = transactionService.getTransactionById(transactionId);
@@ -231,13 +204,10 @@ public class TransactionProcessingServiceImpl implements TransactionProcessingSe
 
     @Override
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAuthority('service:transaction:read')")
     public CustomerTier evaluateTierEligibility(UUID customerId) {
         logger.debug("Facade: evaluating tier eligibility for customer: {}", customerId);
         return feeManagementService.evaluateTierEligibility(customerId);
     }
-
-    // ── Internal helpers ───────────────────────────────────────────────────
 
     private TransactionRequest mapToTransactionRequest(TransactionRequestDTO dto) {
         TransactionRequest request = new TransactionRequest();

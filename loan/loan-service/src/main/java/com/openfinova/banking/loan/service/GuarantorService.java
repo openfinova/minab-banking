@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import com.openfinova.banking.loan.entity.Guarantor;
 import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.repository.GuarantorRepository;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Implementation of GuarantorService for managing loan guarantors.
@@ -49,10 +51,13 @@ public class GuarantorService {
 
     private final GuarantorRepository guarantorRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final DateTimeService dateTimeService;
 
-    public GuarantorService(GuarantorRepository guarantorRepository, LoanAccountRepository loanAccountRepository) {
+    public GuarantorService(GuarantorRepository guarantorRepository, LoanAccountRepository loanAccountRepository,
+            DateTimeService dateTimeService) {
         this.guarantorRepository = guarantorRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -66,6 +71,7 @@ public class GuarantorService {
      * @param addedBy the user adding the guarantor
      * @return the saved guarantor with PENDING status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Guarantor addGuarantor(UUID loanAccountId, Guarantor guarantor, String addedBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -89,6 +95,7 @@ public class GuarantorService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<Guarantor> getGuarantorForLoanAccount(UUID loanAccountId, UUID guarantorId) {
         return guarantorRepository.findById(guarantorId)
                 .filter(g -> g.getLoanAccount() != null && loanAccountId.equals(g.getLoanAccount().getId()));
@@ -101,6 +108,7 @@ public class GuarantorService {
      * @return list of all guarantors for the loan account (all statuses)
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<Guarantor> getGuarantorsByLoanAccount(UUID loanAccountId) {
         return guarantorRepository.findByLoanAccountId(loanAccountId);
     }
@@ -114,6 +122,7 @@ public class GuarantorService {
      * @return list of active guarantors for the loan account
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<Guarantor> getActiveGuarantorsByLoanAccount(UUID loanAccountId) {
         return guarantorRepository.findByLoanAccountIdAndStatus(loanAccountId, GuarantorStatus.ACTIVE);
     }
@@ -171,6 +180,7 @@ public class GuarantorService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<Guarantor> getGuarantorsByLoanAccountAndStatus(UUID loanAccountId, GuarantorStatus status,
             Pageable pageable) {
         return guarantorRepository.findByLoanAccount_IdAndStatus(loanAccountId, status, pageable);
@@ -194,6 +204,7 @@ public class GuarantorService {
      * @throws IllegalArgumentException if guarantorId is null, newStatus is null, updatedBy is null/empty, or guarantor not found
      * @throws IllegalStateException if the status transition is not allowed
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Guarantor updateGuarantorStatus(UUID loanAccountId, UUID guarantorId, GuarantorStatus newStatus,
             String updatedBy) {
         if (loanAccountId == null) {
@@ -239,6 +250,7 @@ public class GuarantorService {
      * @throws IllegalArgumentException if guarantorId is null, verifiedBy is null/empty, or guarantor not found
      * @throws IllegalStateException if guarantor is not in PENDING status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Guarantor verifyGuarantor(UUID loanAccountId, UUID guarantorId, String verifiedBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -260,7 +272,7 @@ public class GuarantorService {
         }
 
         guarantor.setStatus(GuarantorStatus.ACTIVE);
-        guarantor.setVerifiedDate(Instant.now());
+        guarantor.setVerifiedDate(dateTimeService.instant());
         guarantor.setVerifiedBy(verifiedBy);
         return guarantorRepository.save(guarantor);
     }
@@ -283,6 +295,7 @@ public class GuarantorService {
      * @throws IllegalArgumentException if guarantorId is null, releasedBy is null/empty, or guarantor not found
      * @throws IllegalStateException if guarantor cannot be released from current status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public Guarantor releaseGuarantor(UUID loanAccountId, UUID guarantorId, String releasedBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -304,7 +317,7 @@ public class GuarantorService {
         }
 
         guarantor.setStatus(GuarantorStatus.RELEASED);
-        guarantor.setReleasedDate(Instant.now());
+        guarantor.setReleasedDate(dateTimeService.instant());
         guarantor.setReleasedBy(releasedBy);
         return guarantorRepository.save(guarantor);
     }
@@ -327,6 +340,7 @@ public class GuarantorService {
      * @throws IllegalArgumentException if guarantorId is null, reason is null/empty, removedBy is null/empty, or guarantor not found
      * @throws IllegalStateException if guarantor cannot be removed from current status
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public void removeGuarantor(UUID loanAccountId, UUID guarantorId, String reason, String removedBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -351,7 +365,7 @@ public class GuarantorService {
         }
 
         guarantor.setStatus(GuarantorStatus.REMOVED);
-        guarantor.setRemovedDate(Instant.now());
+        guarantor.setRemovedDate(dateTimeService.instant());
         guarantor.setRemovedBy(removedBy);
         guarantor.setRemovalReason(reason);
         guarantor.setRemarks(reason);

@@ -23,7 +23,6 @@ public class SuspenseAgingReportDTO {
     // Constructors
 
     public SuspenseAgingReportDTO() {
-        this.reportDate = LocalDate.now();
     }
 
     public SuspenseAgingReportDTO(String currency) {

@@ -1,0 +1,832 @@
+# Agent Rules
+
+A complete ruleset for AI coding agents working on this codebase.  
+Combine the **Behavioral** section (always active) with the **Stack-Specific** sections below.
+
+---
+
+## 1. Behavioral Guidelines
+
+> Bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1.1 Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 1.2 Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: *"Would a senior engineer say this is overcomplicated?"* If yes, simplify.
+
+### 1.3 Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that **your** changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: *Every changed line should trace directly to the user's request.*
+
+### 1.4 Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+
+- `"Add validation"` → `"Write tests for invalid inputs, then make them pass"`
+- `"Fix the bug"` → `"Write a test that reproduces it, then make it pass"`
+- `"Refactor X"` → `"Ensure tests pass before and after"`
+
+For multi-step tasks, state a brief plan:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+## 2. Architecture
+
+### 2.1 Backend — Modular Monolith (Java 25 + Spring Boot 4)
+
+Each feature lives in a self-contained module. Modules are split into two sub-modules:
+
+```
+modules/
+  payments/
+    payments-api/        ← public contract (interfaces, DTOs, exceptions)
+    payments-service/    ← implementation (entities, repos, service impls, controllers)
+  accounts/
+    accounts-api/
+    accounts-service/
+```
+
+**The Facade is the inbound port of a module.**
+
+It is the single public door that other modules use to request work from this module. It is declared as an interface in `-api` and implemented in `-service` as a thin delegator — no business logic, pure routing to the right internal service.
+
+```
+payments-api/
+  PaymentsFacade            ← interface only; the public contract for outside callers
+
+payments-service/
+  PaymentsFacadeImpl        ← implements PaymentsFacade; pure delegation, no logic
+      │
+      ├──▶ PaymentService          ← owns business logic and transactions
+      ├──▶ FeeCalculationService   ← internal, not visible outside
+      └──▶ FraudCheckService       ← internal, not visible outside
+
+  PaymentsController        ← calls internal services directly; never via its own facade
+  PaymentRepository
+```
+
+**Cross-module call example — CustomerAccount needs TransactionProcessing:**
+
+```
+CustomerAccountService
+    │  depends on (injected via -api)
+    ▼
+TransactionProcessingFacade     ← CustomerAccount knows nothing about TP internals
+    │  implemented by (in tp-service)
+    ▼
+TransactionProcessingFacadeImpl ← delegates to internal services, no logic here
+    │
+    ▼
+TransactionService (internal to TP)
+```
+
+**Module boundary rules:**
+
+- Every module exposes **exactly one facade interface** in its `-api` sub-module. This is the only entry point for other modules.
+- The facade implementation in `-service` **must contain no business logic**. It delegates to internal services only. If you find logic in a facade impl, move it to a service.
+- A module's own controller calls its **internal services directly**. It never goes through its own facade — the facade exists for external callers, not for internal use.
+- Modules may have **multiple internal services**, each owning a distinct area of business logic. These are never visible outside the module.
+- Never import from another module's `-service` package. Only its `-api` is visible.
+- `service` modules must never depend on another module's -service. They may depend on multiple -api modules freely. However, avoid runtime call cycles — if A calls B which calls A within the same operation, that is a design problem regardless of whether it compiles.
+- When adding a cross-module call, always ask: *"Should this be a direct facade call or a domain event?"* State the choice and the reason explicitly before implementing.
+
+**Layer rules within a module's `-service`:**
+
+```
+Controller      ──▶  ServiceA / ServiceB / ServiceC  (own module, direct)
+                           │
+                           ▼
+                      Repository  ──▶  Entity / Domain model
+
+Other module    ──▶  FacadeImpl   ──▶  ServiceA / ServiceB / ServiceC
+```
+
+- Controllers own: routing, input validation, auth annotation, OpenAPI docs, response mapping. Nothing else.
+- Facade implementations own: nothing. Receive the call, find the right service, delegate, return.
+- Services own: all business decisions, transaction boundaries, domain rules.
+- Repositories own: data access only. No conditional business logic.
+- Entities never leave their module. DTOs cross module boundaries.
+
+### 2.2 Frontend — Next.js + TypeScript
+
+```
+app/
+  (protected)/
+    account/
+    audit/
+      page.tsx           ← route entry point only; delegates to a feature component
+components/              ← shared, reusable UI components
+lib/                     ← utilities, API clients, hooks, constants
+```
+
+**Boundary rules:**
+
+- `page.tsx` files are thin. They handle layout and pass data down — no business logic inline.
+- Shared components go in `components/`. Feature-specific components live alongside their page.
+- Data fetching logic (server actions, API calls, React Query hooks) belongs in `lib/`, not inside components.
+- Never import from `app/` into `components/` or `lib/`. Dependency direction: `app → components → lib`.
+
+---
+
+## 3. Coding Style
+
+### 3.1 Java (Backend)
+
+- **Java version:** Java 25. Use modern features: records, sealed classes, pattern matching, text blocks, virtual threads where appropriate.
+- **Date/time source:** Use `DateTimeService` (or `DateTimeService#clock()` from setup) for all current date/time in application code — services, controllers, schedulers, event handlers, entities, DTOs, and repositories. Do not call `LocalDate.now()`, `LocalDateTime.now()`, `Clock.system*()`, or `new Date()` in application code. Exceptions: `SystemDateTimeService` (implementation) and `SetupServiceConfig#systemClock()` (the single `Clock.systemDefaultZone()` bean that backs `DateTimeService` and may be replaced in tests). Pass `LocalDate` / `LocalDateTime` / `Instant` from callers into entity methods and DTO builders; repositories must not embed “now” in default query methods. `LocalDate` / `LocalDateTime` remain valid as value types and fields. Prefer `dateTimeService.instant()` for timestamps; direct `Instant.now()` only for immutable audit/event occurred-at fields when `DateTimeService` is unavailable at that layer — never for business or scheduling logic.
+- **Naming:** `camelCase` for fields/methods, `PascalCase` for classes/interfaces, `SCREAMING_SNAKE_CASE` for constants.
+- **Immutability:** Prefer records for DTOs and value objects. Avoid mutable state in services.
+- **Null handling:** Use `Optional<T>` for return values that may be absent. Never return `null` from a public method. Use `@NonNull`/`@Nullable` annotations on parameters.
+- **Collections:** Return empty collections, not `null`. Prefer immutable views (`List.of`, `Map.copyOf`).
+- **Exceptions:** Use checked exceptions for recoverable domain errors (e.g. `InsufficientFundsException`). Use unchecked exceptions for programming errors. Never swallow exceptions silently.
+- **Method length:** Max ~30 lines. Extract private methods with descriptive names rather than writing long methods.
+- **Forbidden:** Raw types, `@SuppressWarnings` without a comment explaining why, catching `Exception` or `Throwable` without rethrowing.
+
+### 3.2 TypeScript (Frontend)
+
+- **Strict mode on.** No `any`. No type assertions (`as Foo`) without a comment.
+- **Naming:** `camelCase` for variables/functions, `PascalCase` for components/types/interfaces, `SCREAMING_SNAKE_CASE` for constants.
+- **Null handling:** Prefer `undefined` over `null`. Use optional chaining and nullish coalescing.
+- **Async:** `async/await` only. No raw `.then()` chains.
+- **Immutability:** `const` by default. Avoid mutation; use spread/map/filter.
+- **Forbidden:** `var`, loose equality (`==`), `@ts-ignore` without explanation.
+- **Component style:** Functional components + hooks only. No class components.
+- **Exports:** Named exports preferred. Default exports only for page components (Next.js convention).
+
+---
+
+## 4. Commenting & Documentation
+
+> This is a banking core application. Many concepts (interest accrual, amortisation schedules, regulatory capital) are non-obvious. When in doubt, over-document rather than under-document.
+
+### 4.1 The Core Rule
+
+**Comments explain WHY, not WHAT.** Code shows what happens. Comments explain the business rule, regulatory constraint, edge case, or design decision that drove it.
+
+```java
+// ✅ Good — explains the business reason
+// ECB regulation 2023/1234 requires interest to accrue on a 30/360 day-count basis
+// for fixed-rate mortgage products. Actual/365 is used for variable-rate.
+DayCountConvention convention = product.isFixedRate()
+    ? DayCountConvention.THIRTY_360
+    : DayCountConvention.ACTUAL_365;
+
+// ❌ Bad — restates the code
+// Check if fixed rate and assign convention
+```
+
+---
+
+**Avoid comments like this**
+
+```
+----------------- Helpers -------------------------
+```
+
+or
+
+```
+---------------------------
+Helpers 
+---------------------------
+```
+
+**Do not use HTML markups in JavaDocs. Use MD or text only.**
+
+---
+
+### 4.2 What Always Gets Documented
+
+**Java — JavaDoc required on:**
+
+- All entities and their non-trivial fields (especially domain concepts like `InterestAccrual`, `AmortisationSchedule`, `CapitalBuffer`).
+- All facade interfaces and their methods (this is the public contract of the module).
+- All service methods that encode a business decision or regulatory rule.
+- All exceptions — document when they are thrown and what the caller should do.
+- Enum values that represent domain states.
+
+**TypeScript — TSDoc required on:**
+
+- All exported functions and hooks in `lib/`.
+- Shared components with non-obvious props.
+- Any function implementing a financial calculation or transformation.
+
+### 4.3 Entity & Domain Object Documentation
+
+Domain entities must have a class-level JavaDoc that explains:
+
+1. What the concept **is** in business terms.
+2. Its **lifecycle** (how it is created, mutated, and closed/settled).
+3. Any **invariants** that must always hold.
+4. Relevant **regulatory or business rules** that shaped its design.
+
+```java
+/**
+ * Represents the daily accrual of interest on a loan account.
+ *
+ * Interest accrual is the process of recognising interest income that has been
+ * earned but not yet received. Each business day, the system creates one
+ * {@code InterestAccrual} record per active loan, calculated using the loan's
+ * applicable day-count convention ({@link DayCountConvention}).
+ *
+ * Lifecycle
+ *   Created by the nightly batch job ({@code InterestAccrualService#runDailyAccrual}).
+ *   Remains in {@code PENDING} state until the end-of-day settlement run.
+ *   Transitions to {@code SETTLED} when posted to the GL; {@code REVERSED} if corrected.
+ *
+ * Invariants
+ *   {@code amount} is always positive.
+ *   {@code accrualDate} is never a weekend or public holiday.
+ *   Only one accrual record may exist per loan per accrual date.
+ *
+ * @see DayCountConvention
+ * @see InterestAccrualService
+ */
+@Entity
+public class InterestAccrual { ... }
+```
+
+### 4.4 Service Method Documentation
+
+Document service methods when they encode a business decision:
+
+```java
+/**
+ * Applies an early repayment penalty to the given loan, if applicable.
+ *
+ * Under the product terms, a penalty of {@code 1.5%} of the outstanding principal
+ * applies when a loan is repaid within the first 24 months. After 24 months, no
+ * penalty applies. This rule is fixed in the product contract and not configurable
+ * at the account level.
+ *
+ * @param loanId    the loan being repaid
+ * @param repaymentDate the date of repayment, used to calculate months elapsed
+ * @return the penalty amount (zero if no penalty applies)
+ * @throws LoanNotFoundException if no active loan exists for the given id
+ */
+Money calculateEarlyRepaymentPenalty(LoanId loanId, LocalDate repaymentDate);
+```
+
+### 4.5 TODO / FIXME Policy
+
+Always include a ticket reference and a reason:
+
+```java
+// TODO(CORE-456): Replace with event-driven accrual once settlement module is migrated
+// FIXME(CORE-789): This uses actual/365 but the product spec says 30/360 — needs confirmation
+```
+
+Never commit commented-out code. Use git history.
+
+---
+
+## 5. Testing
+
+> **Early-stage codebase warning.** Large parts of the application are not yet covered by tests because features are still stabilising. Respect this. Do not speculatively add tests to untested code that wasn't part of your task — you may be testing behaviour that is about to change.
+
+### 5.1 The Prime Directive
+
+**Never write tests unless explicitly asked.**
+
+When you are asked to write tests, the rules below apply. When you are not asked, do not add them — not even "just a quick one" for the code you just wrote.
+
+If you are asked to implement something and you think tests would be valuable, say so once and ask. Don't add them unilaterally.
+
+### 5.2 Test Types & When to Use Each
+
+This codebase uses three distinct test types. Use the right tool for the right job.
+
+| Type | What it tests | Tooling | Spring context? |
+|---|---|---|---|
+| Unit test | A single class in isolation | JUnit 5 + Mockito | No |
+| Repository test | JPA queries against a real DB schema | JUnit 5 + Testcontainers | Slice (`@DataJpaTest`) |
+| Integration test | A full request through the stack | JUnit 5 + Testcontainers + MockMvc + WireMock | Full (`@SpringBootTest`) |
+
+Default to unit tests. Reach for Testcontainers only when the thing you're testing is inherently about persistence or inter-layer behaviour.
+
+### 5.3 Unit Tests
+
+Unit tests are the primary testing tool. They test one class; everything else is mocked.
+
+**Structure — Arrange / Act / Assert, one behaviour per test:**
+
+```java
+@ExtendWith(MockitoExtension.class)
+class InterestAccrualServiceTest {
+
+    @Mock
+    private LoanRepository loanRepository;
+
+    @Mock
+    private AccrualRepository accrualRepository;
+
+    @InjectMocks
+    private InterestAccrualServiceImpl service;
+
+    @Test
+    void accrual_usesThirty360Convention_forFixedRateLoans() {
+        // Arrange
+        var loan = LoanFixtures.fixedRate(principal("10000"), rate("0.05"));
+        when(loanRepository.findActiveLoans()).thenReturn(List.of(loan));
+
+        // Act
+        service.runDailyAccrual(LocalDate.of(2025, 6, 1));
+
+        // Assert
+        var captor = ArgumentCaptor.forClass(InterestAccrual.class);
+        verify(accrualRepository).save(captor.capture());
+        assertThat(captor.getValue().getDayCountConvention())
+            .isEqualTo(DayCountConvention.THIRTY_360);
+    }
+}
+```
+
+**Naming — describe the behaviour, not the method:**
+
+```
+// ✅ Good — readable as a sentence
+void accrual_usesThirty360Convention_forFixedRateLoans()
+void penalty_isZero_whenLoanIsOlderThan24Months()
+void transfer_throws_whenSourceAccountHasInsufficientFunds()
+
+// ❌ Bad — describes implementation, not behaviour
+void testCalculateAccrual()
+void runDailyAccrualTest()
+```
+
+Pattern: `subject_expectedBehaviour_givenCondition()`
+
+**Mocking rules:**
+
+- Mock all collaborators injected into the class under test. Never reach into real implementations.
+- Use `@Mock` + `@InjectMocks` via `MockitoExtension`. No `Mockito.mock()` inline unless you have a specific reason.
+- Stub only what the test needs. Don't over-specify interactions unrelated to what you're asserting.
+- Prefer `verify()` for side-effect assertions (e.g. a save was called). Prefer return-value assertions for pure computation.
+- Never use `@MockBean` in unit tests — that loads a Spring context and makes the test slow for no reason.
+
+**What to test in services:**
+
+Focus on business logic branches, not boilerplate:
+
+- Each distinct business rule or condition (e.g. fixed vs variable rate, penalty threshold, regulatory cap).
+- Exception paths — when should the service throw, and with what?
+- Edge cases that the domain makes explicit (zero balance, first day of accrual period, closed account).
+
+Do not write tests for: simple getters/setters, delegating methods with no logic, Spring wiring.
+
+**Test data — use fixtures, not inline builders:**
+
+For domain objects that recur across tests, create a `*Fixtures` or `*Mother` class:
+
+```java
+// In src/test/java/...
+public class LoanFixtures {
+    public static Loan fixedRate(Money principal, Rate rate) {
+        return Loan.builder()
+            .id(LoanId.of("TEST-001"))
+            .principal(principal)
+            .rate(rate)
+            .type(LoanType.FIXED)
+            .status(LoanStatus.ACTIVE)
+            .build();
+    }
+}
+```
+
+Don't repeat `Loan.builder()...` boilerplate in every test. If you find yourself doing it more than twice, extract a fixture.
+
+### 5.4 Repository Tests (Testcontainers)
+
+Use when testing JPA queries, custom `@Query` methods, or anything that depends on real SQL behaviour (joins, constraints, ordering, pagination).
+
+```java
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = Replace.NONE)
+@Testcontainers
+class AccrualRepositoryTest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("testdb");
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+    }
+
+    @Autowired
+    private AccrualRepository repository;
+
+    @Test
+    void findByLoanIdAndDate_returnsEmpty_whenNoAccrualExists() {
+        var result = repository.findByLoanIdAndAccrualDate(
+            LoanId.of("LOAN-999"), LocalDate.of(2025, 1, 1));
+        assertThat(result).isEmpty();
+    }
+}
+```
+
+**Rules:**
+- Use `@DataJpaTest` (slice context — loads only JPA layer, no full Spring Boot).
+- Always use `Replace.NONE` so Testcontainers provides the real DB, not H2.
+- Share the container across all tests in the class with `static @Container`. Don't start a new container per test.
+- Test queries, not entity state. If you're testing a `findBy*` method, verify the result of the query, not that JPA can persist a field.
+
+### 5.5 Integration Tests (Testcontainers + MockMvc + WireMock)
+
+Use when you need to verify that a full request — through controller → service → repository → DB — behaves correctly. Also use when testing interactions with external HTTP services.
+
+```java
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
+@Testcontainers
+class LoanAccrualControllerIT {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @RegisterExtension
+    static WireMockExtension wireMock = WireMockExtension.newInstance()
+            .options(wireMockConfig().dynamicPort())
+            .build();
+
+    @Test
+    void triggerAccrual_returns202_andPersistsAccrualRecord() throws Exception {
+        mockMvc.perform(post("/api/v1/accruals/trigger")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    { "date": "2025-06-01" }
+                """))
+            .andExpect(status().isAccepted());
+
+        // assert DB state via repository or second GET request
+    }
+}
+```
+
+**Rules:**
+- Integration tests live in a separate source set or are clearly named `*IT.java` to distinguish from unit tests and allow running them separately.
+- WireMock stubs must be set up inside the test, not shared via global state. Each test is responsible for the stubs it needs.
+- Do not use `@MockBean` to replace real services in an integration test — if you're mocking the service, write a unit test instead. The value of an integration test is that nothing is mocked except external HTTP.
+- One integration test per controller endpoint is usually enough. Don't duplicate logic already covered by unit tests.
+
+### 5.6 What Not To Do
+
+- **Don't test Spring wiring.** If your test's only assertion is that a bean was injected, delete it.
+- **Don't assert on every field of a returned object.** Assert on the fields relevant to the behaviour being tested.
+- **Don't use `Thread.sleep()` for async assertions.** Use Awaitility if you need to poll.
+- **Don't share mutable state between tests.** Each test must be fully independent.
+- **Don't write a Testcontainers test for logic that can be unit tested.** Container startup is expensive; use it only when the test genuinely needs a real DB or real HTTP.
+- **Don't add tests to existing untested code unless asked.** The codebase has intentional gaps. Filling them speculatively risks locking in behaviour that is about to be redesigned.
+
+---
+
+## 6. Security
+
+> This is a banking core application. Security rules are not optional and are not subject to "use judgment." When in doubt, the more restrictive path is always correct.
+
+### 6.1 Authentication
+
+Authentication is delegated entirely to the external OAuth2 / OIDC provider. The application never implements its own login, password hashing, or token issuance.
+
+- Never store credentials, tokens, or secrets in the database, in logs, or in application state.
+- Never implement a custom authentication filter unless explicitly asked and reviewed. Use Spring Security's OAuth2 resource server support.
+- Treat the JWT claims (roles, permissions, subject) as the authoritative source of identity within a request. Never accept user-supplied identity from request bodies or headers.
+- Token validation (signature, expiry, issuer) is handled by the framework. Do not write manual token parsing logic.
+
+### 6.2 Authorisation — Where Checks Live
+
+Authorisation uses **two layers**. They are not equivalent — understand the distinction before adding or modifying a check.
+
+```
+HTTP Request
+     │
+     ▼
+@RestController method
+  @PreAuthorize(...)        ← Layer 1: fast-fail guard, HTTP boundary only
+     │  calls service directly
+     ▼
+@Service method
+  @PreAuthorize(...)        ← Layer 2: authoritative security boundary
+     │                         fires for ALL callers: HTTP, scheduler,
+     ▼                         cross-module facade delegation, tests
+  Business logic
+
+─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+
+Other module
+     │  calls via facade
+     ▼
+FacadeImpl  (no @PreAuthorize — pure delegation, no logic)
+     │  delegates to
+     ▼
+@Service method
+  @PreAuthorize(...)        ← same authoritative check applies here too
+```
+
+**Layer 1 — Controller (`@PreAuthorize` on `@RestController` methods):**
+- Guards HTTP entry points only.
+- Fails fast before any processing — useful for performance and clarity.
+- Expresses coarse-grained access (e.g. "must have `ROLE_OPERATIONS`").
+- **Not the authoritative check.** A scheduler, event handler, or cross-module facade call bypasses the controller entirely.
+
+**Layer 2 — Service (`@PreAuthorize` on `@Service` methods):**
+- This is the real security boundary. It fires regardless of how the method is called — HTTP via controller, cross-module via facade, scheduled job, or test.
+- Required on any service method that touches sensitive data or executes a state-changing operation.
+- Expresses fine-grained access (e.g. `"hasAuthority('loan:write') and hasRole('ROLE_OPERATIONS')"`).
+- The facade impl has **no `@PreAuthorize`** — it contains no logic and must not duplicate or shadow the service-level check.
+
+**Rule:** If you add or modify authorisation on a controller method, verify the corresponding service method also has its own `@PreAuthorize`. The controller annotation is a performance guard; the service annotation is the security contract. Both must exist independently. They will sometimes differ — that is expected and correct.
+
+```java
+// Controller — coarse guard, fail fast at the HTTP boundary
+@PostMapping("/loans/{id}/accrue")
+@PreAuthorize("hasRole('ROLE_OPERATIONS')")
+public ResponseEntity<Void> triggerAccrual(@PathVariable LoanId id) {
+    accrualService.triggerManualAccrual(id);   // calls service directly
+    return ResponseEntity.accepted().build();
+}
+
+// Service — authoritative check, fires for every caller
+@PreAuthorize("hasRole('ROLE_OPERATIONS') and hasAuthority('loan:accrue')")
+public void triggerManualAccrual(LoanId loanId) {
+    // business logic
+}
+
+// Facade impl — no @PreAuthorize, pure delegation
+@Override
+public void triggerManualAccrual(LoanId loanId) {
+    accrualService.triggerManualAccrual(loanId);   // service check fires here too
+}
+```
+
+### 6.3 Secrets & Configuration
+
+- **Never hardcode** credentials, API keys, connection strings, or any secret in source code or configuration files committed to version control.
+- Use environment variables or a secrets manager (Vault, AWS Secrets Manager, etc.) for all secrets. Reference them via Spring's `@Value` or `Environment` — never inline.
+- Never log configuration values that might contain secrets, even at `DEBUG` level.
+- If you introduce a new external dependency (datasource, message broker, external API), document its required configuration properties and mark them clearly in a template `.env.example` or `application-example.yml`.
+
+### 6.4 Input Validation
+
+All input entering the system from outside the trust boundary must be validated before processing.
+
+- Validate at the controller layer using Bean Validation (`@Valid`, `@NotNull`, `@Size`, etc.) on request DTOs.
+- Never trust that upstream validation has run. Service methods that are callable from multiple entry points (directly via controller, or via facade delegation from another module) must re-validate preconditions that matter for correctness.
+- Use strong types at boundaries: `LoanId`, `AccountNumber`, `Money` — not raw `String` or `long`. Parsing and range validation happens at construction time, not scattered across the service layer.
+- Never construct SQL, JPQL, or any query by string concatenation. Use Spring Data query methods, `@Query` with named parameters, or `CriteriaBuilder`.
+- Never deserialise arbitrary user-supplied JSON into a generic `Map` or `Object`. Always deserialise into a typed DTO with known fields.
+
+### 6.5 PII & Sensitive Data
+
+- Never log PII: account numbers, customer names, national ID numbers, dates of birth, balances, transaction amounts, or authentication tokens.
+- Log identifiers (e.g. `loanId=LOAN-123`, `customerId=CUS-456`) — not values.
+- When in doubt about whether a field is sensitive: treat it as sensitive.
+- Do not include sensitive fields in exception messages. Exceptions propagate into logs.
+
+```java
+// ✅ Safe to log
+log.info("Accrual triggered for loanId={}", loanId);
+
+// ❌ Never log
+log.info("Accrual for customer {} (IBAN: {}), amount={}", customer.getName(), iban, amount);
+```
+
+### 6.6 Audit Log
+
+Every entity in the system carries standard audit metadata managed automatically:
+
+```java
+// On every entity — maintained by JPA auditing, never set manually
+private Long version;          // optimistic locking
+private String createdBy;      // set once at creation
+private Instant createdAt;     // set once at creation
+private String updatedBy;      // updated on every mutation
+private Instant updatedAt;     // updated on every mutation
+```
+
+**Rules for the agent:**
+
+- Never set `createdBy`, `createdAt`, `updatedBy`, or `updatedAt` manually in application code. These are populated by Spring Data's `@CreatedBy`, `@CreatedDate`, `@LastModifiedBy`, `@LastModifiedDate` auditing. If you find code setting them manually, flag it.
+- Never omit `version` from a new entity. Optimistic locking is non-negotiable in a concurrent banking system.
+- For operations that go beyond field-level tracking (irreversible actions, regulatory events, financial state transitions), write an explicit audit log entry. The minimum payload is: who, what operation, on which entity, at what time, and the relevant before/after values or key parameters.
+
+**Operations that always require an explicit audit log entry:**
+- Any financial transaction (transfer, payment, fee posting, interest settlement).
+- Account state transitions (open → frozen, active → closed).
+- Manual overrides or corrections by an operator.
+- Any operation triggered by a user with elevated privileges.
+- Failed authorisation attempts on sensitive endpoints.
+
+```java
+// Example audit log entry for a state transition
+auditLogger.record(AuditEvent.builder()
+    .actor(SecurityContext.currentUser())
+    .operation("ACCOUNT_FROZEN")
+    .entityType("Account")
+    .entityId(account.getId().toString())
+    .detail("reason", freezeRequest.getReason())
+    .detail("previousStatus", account.getStatus().name())
+    .build());
+```
+
+### 6.7 What Not To Do
+
+- **Don't remove or comment out `@PreAuthorize` annotations** to "make testing easier." Use `@WithMockUser` or `SecurityMockMvcRequestPostProcessors` in tests instead.
+- **Don't add a `permitAll()` rule** to any endpoint without explicit discussion. There should be very few, if any, unauthenticated endpoints in a banking core.
+- **Don't catch `AccessDeniedException`** and swallow it. Let it propagate so Spring Security returns the correct 403.
+- **Don't write authorisation logic in repositories** (e.g. filtering rows based on the current user). This belongs in the service or facade layer where the intent is explicit.
+- **Don't introduce new transitive dependencies** without checking their security advisories. Flag new deps in your plan.
+
+---
+
+## 7. Git & Branching
+
+### 7.1 Strategy — GitHub Flow
+
+One long-lived branch: `main`. All work happens on short-lived feature branches that merge into `main` via a squash merge.
+
+```
+main
+ ├── feat/CORE-123-interest-accrual-batch
+ ├── fix/CORE-456-accrual-day-count-off-by-one
+ └── chore/CORE-789-upgrade-spring-boot
+```
+
+`main` is always deployable. Never push work-in-progress directly to `main`.
+
+### 7.2 Branch Naming
+
+```
+<type>/TICKET-ID-short-description-in-kebab-case
+```
+
+Types mirror Conventional Commits: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`.
+
+```
+// ✅ Good
+feat/CORE-123-interest-accrual-batch
+fix/CORE-456-accrual-day-count-off-by-one
+refactor/CORE-101-extract-day-count-convention
+docs/CORE-202-agent-rules
+test/CORE-303-accrual-service-unit-tests
+
+// ❌ Bad
+johns-branch
+fix-bug
+CORE-123
+feature/new-stuff
+```
+
+The ticket ID is mandatory. If there is no ticket, create one before branching — especially in a banking core where every change must be traceable.
+
+### 7.3 Commit Messages — Conventional Commits
+
+Commits on feature branches can be granular and informal — they will be squashed. The **squash commit message** that lands on `main` must follow Conventional Commits exactly.
+
+```
+<type>(<scope>): <short summary, present tense, lowercase, no period>
+
+[optional body — explain WHY, not WHAT]
+
+[optional footer — breaking changes, ticket references]
+```
+
+**Types:**
+
+| Type | When to use |
+|---|---|
+| `feat` | A new feature or capability |
+| `fix` | A bug fix |
+| `refactor` | Code change with no behaviour change |
+| `chore` | Dependency updates, build config, tooling |
+| `docs` | Documentation only |
+| `test` | Adding or fixing tests |
+| `perf` | Performance improvement |
+
+**Scope** is the module or layer affected: `accrual`, `loan`, `account`, `auth`, `api`, `db`, etc.
+
+```
+// ✅ Good
+feat(accrual): add nightly interest accrual batch job
+fix(loan): use 30/360 day-count for fixed-rate products
+refactor(account): extract AccountStatusTransition value object
+chore(deps): upgrade spring-boot to 4.1.2
+test(accrual): add unit tests for penalty calculation edge cases
+
+// ❌ Bad
+fixed stuff
+WIP
+CORE-123
+feat: changes
+update loan service
+```
+
+**Breaking changes** go in the footer with `BREAKING CHANGE:`:
+
+```
+feat(loan)!: replace String loanId with strongly-typed LoanId record
+
+BREAKING CHANGE: All callers must migrate from String to LoanId.of(string).
+Affects: payments-api, account-api, reporting-api.
+Refs: CORE-500
+```
+
+### 7.4 Pull Requests
+
+- One PR per ticket. If a task grows beyond one logical change, split it.
+- **PR title = the squash commit message.** Write it in Conventional Commits format — it becomes the `main` history entry.
+- Keep PRs small. A good PR changes one thing and is reviewable in under 30 minutes. If it touches more than ~400 lines, consider splitting.
+- The PR description must explain **why**, not just what. Link the ticket. If there is a non-obvious design decision, explain it — the reviewer should not have to read the full diff to understand the intent.
+- Never merge a PR with failing CI.
+
+### 7.5 What the Agent Should and Should Not Do
+
+**The agent may:**
+- Suggest a branch name and squash commit message when completing a task.
+- Remind you to link a ticket if none is mentioned.
+- Draft a PR description summarising the change and the reasoning.
+
+**The agent must not:**
+- Push branches, create PRs, or merge anything autonomously unless explicitly asked.
+- Amend or rewrite existing commits on `main`.
+- Combine unrelated changes into one branch to "keep things tidy."
+- Suggest skipping a ticket reference because the change is "too small."
+
+### 7.6 What Not To Do
+
+- **Don't commit directly to `main`** — even for one-line fixes. Branch, PR, squash merge.
+- **Don't leave branches open for more than a few days.** Long-lived branches accumulate conflicts and make review harder.
+- **Don't force-push on a shared branch** — it rewrites history others may have pulled.
+- **Don't mix concerns in one branch** — a refactor and a feature in the same PR makes the diff unreadable and rollback impossible.
+- **Don't write commit messages in past tense.** Use the imperative: `add`, `fix`, `remove` — not `added`, `fixed`, `removed`.
+
+---
+
+## 8. Quick Reference — What to Do When in Doubt
+
+| Situation | Rule |
+|---|---|
+| Unsure about a business rule | Stop and ask. Don't guess. |
+| Tempted to call another module's internal class | Expose it via the module's `-api` instead |
+| Writing a domain entity | Add full JavaDoc (lifecycle, invariants, business context) |
+| Writing a service method with a business decision | Document the decision and its rationale |
+| Adding a new cross-module dependency | State it explicitly in your plan before implementing |
+| Noticing a bug adjacent to your task | Mention it, don't fix it |
+| Code works but feels long | If it could be half the length, rewrite it |
+| Asked to implement a feature | Do not add tests unless explicitly asked |
+| Asked to write a test | Default to unit test + Mockito; only use Testcontainers if DB/HTTP is essential |
+| Tempted to add tests to existing untested code | Don't. The gaps are intentional at this stage. |
+| Adding a `@PreAuthorize` to a controller method | Check the corresponding service method also has one — that is the authoritative boundary |
+| Tempted to log a field value for debugging | Ask: is this PII or a financial value? If yes, log the ID only |
+| Writing a financial state transition | Add an explicit audit log entry — entity-level auditing alone is not enough |
+| Unsure if an endpoint needs authentication | It does. Ask before adding `permitAll()`. |
+| Introducing a new secret or credential | Use env vars / secrets manager. Never commit it. |
+| Starting any piece of work | Is there a ticket? If not, ask before branching. |
+| Completing a task | Suggest a branch name, squash commit message, and PR description. |
+| Tempted to combine two changes in one branch | Don't. One PR per concern. |

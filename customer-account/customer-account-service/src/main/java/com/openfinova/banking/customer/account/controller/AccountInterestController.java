@@ -56,11 +56,7 @@ public class AccountInterestController {
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
             @Valid @RequestBody SetInterestRateRequest request) {
 
-        log.info(
-                "Setting interest rate for account {}: type={}, rate={}",
-                id,
-                request.getRateType(),
-                request.getAnnualPercentageRate());
+        log.info("Setting interest rate for account {}: type={}", id, request.getRateType());
 
         InterestRate.RateType rateType = InterestRate.RateType.valueOf(request.getRateType().name());
         InterestRate rate = interestRateService
@@ -107,7 +103,7 @@ public class AccountInterestController {
 
         BigDecimal accruedInterest = accountService.calculateAccruedInterest(id, fromDate, toDate);
 
-        log.info("Calculated accrued interest for account {}: {}", id, accruedInterest);
+        log.info("Calculated accrued interest for account {}", id);
 
         return ResponseEntity.ok(Map.of("accruedInterest", accruedInterest));
     }
@@ -123,7 +119,7 @@ public class AccountInterestController {
             @Parameter(description = "Posting date") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate postingDate,
             @Parameter(description = "Posted by") @RequestParam String postedBy) {
 
-        log.info("Posting accrued interest for account {}: amount={}, date={}", id, interestAmount, postingDate);
+        log.info("Posting accrued interest for account {}: date={}", id, postingDate);
 
         accountService.postAccruedInterest(id, interestAmount, postingDate, postedBy);
 

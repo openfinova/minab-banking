@@ -7,12 +7,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.openfinova.banking.tp.api.entity.CompensationStepStatus;
-import com.openfinova.banking.tp.api.entity.CompensationType;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import com.openfinova.banking.tp.api.entity.CompensationStatus;
+import com.openfinova.banking.tp.api.entity.CompensationStepStatus;
+import com.openfinova.banking.tp.api.entity.CompensationType;
 import com.openfinova.banking.tp.converter.CompensationStepListConverter;
 
 import jakarta.persistence.Column;
@@ -131,7 +131,7 @@ public class CompensationWorkflow {
      * @param context   additional context for the transition
      * @throws IllegalStateException if transition is not valid
      */
-    public void transitionTo(CompensationStatus newStatus, String context) {
+    public void transitionTo(CompensationStatus newStatus, String context, LocalDateTime now) {
         if (!workflowStatus.canTransitionTo(newStatus)) {
             throw new IllegalStateException(
                     String.format("Invalid workflow state transition from %s to %s", workflowStatus, newStatus));
@@ -144,13 +144,13 @@ public class CompensationWorkflow {
             case INITIATED, IN_PROGRESS -> {
                 // No specific timing update for these states
             }
-            case COMPLETED -> this.completedAt = LocalDateTime.now();
+            case COMPLETED -> this.completedAt = now;
             case ESCALATED -> {
-                this.escalatedAt = LocalDateTime.now();
+                this.escalatedAt = now;
                 this.escalationReason = context;
             }
-            case FAILED -> calculateNextRetryTime();
-            case CANCELLED -> this.completedAt = LocalDateTime.now();
+            case FAILED -> calculateNextRetryTime(now);
+            case CANCELLED -> this.completedAt = now;
         }
     }
 
@@ -170,16 +170,16 @@ public class CompensationWorkflow {
      * Increments the retry count and calculates next retry time using exponential
      * backoff
      */
-    public void incrementRetryCount() {
+    public void incrementRetryCount(LocalDateTime now) {
         this.retryCount++;
-        calculateNextRetryTime();
+        calculateNextRetryTime(now);
     }
 
     /**
      * Calculates the next retry time using exponential backoff
      * Base delay: 1 minute, max delay: 60 minutes
      */
-    private void calculateNextRetryTime() {
+    private void calculateNextRetryTime(LocalDateTime now) {
         if (retryCount >= maxRetries) {
             this.nextRetryAt = null;
             return;
@@ -187,7 +187,7 @@ public class CompensationWorkflow {
 
         // Exponential backoff: 1min, 2min, 4min, 8min, etc., capped at 60min
         long delayMinutes = Math.min(60, (long) Math.pow(2, retryCount));
-        this.nextRetryAt = LocalDateTime.now().plusMinutes(delayMinutes);
+        this.nextRetryAt = now.plusMinutes(delayMinutes);
     }
 
     /**
@@ -204,8 +204,8 @@ public class CompensationWorkflow {
      *
      * @return true if ready for retry
      */
-    public boolean isReadyForRetry() {
-        return canRetry() && nextRetryAt != null && LocalDateTime.now().isAfter(nextRetryAt);
+    public boolean isReadyForRetry(LocalDateTime now) {
+        return canRetry() && nextRetryAt != null && now.isAfter(nextRetryAt);
     }
 
     /**
@@ -228,8 +228,8 @@ public class CompensationWorkflow {
      * @param reason      the reason for escalation
      * @param escalatedBy who escalated the workflow
      */
-    public void escalate(String reason, String escalatedBy) {
-        transitionTo(CompensationStatus.ESCALATED, reason);
+    public void escalate(String reason, String escalatedBy, LocalDateTime now) {
+        transitionTo(CompensationStatus.ESCALATED, reason, now);
         this.escalatedBy = escalatedBy;
     }
 

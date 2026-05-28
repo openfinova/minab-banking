@@ -59,7 +59,7 @@ public class TokenCustomizerConfig {
 
             BankingUser freshUser = userRepository.findById(details.getUserId()).orElse(null);
             if (freshUser != null) {
-                LocalDateTime now = LocalDateTime.now(dateTimeService.clock());
+                LocalDateTime now = dateTimeService.now();
                 boolean expired = PasswordLifecycleEvaluator.isPasswordExpired(freshUser, passwordPolicy, now);
                 if (expired && !freshUser.isForcePasswordChange()) {
                     throw new OAuth2AuthenticationException(

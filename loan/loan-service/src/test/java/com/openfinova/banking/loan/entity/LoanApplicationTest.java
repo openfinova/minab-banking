@@ -1,6 +1,7 @@
 package com.openfinova.banking.loan.entity;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,6 +11,7 @@ import com.openfinova.banking.loan.api.entity.ApplicationStatus;
 import com.openfinova.banking.loan.api.entity.GuarantorType;
 
 class LoanApplicationTest {
+    private static final LocalDate TODAY = LocalDate.of(2026, 1, 1);
 
     @Test
     void approve_and_reject_updateState() {
@@ -22,7 +24,7 @@ class LoanApplicationTest {
         app.setApplicationNumber("APP-UT-1");
         app.setStatus(ApplicationStatus.UNDERWRITING);
 
-        app.approve(new BigDecimal("4800"), 24, new BigDecimal("6.5"), "underwriter-1");
+        app.approve(new BigDecimal("4800"), 24, new BigDecimal("6.5"), "underwriter-1", TODAY);
 
         assertThat(app.getStatus()).isEqualTo(ApplicationStatus.APPROVED);
         assertThat(app.isApproved()).isTrue();
@@ -36,7 +38,7 @@ class LoanApplicationTest {
                 "USD");
         rejected.setApplicationNumber("APP-UT-2");
         rejected.setStatus(ApplicationStatus.UNDERWRITING);
-        rejected.reject("DTI too high", "uw-2");
+        rejected.reject("DTI too high", "uw-2", TODAY);
         assertThat(rejected.isRejected()).isTrue();
         assertThat(rejected.getRejectionReason()).isEqualTo("DTI too high");
     }

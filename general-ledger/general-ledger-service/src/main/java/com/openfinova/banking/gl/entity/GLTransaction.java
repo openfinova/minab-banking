@@ -4,8 +4,10 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.openfinova.banking.common.lib.validation.ValidCurrency;
 import com.openfinova.banking.gl.api.entity.GLTransactionSource;
@@ -24,6 +26,7 @@ import java.util.UUID;
  * Each transaction contains multiple journal entries that must balance (debits = credits).
  */
 @Entity(name = "GeneralLedgerTransaction")
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "gl_transactions", indexes = {
         @Index(name = "idx_gl_transactions_reference", columnList = "reference_id"),
         @Index(name = "idx_gl_transactions_date", columnList = "transaction_date"),
@@ -139,16 +142,16 @@ public class GLTransaction {
     @OrderBy("lineNumber ASC")
     private List<GLJournalEntry> journalEntries = new ArrayList<>();
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp
+    @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @CreatedBy
     @Column(name = "created_by", nullable = false, length = 100)
-    @NotBlank(message = "Created by is required")
     @Size(max = 100, message = "Created by must not exceed 100 characters")
     private String createdBy;
 
@@ -181,11 +184,10 @@ public class GLTransaction {
     public GLTransaction() {
     }
 
-    public GLTransaction(String referenceId, String description, LocalDate transactionDate, String createdBy) {
+    public GLTransaction(String referenceId, String description, LocalDate transactionDate) {
         this.referenceId = referenceId;
         this.description = description;
         this.transactionDate = transactionDate;
-        this.createdBy = createdBy;
         this.status = GLTransactionStatus.DRAFT;
         this.source = GLTransactionSource.MANUAL_ENTRY;
     }
@@ -292,13 +294,13 @@ public class GLTransaction {
      * @param submitter username of the person submitting for approval
      * @throws IllegalStateException if transaction is not in DRAFT status
      */
-    public void submitForApproval(String submitter) {
+    public void submitForApproval(String submitter, LocalDateTime submittedAt) {
         if (!isDraft()) {
             throw new IllegalStateException("Only draft transactions can be submitted for approval");
         }
         this.status = GLTransactionStatus.PENDING_APPROVAL;
         this.submittedBy = submitter;
-        this.submittedAt = LocalDateTime.now();
+        this.submittedAt = submittedAt;
     }
 
     /**
@@ -307,14 +309,14 @@ public class GLTransaction {
      * @param approver username of the person approving (or "SYSTEM" for auto-approved)
      * @throws IllegalStateException if transaction is not ready to post
      */
-    public void approveAndPost(String approver) {
+    public void approveAndPost(String approver, Instant postingDate) {
         if (!isPendingApproval() && !isDraft()) {
             throw new IllegalStateException(
                     "Only pending approval or draft transactions can be approved. Current status: " + status);
         }
         this.status = GLTransactionStatus.POSTED;
         this.postedBy = approver;
-        this.postingDate = Instant.now();
+        this.postingDate = postingDate;
     }
 
     /**

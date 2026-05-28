@@ -1,26 +1,47 @@
 package com.openfinova.banking.gl.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.openfinova.banking.gl.api.entity.AgingBracket;
 import com.openfinova.banking.gl.api.entity.EscalationLevel;
 import com.openfinova.banking.gl.api.entity.GLTransactionSource;
 import com.openfinova.banking.gl.api.entity.OperationalGLAccountType;
 import com.openfinova.banking.gl.api.entity.SuspenseStatus;
-import com.openfinova.banking.gl.dto.*;
-import com.openfinova.banking.gl.entity.*;
+import com.openfinova.banking.gl.dto.ClearSuspenseRequest;
+import com.openfinova.banking.gl.dto.SuspenseAgingBucketDTO;
+import com.openfinova.banking.gl.dto.SuspenseAgingReportDTO;
+import com.openfinova.banking.gl.dto.SuspenseItemFilterDTO;
+import com.openfinova.banking.gl.dto.SuspenseItemResponse;
+import com.openfinova.banking.gl.entity.GLAccount;
+import com.openfinova.banking.gl.entity.GLJournalEntry;
+import com.openfinova.banking.gl.entity.GLTransaction;
+import com.openfinova.banking.gl.entity.SuspenseClearingRule;
+import com.openfinova.banking.gl.entity.SuspenseEscalation;
+import com.openfinova.banking.gl.entity.SuspenseItem;
 import com.openfinova.banking.gl.mapper.SuspenseMapper;
 import com.openfinova.banking.gl.repository.SuspenseClearingRuleRepository;
 import com.openfinova.banking.gl.repository.SuspenseEscalationRepository;
 import com.openfinova.banking.gl.repository.SuspenseItemRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.*;
-import java.util.stream.Collectors;
+import com.openfinova.banking.identity.api.principal.BankingPrincipal;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Consolidated service for managing suspense account operations.
@@ -57,11 +78,12 @@ public class SuspenseAccountService {
     private final GLTransactionService transactionService;
     private final GLAccountService accountService;
     private final OperationalGLAccountService operationalGLAccountService;
+    private final DateTimeService dateTimeService;
 
     public SuspenseAccountService(SuspenseItemRepository suspenseItemRepository,
             SuspenseClearingRuleRepository clearingRuleRepository, SuspenseEscalationRepository escalationRepository,
             SuspenseMapper mapper, GLTransactionService transactionService, GLAccountService accountService,
-            OperationalGLAccountService operationalGLAccountService) {
+            OperationalGLAccountService operationalGLAccountService, DateTimeService dateTimeService) {
         this.suspenseItemRepository = suspenseItemRepository;
         this.clearingRuleRepository = clearingRuleRepository;
         this.escalationRepository = escalationRepository;
@@ -69,12 +91,15 @@ public class SuspenseAccountService {
         this.transactionService = transactionService;
         this.accountService = accountService;
         this.operationalGLAccountService = operationalGLAccountService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
      * Clear a suspense item to the target account.
      * Creates offsetting GL transaction to move amount from suspense to correct account.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public SuspenseItemResponse clearSuspenseItem(UUID suspenseItemId, ClearSuspenseRequest request) {
         logger.info("Clearing suspense item {} to account {}", suspenseItemId, request.getTargetAccountId());
 
@@ -105,22 +130,20 @@ public class SuspenseAccountService {
                 ? entryDescription + ": " + request.getResolutionNotes()
                 : entryDescription;
 
-        GLTransaction clearingTx = new GLTransaction(
-                clearingRef,
-                txnDescription,
-                LocalDate.now(),
-                request.getClearedBy());
+        GLTransaction clearingTx = new GLTransaction(clearingRef, txnDescription, dateTimeService.today());
         clearingTx.setCurrency(item.getCurrency());
         clearingTx.setSource(GLTransactionSource.SYSTEM_GENERATED);
 
         BigDecimal amount = item.getAmount();
 
-        GLJournalEntry debitEntry = GLJournalEntry.debit(targetAccount, amount, entryDescription, LocalDate.now());
+        GLJournalEntry debitEntry = GLJournalEntry
+                .debit(targetAccount, amount, entryDescription, dateTimeService.today());
         debitEntry.setCurrency(item.getCurrency());
         debitEntry.setBaseDebitAmount(amount);
         debitEntry.setBaseCreditAmount(BigDecimal.ZERO);
 
-        GLJournalEntry creditEntry = GLJournalEntry.credit(suspenseAccount, amount, entryDescription, LocalDate.now());
+        GLJournalEntry creditEntry = GLJournalEntry
+                .credit(suspenseAccount, amount, entryDescription, dateTimeService.today());
         creditEntry.setCurrency(item.getCurrency());
         creditEntry.setBaseDebitAmount(BigDecimal.ZERO);
         creditEntry.setBaseCreditAmount(amount);
@@ -131,7 +154,7 @@ public class SuspenseAccountService {
         GLTransaction postedClearingTx = transactionService.postTransaction(clearingTx);
 
         item.setTargetAccount(targetAccount);
-        item.markCleared(request.getClearedBy(), postedClearingTx);
+        item.markCleared(request.getClearedBy(), postedClearingTx, dateTimeService.today());
 
         SuspenseItem saved = suspenseItemRepository.save(item);
         logger.info("Cleared suspense item {} with clearing transaction {}", saved.getId(), postedClearingTx.getId());
@@ -142,6 +165,8 @@ public class SuspenseAccountService {
     /**
      * Get suspense item by ID.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public SuspenseItemResponse getSuspenseItem(UUID id) {
         SuspenseItem item = suspenseItemRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Suspense item not found: " + id));
@@ -151,6 +176,8 @@ public class SuspenseAccountService {
     /**
      * Find suspense items with filters.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public Page<SuspenseItemResponse> findSuspenseItems(SuspenseItemFilterDTO filter, Pageable pageable) {
         // TODO: Implement dynamic query based on filter criteria
         // For now, simple status filter
@@ -165,6 +192,8 @@ public class SuspenseAccountService {
     /**
      * Start investigation on a suspense item.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public SuspenseItemResponse startInvestigation(UUID suspenseItemId, String investigator) {
         SuspenseItem item = suspenseItemRepository.findById(suspenseItemId)
                 .orElseThrow(() -> new IllegalArgumentException("Suspense item not found: " + suspenseItemId));
@@ -180,6 +209,8 @@ public class SuspenseAccountService {
      * Generate aging report for suspense items.
      * Groups items by aging bracket with totals.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public SuspenseAgingReportDTO generateAgingReport(String currency) {
         logger.info("Generating aging report for currency: {}", currency);
 
@@ -190,7 +221,7 @@ public class SuspenseAccountService {
 
         // Group by aging bracket
         Map<AgingBracket, List<SuspenseItem>> buckets = activeItems.stream()
-                .collect(Collectors.groupingBy(SuspenseItem::getAgingBracket));
+                .collect(Collectors.groupingBy(item -> item.getAgingBracket(dateTimeService.today())));
 
         List<SuspenseAgingBucketDTO> agingBuckets = new ArrayList<>();
         for (AgingBracket bracket : AgingBracket.values()) {
@@ -220,8 +251,10 @@ public class SuspenseAccountService {
     /**
      * Get items older than specified days.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<SuspenseItemResponse> getItemsOlderThan(int days) {
-        LocalDate cutoffDate = LocalDate.now().minusDays(days);
+        LocalDate cutoffDate = dateTimeService.today().minusDays(days);
         return suspenseItemRepository.findItemsOlderThan(cutoffDate).stream().map(mapper::toSuspenseItemResponse)
                 .collect(Collectors.toList());
     }
@@ -229,6 +262,8 @@ public class SuspenseAccountService {
     /**
      * Get items requiring AML review.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<SuspenseItemResponse> getItemsRequiringAMLReview() {
         return suspenseItemRepository.findItemsRequiringAMLReview().stream().map(mapper::toSuspenseItemResponse)
                 .collect(Collectors.toList());
@@ -238,6 +273,8 @@ public class SuspenseAccountService {
      * Apply automatic clearing rules to eligible suspense items.
      * Returns count of items cleared.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public int applyAutomaticClearingRules() {
         logger.info("Applying automatic clearing rules");
 
@@ -273,21 +310,20 @@ public class SuspenseAccountService {
                     GLTransaction autoClearingTx = new GLTransaction(
                             autoClearRef,
                             autoEntryDesc,
-                            LocalDate.now(),
-                            SYSTEM_USER);
+                            dateTimeService.today());
                     autoClearingTx.setCurrency(item.getCurrency());
                     autoClearingTx.setSource(GLTransactionSource.SYSTEM_GENERATED);
 
                     BigDecimal autoAmount = item.getAmount();
 
                     GLJournalEntry autoDebitEntry = GLJournalEntry
-                            .debit(ruleTargetAccount, autoAmount, autoEntryDesc, LocalDate.now());
+                            .debit(ruleTargetAccount, autoAmount, autoEntryDesc, dateTimeService.today());
                     autoDebitEntry.setCurrency(item.getCurrency());
                     autoDebitEntry.setBaseDebitAmount(autoAmount);
                     autoDebitEntry.setBaseCreditAmount(BigDecimal.ZERO);
 
                     GLJournalEntry autoCreditEntry = GLJournalEntry
-                            .credit(suspenseAccount, autoAmount, autoEntryDesc, LocalDate.now());
+                            .credit(suspenseAccount, autoAmount, autoEntryDesc, dateTimeService.today());
                     autoCreditEntry.setCurrency(item.getCurrency());
                     autoCreditEntry.setBaseDebitAmount(BigDecimal.ZERO);
                     autoCreditEntry.setBaseCreditAmount(autoAmount);
@@ -298,7 +334,7 @@ public class SuspenseAccountService {
                     GLTransaction postedAutoClearingTx = transactionService.postTransaction(autoClearingTx);
 
                     item.setTargetAccount(ruleTargetAccount);
-                    item.markAutoCleared(postedAutoClearingTx);
+                    item.markAutoCleared(postedAutoClearingTx, dateTimeService.today());
                     suspenseItemRepository.save(item);
 
                     clearedCount++;
@@ -317,13 +353,16 @@ public class SuspenseAccountService {
      * Find the highest priority matching rule for an item.
      */
     private SuspenseClearingRule findMatchingRule(SuspenseItem item, List<SuspenseClearingRule> rules) {
-        return rules.stream().filter(rule -> rule.matches(item)).findFirst().orElse(null);
+        var today = dateTimeService.today();
+        return rules.stream().filter(rule -> rule.matches(item, today)).findFirst().orElse(null);
     }
 
     /**
      * Check escalation thresholds and create escalations for aged items.
      * Returns count of new escalations created.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public int checkEscalationThresholds() {
         logger.info("Checking escalation thresholds");
 
@@ -355,7 +394,7 @@ public class SuspenseAccountService {
      * Determine required escalation level based on item age.
      */
     private EscalationLevel determineRequiredEscalationLevel(SuspenseItem item) {
-        long ageDays = item.getAgeDays();
+        long ageDays = item.getAgeDays(dateTimeService.today());
 
         if (ageDays >= 180) {
             return EscalationLevel.CRITICAL_BOARD_LEVEL;
@@ -378,13 +417,20 @@ public class SuspenseAccountService {
     public void createEscalation(SuspenseItem item, EscalationLevel level) {
         logger.info("Creating escalation for item {} at level {}", item.getId(), level);
 
-        LocalDate dueDate = LocalDate.now().plusDays(level.getTypicalAgeDays());
-        String assignedTo = "TODO_ASSIGN"; // TODO: Determine assignee based on level and organizational structure
+        LocalDate dueDate = dateTimeService.today().plusDays(level.getTypicalAgeDays());
+        String assignedTo = resolveCurrentActor();
 
-        SuspenseEscalation escalation = new SuspenseEscalation(item, level, assignedTo, dueDate);
+        SuspenseEscalation escalation = new SuspenseEscalation(
+                item,
+                level,
+                assignedTo,
+                dueDate,
+                dateTimeService.today());
         escalation.setEscalationNotes(
-                String.format("Auto-escalated: Item aged %d days exceeds threshold for %s", item.getAgeDays(), level));
-        escalation.setCreatedBy(SYSTEM_USER);
+                String.format(
+                        "Auto-escalated: Item aged %d days exceeds threshold for %s",
+                        item.getAgeDays(dateTimeService.today()),
+                        level));
 
         escalationRepository.save(escalation);
 
@@ -398,6 +444,8 @@ public class SuspenseAccountService {
     /**
      * Get all unresolved escalations.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<SuspenseEscalation> getUnresolvedEscalations() {
         return escalationRepository.findByIsResolvedFalseOrderByDueDateAsc();
     }
@@ -405,18 +453,22 @@ public class SuspenseAccountService {
     /**
      * Get overdue escalations (past due date).
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<SuspenseEscalation> getOverdueEscalations() {
-        return escalationRepository.findOverdueEscalations(LocalDate.now());
+        return escalationRepository.findOverdueEscalations(dateTimeService.today());
     }
 
     /**
      * Resolve an escalation.
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public void resolveEscalation(UUID escalationId, String resolvedBy, String resolutionNotes) {
         SuspenseEscalation escalation = escalationRepository.findById(escalationId)
                 .orElseThrow(() -> new IllegalArgumentException("Escalation not found: " + escalationId));
 
-        escalation.resolve(resolvedBy, resolutionNotes);
+        escalation.resolve(resolvedBy, resolutionNotes, dateTimeService.today());
         escalationRepository.save(escalation);
 
         logger.info("Resolved escalation {} by {}", escalationId, resolvedBy);
@@ -425,6 +477,8 @@ public class SuspenseAccountService {
     /**
      * Get summary statistics for active suspense items.
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public Map<String, Object> getSuspenseStatistics() {
         Map<String, Object> stats = new HashMap<>();
 
@@ -442,5 +496,17 @@ public class SuspenseAccountService {
         stats.put("escalatedItems", escalatedCount);
 
         return stats;
+    }
+
+    private String resolveCurrentActor() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated()) {
+            try {
+                return BankingPrincipal.from(auth).username();
+            } catch (IllegalArgumentException ignored) {
+                // Fall through to system user for batch/unauthenticated contexts
+            }
+        }
+        return SYSTEM_USER;
     }
 }

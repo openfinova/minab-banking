@@ -4,8 +4,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -22,6 +29,7 @@ import jakarta.persistence.Version;
  * Entity representing a holiday in the system.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "holidays", uniqueConstraints = @UniqueConstraint(name = "uk_holiday_date_country_region", columnNames = {
         "holiday_date", "country_code", "region_code" }), indexes = {
                 @Index(name = "idx_holiday_country_year", columnList = "country_code, holiday_year"),
@@ -62,15 +70,19 @@ public class Holiday {
     @Column(name = "is_observed_holiday", nullable = false)
     private Boolean observedHoliday;
 
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @LastModifiedDate
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @CreatedBy
     @Column(name = "created_by", length = 100)
     private String createdBy;
 
+    @LastModifiedBy
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 
@@ -102,8 +114,6 @@ public class Holiday {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
         if (date != null) {
             year = date.getYear();
         }
@@ -111,7 +121,6 @@ public class Holiday {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
         if (date != null) {
             year = date.getYear();
         }

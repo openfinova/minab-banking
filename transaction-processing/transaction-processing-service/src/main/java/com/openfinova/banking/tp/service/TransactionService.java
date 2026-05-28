@@ -20,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -95,6 +96,7 @@ public class TransactionService {
         this.eventPublisher = eventPublisher;
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public Transaction initiateTransaction(TransactionRequest request) {
         logger.info("Initiating transaction for request: {}", request.getIdempotencyKey());
 
@@ -112,7 +114,7 @@ public class TransactionService {
         TransactionRequest savedRequest = transactionRequestRepository.save(request);
 
         // Create and persist the transaction
-        Transaction transaction = new Transaction(savedRequest);
+        Transaction transaction = new Transaction(savedRequest, dateTimeService.today(), dateTimeService.now());
 
         // Record initiation event
         recordTransactionEvent(
@@ -127,6 +129,7 @@ public class TransactionService {
         return savedTransaction;
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public Transaction processTransaction(UUID transactionId) {
         logger.info("Processing transaction: {}", transactionId);
 
@@ -152,25 +155,31 @@ public class TransactionService {
             createBalanceReservation(transaction);
 
             // Step 4: Transition to PENDING_RESERVATION
-            transaction.transitionTo(TransactionStatus.PENDING_RESERVATION, "Balance reservation created");
+            transaction.transitionTo(
+                    TransactionStatus.PENDING_RESERVATION,
+                    "Balance reservation created",
+                    dateTimeService.now());
 
             // Step 5: External authorization (simulated)
             performExternalAuthorization(transaction);
 
             // Step 6: Transition to AUTHORIZED
-            transaction.transitionTo(TransactionStatus.AUTHORIZED, "External authorization completed");
+            transaction.transitionTo(
+                    TransactionStatus.AUTHORIZED,
+                    "External authorization completed",
+                    dateTimeService.now());
 
             // Step 7: GL posting handoff
             initiateGLPosting(transaction);
 
             // Step 8: Transition to POSTED
-            transaction.transitionTo(TransactionStatus.POSTED, "GL posting completed");
+            transaction.transitionTo(TransactionStatus.POSTED, "GL posting completed", dateTimeService.now());
 
             Transaction savedTransaction = transactionRepository.save(transaction);
             logger.info("Transaction processed successfully: {}", transactionId);
             return savedTransaction;
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.error("Transaction processing failed for transaction: {}", transactionId, e);
             return failTransaction(transactionId, e.getMessage(), "PROCESSING_ERROR");
         }
@@ -213,26 +222,34 @@ public class TransactionService {
             createBalanceReservation(transaction);
 
             // Step 6: Transition to PENDING_RESERVATION
-            transaction
-                    .transitionTo(TransactionStatus.PENDING_RESERVATION, "Multi-currency balance reservation created");
+            transaction.transitionTo(
+                    TransactionStatus.PENDING_RESERVATION,
+                    "Multi-currency balance reservation created",
+                    dateTimeService.now());
 
             // Step 7: External authorization (simulated)
             performExternalAuthorization(transaction);
 
             // Step 8: Transition to AUTHORIZED
-            transaction.transitionTo(TransactionStatus.AUTHORIZED, "Multi-currency external authorization completed");
+            transaction.transitionTo(
+                    TransactionStatus.AUTHORIZED,
+                    "Multi-currency external authorization completed",
+                    dateTimeService.now());
 
             // Step 9: GL posting handoff
             initiateGLPosting(transaction);
 
             // Step 10: Transition to POSTED
-            transaction.transitionTo(TransactionStatus.POSTED, "Multi-currency GL posting completed");
+            transaction.transitionTo(
+                    TransactionStatus.POSTED,
+                    "Multi-currency GL posting completed",
+                    dateTimeService.now());
 
             Transaction savedTransaction = transactionRepository.save(transaction);
             logger.info("Multi-currency transaction processed successfully: {}", transactionId);
             return savedTransaction;
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.error("Multi-currency transaction processing failed for transaction: {}", transactionId, e);
             return failTransaction(transactionId, e.getMessage(), "MULTI_CURRENCY_PROCESSING_ERROR");
         }
@@ -368,9 +385,11 @@ public class TransactionService {
             config = new BatchProcessingConfig();
         }
 
+        LocalDateTime batchStartedAt = dateTimeService.now();
         BatchTransactionResult result = new BatchTransactionResult(
                 "BATCH-" + UUID.randomUUID().toString().substring(0, 8),
-                transactionIds.size());
+                transactionIds.size(),
+                batchStartedAt);
 
         List<TransactionResponse> successfulResults = new ArrayList<>();
         Map<UUID, String> failedResults = new HashMap<>();
@@ -407,7 +426,7 @@ public class TransactionService {
         result.setFailedResults(failedResults);
         result.setSuccessfulTransactions(successfulResults.size());
         result.setFailedTransactions(failedResults.size());
-        result.markProcessingComplete();
+        result.markProcessingComplete(dateTimeService.now());
 
         logger.info("Advanced batch processing completed: {}", result);
 
@@ -426,6 +445,7 @@ public class TransactionService {
         return transactionIds.stream().map(id -> failTransaction(id, reason, errorCode)).toList();
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public TransactionStatus getTransactionStatus(UUID transactionId) {
         Transaction transaction = getTransactionById(transactionId);
         return transaction.getStatus();
@@ -440,6 +460,7 @@ public class TransactionService {
      * Resolves an existing transaction by idempotency key (external facade / idempotency helpers).
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public Optional<Transaction> findExistingTransaction(String idempotencyKey) {
         return transactionRepository.findByTransactionKey(idempotencyKey);
     }
@@ -481,7 +502,7 @@ public class TransactionService {
     /**
      * Loads transactions with both {@code events} and {@code reservations} fully populated.
      *
-     * <p>Why two queries? Hibernate throws {@link org.hibernate.loader.MultipleBagFetchException}
+     * Why two queries? Hibernate throws {@link org.hibernate.loader.MultipleBagFetchException}
      * when you JOIN FETCH two {@code List} collections simultaneously. Both {@code events} and
      * {@code reservations} are mapped as bags (unordered {@code List} without {@code @OrderColumn}),
      * so a single query like:
@@ -492,11 +513,11 @@ public class TransactionService {
      *   LEFT JOIN FETCH t.reservations  -- BOOM: MultipleBagFetchException
      * </pre>
      *
-     * <p>is not possible. The root cause is that fetching two bags via JOIN produces a Cartesian
+     * is not possible. The root cause is that fetching two bags via JOIN produces a Cartesian
      * product in the SQL result set — if a transaction has 3 events and 3 reservations, the JOIN
      * returns 9 rows instead of 6, corrupting the hydrated entity state.
      *
-     * <p>Solution: run two separate queries within the <strong>same Hibernate session</strong>.
+     * Solution: run two separate queries within the <strong>same Hibernate session</strong>.
      * The first query loads transactions with their {@code events}. The second query loads
      * transactions with their {@code reservations}. Because both queries run in the same session,
      * Hibernate's first-level (session) cache recognises the same {@code Transaction} IDs and
@@ -507,19 +528,17 @@ public class TransactionService {
      *   Query 2 → Transaction#1 { events=[...],  reservations=[...] } ← same reference, mutated
      * </pre>
      *
-     * <p>The return value of the second query is therefore intentionally discarded — the
+     * The return value of the second query is therefore intentionally discarded — the
      * {@code transactions} list returned from the first query already holds the fully-populated
      * instances by the time the method returns.
      *
-     * <p><strong>⚠️ DO NOT:</strong>
-     * <ul>
-     *   <li>Merge the two results manually — the session cache handles this automatically.</li>
-     *   <li>Remove {@code @Transactional} — without a shared session, the cache is gone between
+     * ⚠️ DO NOT:
+     *   Merge the two results manually — the session cache handles this automatically.
+     *   Remove {@code @Transactional} — without a shared session, the cache is gone between
      *       calls and {@code reservations} will remain uninitialized, causing a
-     *       {@link org.hibernate.LazyInitializationException} on access.</li>
-     *   <li>Collapse back into one query with two {@code JOIN FETCH} — see above.</li>
-     *   <li>"Fix" the discarded return value of the second query — it is not a bug.</li>
-     * </ul>
+     *       {@link org.hibernate.LazyInitializationException} on access.
+     *   Collapse back into one query with two {@code JOIN FETCH} — see above.
+     *   "Fix" the discarded return value of the second query — it is not a bug.
      *
      * @param transactionIds the IDs of the transactions to load
      * @return transactions with {@code events} and {@code reservations} fully initialized
@@ -535,6 +554,7 @@ public class TransactionService {
         return transactionRepository.findByTransactionKey(request.getIdempotencyKey()).isPresent();
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public Transaction completeTransaction(UUID transactionId) {
         logger.info("Completing transaction: {}", transactionId);
 
@@ -575,6 +595,7 @@ public class TransactionService {
         return savedTransaction;
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public Transaction failTransaction(UUID transactionId, String reason, String errorCode) {
         logger.warn("Failing transaction: {} with reason: {}", transactionId, reason);
 
@@ -589,7 +610,7 @@ public class TransactionService {
         recordTransactionEvent(transaction, "TRANSACTION_FAILED", TransactionStatus.FAILED, reason, errorCode);
 
         // Transition to FAILED state
-        transaction.transitionTo(TransactionStatus.FAILED, reason);
+        transaction.transitionTo(TransactionStatus.FAILED, reason, dateTimeService.now());
 
         // Release any balance reservations
         releaseBalanceReservations(transaction);
@@ -697,6 +718,7 @@ public class TransactionService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public Transaction getTransactionById(UUID id) {
         return transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + id));
@@ -835,17 +857,12 @@ public class TransactionService {
         }
 
         // Validate accounts using AccountFacade
-        try {
-            if (request.getSourceAccountId() != null) {
-                validateAccountForTransaction(request.getSourceAccountId(), request, true);
-            }
+        if (request.getSourceAccountId() != null) {
+            validateAccountForTransaction(request.getSourceAccountId(), request, true);
+        }
 
-            if (request.getDestinationAccountId() != null) {
-                validateAccountForTransaction(request.getDestinationAccountId(), request, false);
-            }
-        } catch (Exception e) {
-            logger.error("Account validation failed for transaction request: {}", e.getMessage());
-            throw new IllegalArgumentException("Account validation failed: " + e.getMessage(), e);
+        if (request.getDestinationAccountId() != null) {
+            validateAccountForTransaction(request.getDestinationAccountId(), request, false);
         }
     }
 
@@ -926,28 +943,19 @@ public class TransactionService {
         if (transaction.getSourceAccountId() != null) {
             BigDecimal totalAmount = transaction.getTotalAmount();
 
-            try {
-                // Use BalanceReservationService with full transaction context
-                UUID reservationId = balanceReservationService.reserveBalanceForTransaction(
-                        transaction,
-                        transaction.getSourceAccountId(),
-                        totalAmount,
-                        ReservationType.DEBIT_HOLD);
+            UUID reservationId = balanceReservationService.reserveBalanceForTransaction(
+                    transaction,
+                    transaction.getSourceAccountId(),
+                    totalAmount,
+                    ReservationType.DEBIT_HOLD);
 
-                logger.info("Created balance reservation {} for transaction {}", reservationId, transaction.getId());
+            logger.info("Created balance reservation {} for transaction {}", reservationId, transaction.getId());
 
-                recordTransactionEvent(
-                        transaction,
-                        "BALANCE_RESERVED",
-                        transaction.getStatus(),
-                        "Balance reserved: " + totalAmount + " for account: " + transaction.getSourceAccountId());
-            } catch (Exception e) {
-                logger.error(
-                        "Failed to create balance reservation for transaction {}: {}",
-                        transaction.getId(),
-                        e.getMessage());
-                throw new RuntimeException("Balance reservation failed: " + e.getMessage(), e);
-            }
+            recordTransactionEvent(
+                    transaction,
+                    "BALANCE_RESERVED",
+                    transaction.getStatus(),
+                    "Balance reserved: " + totalAmount + " for account: " + transaction.getSourceAccountId());
         }
     }
 
@@ -993,7 +1001,7 @@ public class TransactionService {
             // Create customer-facing AccountTransactions after successful GL posting
             createAccountTransactions(transaction);
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.error("GL posting failed for transaction: {}", transaction.getId(), e);
 
             // Record the failure event
@@ -1158,160 +1166,149 @@ public class TransactionService {
     private PostTransactionCommand buildGLTransactionCommand(Transaction transaction) {
         logger.debug("Building GL transaction command for TP transaction: {}", transaction.getId());
 
-        try {
-            List<PostTransactionCommand.JournalEntryCommand> entries = new ArrayList<>();
+        List<PostTransactionCommand.JournalEntryCommand> entries = new ArrayList<>();
+        if (transaction.getSourceAccountId() != null && transaction.getDestinationAccountId() != null) {
 
-            // Handle P2P transactions (source and destination both present)
-            if (transaction.getSourceAccountId() != null && transaction.getDestinationAccountId() != null) {
+            // 1. Resolve source customer account's PRIMARY_BALANCE GL account
+            UUID sourceGLAccountId = resolveGLAccountForCustomerAccount(
+                    transaction.getSourceAccountId(),
+                    GLAccountMappingType.PRIMARY_BALANCE);
 
-                // 1. Resolve source customer account's PRIMARY_BALANCE GL account
-                UUID sourceGLAccountId = resolveGLAccountForCustomerAccount(
-                        transaction.getSourceAccountId(),
-                        GLAccountMappingType.PRIMARY_BALANCE);
+            // 2. Resolve destination customer account's PRIMARY_BALANCE GL account
+            UUID destinationGLAccountId = resolveGLAccountForCustomerAccount(
+                    transaction.getDestinationAccountId(),
+                    GLAccountMappingType.PRIMARY_BALANCE);
 
-                // 2. Resolve destination customer account's PRIMARY_BALANCE GL account
-                UUID destinationGLAccountId = resolveGLAccountForCustomerAccount(
-                        transaction.getDestinationAccountId(),
-                        GLAccountMappingType.PRIMARY_BALANCE);
+            // 3. Create DEBIT entry - reduce source customer's balance (Asset/Liability account)
+            PostTransactionCommand.JournalEntryCommand debitEntry = new PostTransactionCommand.JournalEntryCommand(
+                    sourceGLAccountId,
+                    transaction.getTotalAmount(), // debit amount (principal + fee)
+                    BigDecimal.ZERO, // credit amount
+                    "Debit from account for TP transaction: " + transaction.getIdempotencyKey(),
+                    transaction.getValueDate());
+            entries.add(debitEntry);
 
-                // 3. Create DEBIT entry - reduce source customer's balance (Asset/Liability account)
-                PostTransactionCommand.JournalEntryCommand debitEntry = new PostTransactionCommand.JournalEntryCommand(
-                        sourceGLAccountId,
-                        transaction.getTotalAmount(), // debit amount (principal + fee)
-                        BigDecimal.ZERO, // credit amount
-                        "Debit from account for TP transaction: " + transaction.getIdempotencyKey(),
-                        transaction.getValueDate());
-                entries.add(debitEntry);
+            // 4. Create CREDIT entry - increase destination customer's balance (Asset/Liability account)
+            PostTransactionCommand.JournalEntryCommand creditEntry = new PostTransactionCommand.JournalEntryCommand(
+                    destinationGLAccountId,
+                    BigDecimal.ZERO, // debit amount
+                    transaction.getPrincipalAmount(), // credit amount (principal only, without fees)
+                    "Credit to account for TP transaction: " + transaction.getIdempotencyKey(),
+                    transaction.getValueDate());
+            entries.add(creditEntry);
 
-                // 4. Create CREDIT entry - increase destination customer's balance (Asset/Liability account)
-                PostTransactionCommand.JournalEntryCommand creditEntry = new PostTransactionCommand.JournalEntryCommand(
-                        destinationGLAccountId,
-                        BigDecimal.ZERO, // debit amount
-                        transaction.getPrincipalAmount(), // credit amount (principal only, without fees)
-                        "Credit to account for TP transaction: " + transaction.getIdempotencyKey(),
-                        transaction.getValueDate());
-                entries.add(creditEntry);
-
-                // 5. Fee revenue recognition: credit FEE_INCOME when fee > 0
-                BigDecimal feeForGL = getFeeAmountForGL(transaction);
-                if (feeForGL.compareTo(BigDecimal.ZERO) > 0) {
-                    UUID feeGLAccountId = generalLedgerService
-                            .getOperationalGLAccount(OperationalGLAccountType.FEE_INCOME.name());
-                    PostTransactionCommand.JournalEntryCommand feeEntry = new PostTransactionCommand.JournalEntryCommand(
-                            feeGLAccountId,
-                            BigDecimal.ZERO,
-                            feeForGL,
-                            "Fee income for TP transaction: " + transaction.getIdempotencyKey(),
-                            transaction.getValueDate());
-                    entries.add(feeEntry);
-                }
-
-            } else if (transaction.getSourceAccountId() != null) {
-                // Debit-only transaction (e.g., cash withdrawal, external payment)
-                // Need to determine the contra account based on transaction type
-
-                UUID sourceGLAccountId = resolveGLAccountForCustomerAccount(
-                        transaction.getSourceAccountId(),
-                        GLAccountMappingType.PRIMARY_BALANCE);
-
-                // Create DEBIT entry - reduce customer's balance (principal + fee)
-                PostTransactionCommand.JournalEntryCommand debitEntry = new PostTransactionCommand.JournalEntryCommand(
-                        sourceGLAccountId,
-                        transaction.getTotalAmount(),
+            // 5. Fee revenue recognition: credit FEE_INCOME when fee > 0
+            BigDecimal feeForGL = getFeeAmountForGL(transaction);
+            if (feeForGL.compareTo(BigDecimal.ZERO) > 0) {
+                UUID feeGLAccountId = generalLedgerService
+                        .getOperationalGLAccount(OperationalGLAccountType.FEE_INCOME.name());
+                PostTransactionCommand.JournalEntryCommand feeEntry = new PostTransactionCommand.JournalEntryCommand(
+                        feeGLAccountId,
                         BigDecimal.ZERO,
-                        "Debit for TP transaction: " + transaction.getIdempotencyKey(),
+                        feeForGL,
+                        "Fee income for TP transaction: " + transaction.getIdempotencyKey(),
                         transaction.getValueDate());
-                entries.add(debitEntry);
-
-                // Determine contra account based on transaction type or metadata
-                UUID contraGLAccountId = resolveContraAccountForDebitOnly(transaction);
-                BigDecimal feeForGL = getFeeAmountForGL(transaction);
-                BigDecimal principalAmount = transaction.getPrincipalAmount();
-
-                // CREDIT contra for principal only (fee revenue recognized separately)
-                PostTransactionCommand.JournalEntryCommand contraEntry = new PostTransactionCommand.JournalEntryCommand(
-                        contraGLAccountId,
-                        BigDecimal.ZERO,
-                        principalAmount,
-                        "Contra entry for TP transaction: " + transaction.getIdempotencyKey(),
-                        transaction.getValueDate());
-                entries.add(contraEntry);
-
-                // Fee revenue recognition: credit FEE_INCOME when fee > 0
-                if (feeForGL.compareTo(BigDecimal.ZERO) > 0) {
-                    UUID feeGLAccountId = generalLedgerService
-                            .getOperationalGLAccount(OperationalGLAccountType.FEE_INCOME.name());
-                    PostTransactionCommand.JournalEntryCommand feeEntry = new PostTransactionCommand.JournalEntryCommand(
-                            feeGLAccountId,
-                            BigDecimal.ZERO,
-                            feeForGL,
-                            "Fee income for TP transaction: " + transaction.getIdempotencyKey(),
-                            transaction.getValueDate());
-                    entries.add(feeEntry);
-                }
-
-            } else if (transaction.getDestinationAccountId() != null) {
-                // Credit-only transaction (e.g., cash deposit, external receipt)
-                // Need to determine the contra account based on transaction type
-
-                UUID destinationGLAccountId = resolveGLAccountForCustomerAccount(
-                        transaction.getDestinationAccountId(),
-                        GLAccountMappingType.PRIMARY_BALANCE);
-
-                // Determine contra account based on transaction type or metadata
-                UUID contraGLAccountId = resolveContraAccountForCreditOnly(transaction);
-
-                // Create DEBIT entry - contra account (cash, clearing, etc.)
-                PostTransactionCommand.JournalEntryCommand contraEntry = new PostTransactionCommand.JournalEntryCommand(
-                        contraGLAccountId,
-                        transaction.getTotalAmount(),
-                        BigDecimal.ZERO,
-                        "Contra entry for TP transaction: " + transaction.getIdempotencyKey(),
-                        transaction.getValueDate());
-                entries.add(contraEntry);
-
-                // Create CREDIT entry - increase customer's balance
-                PostTransactionCommand.JournalEntryCommand creditEntry = new PostTransactionCommand.JournalEntryCommand(
-                        destinationGLAccountId,
-                        BigDecimal.ZERO,
-                        transaction.getTotalAmount(),
-                        "Credit for TP transaction: " + transaction.getIdempotencyKey(),
-                        transaction.getValueDate());
-                entries.add(creditEntry);
+                entries.add(feeEntry);
             }
 
-            // Validate that we have at least 2 entries for balanced double-entry bookkeeping
-            if (entries.size() < 2) {
-                logger.warn(
-                        "Transaction {} has only {} journal entries - may be unbalanced",
-                        transaction.getId(),
-                        entries.size());
+        } else if (transaction.getSourceAccountId() != null) {
+            // Debit-only transaction (e.g., cash withdrawal, external payment)
+            // Need to determine the contra account based on transaction type
+
+            UUID sourceGLAccountId = resolveGLAccountForCustomerAccount(
+                    transaction.getSourceAccountId(),
+                    GLAccountMappingType.PRIMARY_BALANCE);
+
+            // Create DEBIT entry - reduce customer's balance (principal + fee)
+            PostTransactionCommand.JournalEntryCommand debitEntry = new PostTransactionCommand.JournalEntryCommand(
+                    sourceGLAccountId,
+                    transaction.getTotalAmount(),
+                    BigDecimal.ZERO,
+                    "Debit for TP transaction: " + transaction.getIdempotencyKey(),
+                    transaction.getValueDate());
+            entries.add(debitEntry);
+
+            // Determine contra account based on transaction type or metadata
+            UUID contraGLAccountId = resolveContraAccountForDebitOnly(transaction);
+            BigDecimal feeForGL = getFeeAmountForGL(transaction);
+            BigDecimal principalAmount = transaction.getPrincipalAmount();
+
+            // CREDIT contra for principal only (fee revenue recognized separately)
+            PostTransactionCommand.JournalEntryCommand contraEntry = new PostTransactionCommand.JournalEntryCommand(
+                    contraGLAccountId,
+                    BigDecimal.ZERO,
+                    principalAmount,
+                    "Contra entry for TP transaction: " + transaction.getIdempotencyKey(),
+                    transaction.getValueDate());
+            entries.add(contraEntry);
+
+            // Fee revenue recognition: credit FEE_INCOME when fee > 0
+            if (feeForGL.compareTo(BigDecimal.ZERO) > 0) {
+                UUID feeGLAccountId = generalLedgerService
+                        .getOperationalGLAccount(OperationalGLAccountType.FEE_INCOME.name());
+                PostTransactionCommand.JournalEntryCommand feeEntry = new PostTransactionCommand.JournalEntryCommand(
+                        feeGLAccountId,
+                        BigDecimal.ZERO,
+                        feeForGL,
+                        "Fee income for TP transaction: " + transaction.getIdempotencyKey(),
+                        transaction.getValueDate());
+                entries.add(feeEntry);
             }
 
-            // Create the PostTransactionCommand
-            PostTransactionCommand command = new PostTransactionCommand(
-                    transaction.getId().toString(), // referenceId
-                    "TP Transaction: " + transaction.getIdempotencyKey(), // description
-                    transaction.getTransactionDate(), // transactionDate
-                    transaction.getCurrency(), // currency
-                    "TP_SERVICE", // createdBy
-                    entries // journal entries
-            );
+        } else if (transaction.getDestinationAccountId() != null) {
+            // Credit-only transaction (e.g., cash deposit, external receipt)
+            // Need to determine the contra account based on transaction type
 
-            logger.debug(
-                    "Built GL transaction command with {} entries for TP transaction: {}",
-                    entries.size(),
-                    transaction.getId());
+            UUID destinationGLAccountId = resolveGLAccountForCustomerAccount(
+                    transaction.getDestinationAccountId(),
+                    GLAccountMappingType.PRIMARY_BALANCE);
 
-            return command;
+            // Determine contra account based on transaction type or metadata
+            UUID contraGLAccountId = resolveContraAccountForCreditOnly(transaction);
 
-        } catch (Exception e) {
-            logger.error(
-                    "Failed to build GL transaction command for TP transaction {}: {}",
-                    transaction.getId(),
-                    e.getMessage());
-            throw new RuntimeException("GL transaction command building failed: " + e.getMessage(), e);
+            // Create DEBIT entry - contra account (cash, clearing, etc.)
+            PostTransactionCommand.JournalEntryCommand contraEntry = new PostTransactionCommand.JournalEntryCommand(
+                    contraGLAccountId,
+                    transaction.getTotalAmount(),
+                    BigDecimal.ZERO,
+                    "Contra entry for TP transaction: " + transaction.getIdempotencyKey(),
+                    transaction.getValueDate());
+            entries.add(contraEntry);
+
+            // Create CREDIT entry - increase customer's balance
+            PostTransactionCommand.JournalEntryCommand creditEntry = new PostTransactionCommand.JournalEntryCommand(
+                    destinationGLAccountId,
+                    BigDecimal.ZERO,
+                    transaction.getTotalAmount(),
+                    "Credit for TP transaction: " + transaction.getIdempotencyKey(),
+                    transaction.getValueDate());
+            entries.add(creditEntry);
         }
+
+        // Validate that we have at least 2 entries for balanced double-entry bookkeeping
+        if (entries.size() < 2) {
+            logger.warn(
+                    "Transaction {} has only {} journal entries - may be unbalanced",
+                    transaction.getId(),
+                    entries.size());
+        }
+
+        // Create the PostTransactionCommand
+        PostTransactionCommand command = new PostTransactionCommand(
+                transaction.getId().toString(), // referenceId
+                "TP Transaction: " + transaction.getIdempotencyKey(), // description
+                transaction.getTransactionDate(), // transactionDate
+                transaction.getCurrency(), // currency
+                "TP_SERVICE", // createdBy
+                entries // journal entries
+        );
+
+        logger.debug(
+                "Built GL transaction command with {} entries for TP transaction: {}",
+                entries.size(),
+                transaction.getId());
+
+        return command;
     }
 
     /**
@@ -1486,17 +1483,8 @@ public class TransactionService {
 
         for (BalanceReservation reservation : transaction.getReservations()) {
             if (reservation.getStatus() == ReservationStatus.ACTIVE) {
-                try {
-                    balanceReservationService.confirmReservation(reservation.getId());
-                    reservation.setStatus(ReservationStatus.CONVERTED);
-                } catch (Exception e) {
-                    logger.error(
-                            "Failed to confirm reservation {} for transaction {}: {}",
-                            reservation.getId(),
-                            transaction.getId(),
-                            e.getMessage());
-                    throw new RuntimeException("Failed to confirm balance reservation: " + e.getMessage(), e);
-                }
+                balanceReservationService.confirmReservation(reservation.getId());
+                reservation.setStatus(ReservationStatus.CONVERTED);
             }
         }
 
@@ -1512,17 +1500,8 @@ public class TransactionService {
 
         for (BalanceReservation reservation : transaction.getReservations()) {
             if (reservation.getStatus() == ReservationStatus.ACTIVE) {
-                try {
-                    balanceReservationService.releaseReservation(reservation.getId());
-                    reservation.setStatus(ReservationStatus.RELEASED);
-                } catch (Exception e) {
-                    logger.error(
-                            "Failed to release reservation {} for transaction {}: {}",
-                            reservation.getId(),
-                            transaction.getId(),
-                            e.getMessage());
-                    // Continue with other reservations even if one fails
-                }
+                balanceReservationService.releaseReservation(reservation.getId());
+                reservation.setStatus(ReservationStatus.RELEASED);
             }
         }
 
@@ -1550,7 +1529,6 @@ public class TransactionService {
         event.setEventSequence(transaction.getEvents().size() + 1);
         event.setPreviousStatus(transaction.getStatus());
         event.setNewStatus(status);
-        event.setCreatedBy("SYSTEM");
 
         if (context != null) {
             event.setEventData(Map.of("context", context));
@@ -1840,7 +1818,6 @@ public class TransactionService {
         metadata.put("originalAmount", originalTransaction.getTotalAmount());
         metadata.put("transactionType", "REFUND");
         refundRequest.setMetadata(metadata);
-        refundRequest.setCreatedBy(initiatedBy != null && !initiatedBy.isBlank() ? initiatedBy : "SYSTEM");
 
         // Initiate the refund transaction
         Transaction refundTransaction = initiateTransaction(refundRequest);
@@ -1937,19 +1914,19 @@ public class TransactionService {
                         "Destination AccountTransaction created: " + destAccountTxId);
             }
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.error(
                     "Failed to create AccountTransactions for transaction {}: {}",
                     transaction.getId(),
                     e.getMessage(),
                     e);
-            // Don't fail the transaction - AccountTransactions can be created later via reconciliation
             recordTransactionEvent(
                     transaction,
                     "ACCOUNT_TRANSACTION_CREATION_FAILED",
                     transaction.getStatus(),
                     "Failed to create AccountTransactions: " + e.getMessage(),
                     "ACCOUNT_TX_ERROR");
+            throw e;
         }
     }
 

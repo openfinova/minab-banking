@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
-@EnableJpaAuditing
+@EnableJpaAuditing(auditorAwareRef = "bankingAuditorAware")
 public class OpenfinovaBankingApplication {
 
     public static void main(String[] args) {

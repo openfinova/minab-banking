@@ -1,5 +1,6 @@
 package com.openfinova.banking.tp.entity;
 
+import static com.openfinova.banking.tp.testsupport.TpEntityTestFixtures.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -8,8 +9,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import com.openfinova.banking.tp.api.entity.ReservationType;
+import com.openfinova.banking.tp.api.entity.TransactionStatus;
 import com.openfinova.banking.tp.testsupport.TpEntityTestFixtures;
 
 class TransactionTest {
@@ -17,14 +18,14 @@ class TransactionTest {
     @Test
     void transitionTo_rejectsInvalidStateChange() {
         Transaction tx = TpEntityTestFixtures.transaction();
-        assertThatThrownBy(() -> tx.transitionTo(TransactionStatus.POSTED, "skip"))
+        assertThatThrownBy(() -> tx.transitionTo(TransactionStatus.POSTED, "skip", NOW))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void transitionTo_validPathAndRecordsEvent() {
         Transaction tx = TpEntityTestFixtures.transaction();
-        tx.transitionTo(TransactionStatus.PENDING_RESERVATION, null);
+        tx.transitionTo(TransactionStatus.PENDING_RESERVATION, null, NOW);
         assertThat(tx.getStatus()).isEqualTo(TransactionStatus.PENDING_RESERVATION);
         assertThat(tx.getEvents()).hasSize(1);
     }
@@ -45,7 +46,7 @@ class TransactionTest {
                 new BigDecimal("50.0000"),
                 "USD",
                 ReservationType.DEBIT_HOLD,
-                java.time.LocalDateTime.now().plusHours(1),
+                NOW.plusHours(1),
                 "res-key-1",
                 "ref-1");
         tx.addReservation(r);

@@ -9,6 +9,7 @@ import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.mapper.CollectionActivityMapper;
 import com.openfinova.banking.loan.repository.CollectionActivityRepository;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -42,11 +43,13 @@ public class CollectionActivityService {
 
     private final CollectionActivityRepository activityRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final DateTimeService dateTimeService;
 
     public CollectionActivityService(CollectionActivityRepository activityRepository,
-            LoanAccountRepository loanAccountRepository) {
+            LoanAccountRepository loanAccountRepository, DateTimeService dateTimeService) {
         this.activityRepository = activityRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -368,7 +371,7 @@ public class CollectionActivityService {
         if (followUpDate == null) {
             throw new IllegalArgumentException("Follow-up date cannot be null");
         }
-        if (followUpDate.isBefore(LocalDate.now())) {
+        if (followUpDate.isBefore(dateTimeService.today())) {
             throw new IllegalArgumentException("Follow-up date cannot be in the past");
         }
         if (followUpType == null) {

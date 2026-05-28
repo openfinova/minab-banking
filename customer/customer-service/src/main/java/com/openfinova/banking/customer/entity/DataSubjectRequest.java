@@ -143,12 +143,12 @@ public class DataSubjectRequest {
     }
 
     public DataSubjectRequest(Customer customer, DataSubjectRequestType requestType, String channel,
-            String customerNotes) {
+            String customerNotes, LocalDate receivedAt) {
         this.customer = customer;
         this.requestType = requestType;
         this.channel = channel;
         this.customerNotes = customerNotes;
-        this.receivedAt = LocalDate.now();
+        this.receivedAt = receivedAt;
         this.dueBy = this.receivedAt.plusDays(30);
         this.status = DataSubjectRequestStatus.RECEIVED;
     }
@@ -158,30 +158,30 @@ public class DataSubjectRequest {
     /**
      * Returns true if the response deadline has passed and the request is still open.
      */
-    public boolean isOverdue() {
+    public boolean isOverdue(LocalDate evaluatedAt) {
         return status != DataSubjectRequestStatus.FULFILLED && status != DataSubjectRequestStatus.REJECTED
-                && status != DataSubjectRequestStatus.WITHDRAWN && LocalDate.now().isAfter(dueBy);
+                && status != DataSubjectRequestStatus.WITHDRAWN && evaluatedAt.isAfter(dueBy);
     }
 
     /**
      * Extends the SLA deadline by up to 60 additional days (total max 90 days from receipt).
      * Must notify the customer within the original 30-day window.
      */
-    public void extendDeadline(int additionalDays) {
+    public void extendDeadline(int additionalDays, LocalDate extensionNotifiedAt) {
         if (additionalDays > 60) {
             throw new IllegalArgumentException("GDPR allows a maximum extension of 60 days");
         }
         this.dueBy = this.dueBy.plusDays(additionalDays);
         this.extended = true;
-        this.extensionNotifiedAt = LocalDate.now();
+        this.extensionNotifiedAt = extensionNotifiedAt;
     }
 
     /**
      * Marks the request as fulfilled.
      */
-    public void markFulfilled(String handledBy) {
+    public void markFulfilled(String handledBy, LocalDate fulfilledAt) {
         this.status = DataSubjectRequestStatus.FULFILLED;
-        this.fulfilledAt = LocalDate.now();
+        this.fulfilledAt = fulfilledAt;
         this.handledBy = handledBy;
     }
 
@@ -198,11 +198,11 @@ public class DataSubjectRequest {
     /**
      * Rejects the request with a documented reason.
      */
-    public void reject(String reason, String handledBy) {
+    public void reject(String reason, String handledBy, LocalDate fulfilledAt) {
         this.status = DataSubjectRequestStatus.REJECTED;
         this.outcomeReason = reason;
         this.handledBy = handledBy;
-        this.fulfilledAt = LocalDate.now();
+        this.fulfilledAt = fulfilledAt;
     }
 
     // Getters and Setters

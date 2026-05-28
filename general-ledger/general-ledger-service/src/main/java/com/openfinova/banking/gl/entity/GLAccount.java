@@ -4,11 +4,14 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 import com.openfinova.banking.common.lib.converter.MapToJsonConverter;
 import com.openfinova.banking.common.lib.validation.ValidCurrency;
@@ -30,6 +33,7 @@ import java.util.UUID;
  * Supports hierarchical relationships and soft delete functionality.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "gl_accounts", indexes = { @Index(name = "idx_gl_accounts_code", columnList = "code"),
         @Index(name = "idx_gl_accounts_parent", columnList = "parent_id"),
         @Index(name = "idx_gl_accounts_type", columnList = "type") })
@@ -144,19 +148,20 @@ public class GLAccount {
     @Column(name = "cash_flow_category", nullable = false, length = 10)
     private CashFlowCategory cashFlowCategory;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp
+    @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @CreatedBy
     @Column(name = "created_by", nullable = false, length = 100)
-    @NotBlank(message = "Created by is required")
     @Size(max = 100, message = "Created by must not exceed 100 characters")
     private String createdBy;
 
+    @LastModifiedBy
     @Column(name = "updated_by", length = 100)
     @Size(max = 100, message = "Updated by must not exceed 100 characters")
     private String updatedBy;
@@ -191,12 +196,11 @@ public class GLAccount {
     public GLAccount() {
     }
 
-    public GLAccount(String code, String name, GLAccountType type, String currency, String createdBy) {
+    public GLAccount(String code, String name, GLAccountType type, String currency) {
         this.code = code;
         this.name = name;
         this.type = type;
         this.currency = currency;
-        this.createdBy = createdBy;
         this.normalBalance = determineNormalBalance(type, false);
         this.cashFlowCategory = determineDefaultCashFlowCategory(type);
     }
@@ -261,9 +265,9 @@ public class GLAccount {
      *
      * @param reason the reason for inactivation
      */
-    public void markInactive(String reason) {
+    public void markInactive(String reason, LocalDate inactivatedOn) {
         this.status = GLAccountStatus.INACTIVE;
-        this.inactivatedOn = LocalDate.now();
+        this.inactivatedOn = inactivatedOn;
         this.inactivationReason = reason;
     }
 

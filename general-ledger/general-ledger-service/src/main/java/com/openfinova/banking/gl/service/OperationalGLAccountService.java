@@ -7,14 +7,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.openfinova.banking.gl.api.entity.OperationalGLAccountType;
+
 import com.openfinova.banking.gl.api.entity.GLAuditAction;
 import com.openfinova.banking.gl.api.entity.GLEntityType;
+import com.openfinova.banking.gl.api.entity.OperationalGLAccountType;
 import com.openfinova.banking.gl.dto.ChartOfAccountsImport;
 import com.openfinova.banking.gl.dto.OperationalAccountValidationResult;
 import com.openfinova.banking.gl.entity.GLAccount;
@@ -45,6 +48,7 @@ public class OperationalGLAccountService {
         this.operationalGLConfigReadService = operationalGLConfigReadService;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     @Transactional(readOnly = true)
     public UUID getOperationalGLAccount(OperationalGLAccountType type) {
         logger.debug("Getting operational GL account for type: {}", type);
@@ -66,6 +70,17 @@ public class OperationalGLAccountService {
         return glAccountId;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+    @Transactional(readOnly = true)
+    public UUID getOperationalGLAccount(String operationalGLAccountType) {
+        try {
+            return getOperationalGLAccount(OperationalGLAccountType.valueOf(operationalGLAccountType));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid operational GL account type: " + operationalGLAccountType);
+        }
+    }
+
+    @PreAuthorize("hasAuthority('gl:read')")
     @Transactional(readOnly = true)
     public UUID getOperationalGLAccountOrNull(OperationalGLAccountType type) {
         logger.debug("Getting operational GL account (nullable) for type: {}", type);
@@ -76,6 +91,7 @@ public class OperationalGLAccountService {
     }
 
     @CacheEvict(value = "operationalGlConfig", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
     public OperationalGLConfig configureOperationalAccount(OperationalGLAccountType type, UUID glAccountId,
             String createdBy) {
         logger.info("Configuring operational account - type: {}, glAccountId: {}", type, glAccountId);
@@ -140,22 +156,26 @@ public class OperationalGLAccountService {
         }
     }
 
+    @PreAuthorize("hasAuthority('gl:read')")
     @Transactional(readOnly = true)
     public boolean isConfigured(OperationalGLAccountType type) {
         return operationalGLConfigRepository.existsByConfigType(type);
     }
 
+    @PreAuthorize("hasAuthority('gl:read')")
     @Transactional(readOnly = true)
     public Optional<OperationalGLConfig> getConfiguration(OperationalGLAccountType type) {
         return operationalGLConfigReadService.resolveActiveOperationalConfig(type);
     }
 
+    @PreAuthorize("hasAuthority('gl:read')")
     @Transactional(readOnly = true)
     public List<OperationalGLConfig> getAllActiveConfigurations() {
         return operationalGLConfigReadService.findAllActive();
     }
 
     @CacheEvict(value = "operationalGlConfig", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void deactivateConfiguration(UUID configId, String deactivatedBy) {
         logger.info("Deactivating operational GL configuration: {}", configId);
 
@@ -169,6 +189,7 @@ public class OperationalGLAccountService {
     }
 
     @CacheEvict(value = "operationalGlConfig", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void activateConfiguration(UUID configId, String activatedBy) {
         logger.info("Activating operational GL configuration: {}", configId);
 
@@ -182,6 +203,7 @@ public class OperationalGLAccountService {
     }
 
     @CacheEvict(value = "operationalGlConfig", allEntries = true)
+    @PreAuthorize("hasAuthority('gl:approve')")
     public int createStandardOperationalAccounts(String createdBy) {
         logger.info("Creating standard operational accounts by {}", createdBy);
 
@@ -224,6 +246,7 @@ public class OperationalGLAccountService {
         return accountsCreated;
     }
 
+    @PreAuthorize("hasAuthority('gl:read')")
     @Transactional(readOnly = true)
     public OperationalAccountValidationResult validateOperationalAccounts() {
         logger.debug("Validating operational accounts");

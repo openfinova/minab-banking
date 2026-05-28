@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -140,10 +141,12 @@ public class GLSnapshotService {
         }
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void generateDailySnapshots() {
         generateDailySnapshots(dateTimeService.today().minusDays(1)); // Previous business day
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void generateDailySnapshots(LocalDate date) {
         logger.info("Starting daily snapshot generation for date: {}", date);
         long startTime = System.currentTimeMillis();
@@ -167,6 +170,7 @@ public class GLSnapshotService {
                 processingTime);
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void generateWeeklySnapshots() {
         LocalDate endDate = dateTimeService.today().minusDays(1);
         LocalDate startDate = endDate.minusDays(6); // Last 7 days
@@ -174,6 +178,7 @@ public class GLSnapshotService {
         generateSnapshotsForPeriod(startDate, endDate, "weekly");
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void generateMonthlySnapshots() {
         LocalDate endDate = dateTimeService.today().minusDays(1);
         LocalDate startDate = endDate.withDayOfMonth(1); // First day of current month
@@ -181,6 +186,7 @@ public class GLSnapshotService {
         generateSnapshotsForPeriod(startDate, endDate, "monthly");
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public int generateSnapshotsForAccounts(List<UUID> accountIds, LocalDate date) {
         logger.info("Generating snapshots for {} accounts on {}", accountIds.size(), date);
 
@@ -198,6 +204,7 @@ public class GLSnapshotService {
         return snapshotsCreated;
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public int generateSnapshotsForAccountType(GLAccountType accountType, LocalDate date) {
         logger.info("Generating snapshots for account type {} on {}", accountType, date);
 
@@ -208,6 +215,7 @@ public class GLSnapshotService {
         return generateSnapshotsForAccounts(accountIds, date);
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public int generateMissingSnapshots(LocalDate date) {
         logger.info("Generating missing snapshots for {}", date);
 
@@ -220,6 +228,7 @@ public class GLSnapshotService {
         return generateSnapshotsForAccounts(missingAccountIds, date);
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     @Transactional
     public int cleanupOldSnapshots(int retentionDays) {
         logger.info("Cleaning up snapshots older than {} days", retentionDays);
@@ -233,6 +242,7 @@ public class GLSnapshotService {
         return deletedCount;
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public int rebuildSnapshotsForPeriod(LocalDate startDate, LocalDate endDate) {
         logger.info("Rebuilding snapshots for period {} to {}", startDate, endDate);
 
@@ -248,6 +258,7 @@ public class GLSnapshotService {
         return deletedCount;
     }
 
+    @PreAuthorize("hasAuthority('gl:read')")
     public SnapshotStatistics getSnapshotStatistics(LocalDate date) {
         logger.debug("Getting snapshot statistics for {}", date);
 
@@ -279,6 +290,7 @@ public class GLSnapshotService {
                 processingTime);
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public int archiveOldSnapshots(LocalDate beforeDate) {
         logger.info("Archiving snapshots before {}", beforeDate);
 
@@ -294,6 +306,7 @@ public class GLSnapshotService {
         return archivedCount;
     }
 
+    @PreAuthorize("hasAuthority('gl:read')")
     public BalanceReconciliationReport performBalanceReconciliation() {
         logger.info("Starting comprehensive balance reconciliation");
 
@@ -311,6 +324,7 @@ public class GLSnapshotService {
         return report;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     public AccountReconciliationResult performBalanceReconciliationForAccount(UUID accountId, LocalDate date) {
         logger.debug("Performing balance reconciliation for account {} on {}", accountId, date);
 
@@ -357,6 +371,7 @@ public class GLSnapshotService {
         return result;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     public BalanceReconciliationReport performBalanceReconciliationForPeriod(LocalDate startDate, LocalDate endDate) {
         logger.info("Performing balance reconciliation for period {} to {}", startDate, endDate);
         long startTime = System.currentTimeMillis();
@@ -397,6 +412,7 @@ public class GLSnapshotService {
         return report;
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void performDataIntegrityValidation() {
         logger.info("Starting data integrity validation");
 
@@ -422,6 +438,7 @@ public class GLSnapshotService {
         logger.info("Data integrity validation completed");
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public void performAuditTrailValidation() {
         logger.info("Starting audit trail validation");
 
@@ -434,6 +451,7 @@ public class GLSnapshotService {
         }
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public ValidationResult performSequentialNumberValidation() {
         logger.info("Validating sequential transaction numbers per fiscal period");
 
@@ -557,6 +575,7 @@ public class GLSnapshotService {
         return result;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     public ValidationResult validateSnapshotIntegrity(LocalDate date) {
         logger.debug("Validating snapshot integrity for {}", date);
 
@@ -611,6 +630,7 @@ public class GLSnapshotService {
         return result;
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public RepairResult validateAndRepairSnapshots(LocalDate startDate, LocalDate endDate) {
         logger.info("Validating and repairing snapshots for period {} to {}", startDate, endDate);
         long startTime = System.currentTimeMillis();
@@ -656,6 +676,7 @@ public class GLSnapshotService {
         return result;
     }
 
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
     public SnapshotsComplianceReport generateComplianceReport(LocalDate startDate, LocalDate endDate) {
         logger.info("Generating compliance report for period {} to {}", startDate, endDate);
 
@@ -695,6 +716,7 @@ public class GLSnapshotService {
         return report;
     }
 
+    @PreAuthorize("hasAuthority('gl:approve')")
     public SnapshotRecoveryResult recoverFromFailedSnapshot(LocalDate date) {
         logger.info("Attempting to recover from failed snapshot for {}", date);
 

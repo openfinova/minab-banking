@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import com.openfinova.banking.loan.dto.ScheduleCalculation;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanScheduleRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 class LoanScheduleServiceAmortizationTest {
 
@@ -21,7 +22,10 @@ class LoanScheduleServiceAmortizationTest {
 
     @BeforeEach
     void setUp() {
-        service = new LoanScheduleService(mock(LoanScheduleRepository.class), mock(LoanAccountRepository.class));
+        service = new LoanScheduleService(
+                mock(LoanScheduleRepository.class),
+                mock(LoanAccountRepository.class),
+                mock(DateTimeService.class));
     }
 
     @Test

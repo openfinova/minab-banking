@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,7 @@ import com.openfinova.banking.gl.mapper.GLEntityMapper;
 import com.openfinova.banking.gl.repository.GLReconciliationRepository;
 import com.openfinova.banking.gl.repository.GLRevaluationDetailRepository;
 import com.openfinova.banking.gl.repository.GLTransactionRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Implementation of GLTransactionService providing comprehensive transaction management.
@@ -77,6 +79,7 @@ public class GLTransactionService {
     private final GLReconciliationRepository reconciliationRepository;
     private final TransactionNumberingService numberingService;
     private final ApprovalWorkflowService approvalWorkflowService;
+    private final DateTimeService dateTimeService;
 
     /**
      * Constructor for dependency injection.
@@ -95,7 +98,7 @@ public class GLTransactionService {
             GLAccountService accountService, BalanceService balanceService, FiscalPeriodService fiscalPeriodService,
             GLRevaluationDetailRepository revaluationDetailRepository,
             GLReconciliationRepository reconciliationRepository, TransactionNumberingService numberingService,
-            ApprovalWorkflowService approvalWorkflowService) {
+            ApprovalWorkflowService approvalWorkflowService, DateTimeService dateTimeService) {
         this.transactionRepository = transactionRepository;
         this.auditService = auditService;
         this.accountService = accountService;
@@ -105,6 +108,7 @@ public class GLTransactionService {
         this.reconciliationRepository = reconciliationRepository;
         this.numberingService = numberingService;
         this.approvalWorkflowService = approvalWorkflowService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -114,6 +118,8 @@ public class GLTransactionService {
      * @param transaction The transaction to post.
      * @return The posted transaction.
      */
+    @PreAuthorize("hasAnyAuthority('gl:post', 'service:gl:write')")
+
     public GLTransaction postTransaction(GLTransaction transaction) {
         logger.info("Posting transaction: {}", transaction.getReferenceId());
 
@@ -144,7 +150,7 @@ public class GLTransactionService {
         String oldStatus = transaction.getStatus().toString();
 
         // Post the transaction
-        transaction.approveAndPost(transaction.getCreatedBy());
+        transaction.approveAndPost(transaction.getCreatedBy(), dateTimeService.instant());
 
         GLTransaction savedTransaction = transactionRepository.save(transaction);
         logger.info("Successfully posted transaction: {}", savedTransaction.getReferenceId());
@@ -192,6 +198,8 @@ public class GLTransactionService {
      * @param reversedBy    The user or system performing the reversal.
      * @return The reversal transaction.
      */
+    @PreAuthorize("hasAnyAuthority('gl:post', 'service:gl:write')")
+
     public GLTransaction reverseTransaction(UUID transactionId, String reason, String reversedBy) {
         logger.info("Reversing transaction: {} by {}", transactionId, reversedBy);
 
@@ -223,8 +231,7 @@ public class GLTransactionService {
         GLTransaction reversalTransaction = new GLTransaction(
                 GLTransactionType.REVERSAL.generateReferenceId(originalTransaction.getReferenceId()),
                 "Reversal of: " + reason,
-                originalTransaction.getTransactionDate(),
-                reversedBy);
+                originalTransaction.getTransactionDate());
 
         // Create contra journal entries
         for (GLJournalEntry originalEntry : originalTransaction.getJournalEntries()) {
@@ -259,7 +266,7 @@ public class GLTransactionService {
         logger.debug("Assigned transaction number {} to reversal of {}", reversalTransactionNumber, transactionId);
 
         // Post the reversal and persist the final state (status + transactionNumber)
-        reversalTransaction.approveAndPost(reversedBy);
+        reversalTransaction.approveAndPost(reversedBy, dateTimeService.instant());
         GLTransaction savedReversalTransaction = transactionRepository.save(reversalTransaction);
 
         // Mark original transaction as reversed
@@ -303,6 +310,8 @@ public class GLTransactionService {
      * @param id The UUID of the transaction.
      * @return An Optional containing the transaction if found.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<GLTransaction> getTransactionById(UUID id) {
         logger.debug("Getting transaction by ID: {}", id);
@@ -315,6 +324,8 @@ public class GLTransactionService {
      * @param referenceId The external reference ID.
      * @return An Optional containing the transaction if found.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public Optional<GLTransaction> getTransactionByReference(String referenceId) {
         logger.debug("Getting transaction by reference: {}", referenceId);
@@ -327,6 +338,8 @@ public class GLTransactionService {
      * @param transaction The transaction to validate.
      * @throws IllegalStateException if the transaction is invalid.
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     public void validateTransaction(GLTransaction transaction) {
         if (transaction == null) {
             throw new IllegalArgumentException("Transaction cannot be null");
@@ -483,6 +496,8 @@ public class GLTransactionService {
      * @param transactionId The UUID of the transaction.
      * @return true if the transaction is balanced (total debits = total credits).
      */
+    @PreAuthorize("hasAnyAuthority('gl:read', 'service:gl:read')")
+
     @Transactional(readOnly = true)
     public boolean validateTransactionBalance(UUID transactionId) {
         logger.debug("Validating transaction balance for: {}", transactionId);
@@ -631,7 +646,7 @@ public class GLTransactionService {
                 String oldStatus = transaction.getStatus().toString();
 
                 // Post the transaction
-                transaction.approveAndPost(transaction.getCreatedBy());
+                transaction.approveAndPost(transaction.getCreatedBy(), dateTimeService.instant());
                 GLTransaction savedTransaction = transactionRepository.save(transaction);
 
                 // Audit log with correlation ID
@@ -811,10 +826,6 @@ public class GLTransactionService {
         return !revaluationDetailRepository.findByJournalTransactionId(transactionId).isEmpty();
     }
 
-    // ========================================================================
-    // Approval Workflow Methods
-    // ========================================================================
-
     /**
      * Create a draft GL transaction for manual journal entries.
      * Draft transactions are not posted to the GL and do not affect balances.
@@ -824,12 +835,13 @@ public class GLTransactionService {
      * @param createdBy username of the creator (maker)
      * @return the created draft transaction
      */
+    @PreAuthorize("hasAuthority('gl:post')")
+
     public GLTransaction createDraftTransaction(PostTransactionCommand command, String createdBy) {
         logger.info("Creating draft transaction: {}", command.getReferenceId());
 
         // Build transaction entity from command
         GLTransaction transaction = GLEntityMapper.toEntity(command, accountService);
-        transaction.setCreatedBy(createdBy);
         transaction.setStatus(com.openfinova.banking.gl.api.entity.GLTransactionStatus.DRAFT);
 
         // Set source (default to MANUAL_ENTRY if not specified)
@@ -883,6 +895,8 @@ public class GLTransactionService {
      * @throws IllegalStateException if transaction is not in DRAFT status
      * @throws SecurityException if submitter doesn't have authority
      */
+    @PreAuthorize("hasAuthority('gl:post')")
+
     public void submitTransactionForApproval(UUID transactionId, String submitterUsername,
             GLApprovalRole submitterRole) {
         logger.info("Submitting transaction {} for approval by {}", transactionId, submitterUsername);
@@ -933,6 +947,8 @@ public class GLTransactionService {
      * @throws IllegalStateException if transaction is not pending approval
      * @throws SecurityException if approver doesn't have authority
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public boolean approveAndPostTransaction(UUID transactionId, String approverUsername, GLApprovalRole approverRole,
             String comments, String ipAddress) {
         logger.info("Approving transaction {} by {}", transactionId, approverUsername);
@@ -958,7 +974,7 @@ public class GLTransactionService {
             transaction.setTransactionNumber(transactionNumber);
 
             // Approve and post
-            transaction.approveAndPost(approverUsername);
+            transaction.approveAndPost(approverUsername, dateTimeService.instant());
             transactionRepository.save(transaction);
 
             logger.info("Transaction {} fully approved and posted with number {}", transactionId, transactionNumber);
@@ -1004,6 +1020,8 @@ public class GLTransactionService {
      * @throws IllegalStateException if transaction is not pending approval
      * @throws SecurityException if rejecter doesn't have authority
      */
+    @PreAuthorize("hasAuthority('gl:approve')")
+
     public void rejectTransaction(UUID transactionId, String rejecterUsername, GLApprovalRole rejecterRole,
             String reason, String ipAddress) {
         logger.info("Rejecting transaction {} by {}: {}", transactionId, rejecterUsername, reason);
@@ -1087,7 +1105,6 @@ public class GLTransactionService {
 
         // Build transaction
         GLTransaction transaction = GLEntityMapper.toEntity(command, accountService);
-        transaction.setCreatedBy(systemUser);
         transaction.setSource(source);
         transaction.setStatus(com.openfinova.banking.gl.api.entity.GLTransactionStatus.POSTED);
         transaction.setPostedBy(systemUser);
@@ -1106,7 +1123,7 @@ public class GLTransactionService {
         transaction.setTransactionNumber(transactionNumber);
 
         // Post transaction
-        transaction.approveAndPost(systemUser);
+        transaction.approveAndPost(systemUser, dateTimeService.instant());
         GLTransaction savedTransaction = transactionRepository.save(transaction);
 
         logger.info(

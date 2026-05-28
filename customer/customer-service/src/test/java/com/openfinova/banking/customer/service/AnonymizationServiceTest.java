@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,10 +30,12 @@ import com.openfinova.banking.customer.repository.CustomerAuditLogRepository;
 import com.openfinova.banking.customer.repository.CustomerDataRetentionRepository;
 import com.openfinova.banking.customer.repository.CustomerRepository;
 import com.openfinova.banking.customer.repository.IdentificationDocumentRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 @ExtendWith(MockitoExtension.class)
 class AnonymizationServiceTest {
 
+    private static final LocalDate TODAY = LocalDate.of(2025, 6, 1);
     private static final String HMAC_SECRET = "test-secret-key-for-anonymization";
 
     @Mock
@@ -49,6 +52,8 @@ class AnonymizationServiceTest {
     private CustomerDataRetentionRepository retentionRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private DateTimeService dateTimeService;
 
     private AnonymizationService anonymizationService;
 
@@ -62,7 +67,9 @@ class AnonymizationServiceTest {
                 auditLogRepository,
                 retentionRepository,
                 eventPublisher,
+                dateTimeService,
                 HMAC_SECRET);
+        lenient().when(dateTimeService.today()).thenReturn(TODAY);
     }
 
     @Test
@@ -78,7 +85,7 @@ class AnonymizationServiceTest {
 
         CustomerDataRetention retention = new CustomerDataRetention();
         retention.setCustomer(customer);
-        retention.setRetentionExpiresAt(LocalDate.now().minusDays(1));
+        retention.setRetentionExpiresAt(TODAY.minusDays(1));
         retention.setAnonymized(false);
 
         when(customerRepository.findById(customer.getId())).thenReturn(Optional.of(customer));
@@ -107,7 +114,7 @@ class AnonymizationServiceTest {
 
         CustomerDataRetention retention = new CustomerDataRetention();
         retention.setCustomer(customer);
-        retention.setRetentionExpiresAt(LocalDate.now().plusDays(30));
+        retention.setRetentionExpiresAt(TODAY.plusDays(30));
         retention.setAnonymized(false);
 
         when(customerRepository.findById(customer.getId())).thenReturn(Optional.of(customer));

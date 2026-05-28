@@ -47,7 +47,7 @@ public class Notification {
     }
 
     public Notification(String recipientId, String subject, String message, NotificationChannel channel,
-            NotificationSeverity severity) {
+            NotificationSeverity severity, LocalDateTime createdAt) {
         this.id = UUID.randomUUID();
         this.recipientId = recipientId;
         this.subject = subject;
@@ -55,7 +55,7 @@ public class Notification {
         this.channel = channel;
         this.severity = severity;
         this.isRead = false;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = createdAt;
     }
 
     // Getters and Setters

@@ -98,7 +98,8 @@ public class VelocityLimit {
 
     // Constructor for creating new velocity limits
     public VelocityLimit(UUID accountId, TransactionType transactionType, VelocityLimitPeriod limitPeriod,
-            CustomerTier customerTier, String currency, Integer maxCount, BigDecimal maxAmount) {
+            CustomerTier customerTier, String currency, Integer maxCount, BigDecimal maxAmount,
+            LocalDateTime periodReference) {
         this.accountId = accountId;
         this.transactionType = transactionType;
         this.limitPeriod = limitPeriod;
@@ -109,14 +110,11 @@ public class VelocityLimit {
         this.currentCount = 0;
         this.currentAmount = BigDecimal.ZERO;
 
-        // Set period boundaries
-        LocalDateTime now = LocalDateTime.now();
-        this.periodStart = limitPeriod.getPeriodStart(now);
-        this.periodEnd = limitPeriod.getPeriodEnd(now);
+        initializePeriod(limitPeriod, periodReference);
     }
 
     public VelocityLimit(TransactionType transactionType, VelocityLimitPeriod limitPeriod, CustomerTier customerTier,
-            String currency) {
+            String currency, LocalDateTime periodReference) {
         this.transactionType = transactionType;
         this.limitPeriod = limitPeriod;
         this.customerTier = customerTier;
@@ -125,10 +123,12 @@ public class VelocityLimit {
         this.currentAmount = BigDecimal.ZERO;
         this.isActive = true;
 
-        // Set period boundaries
-        LocalDateTime now = LocalDateTime.now();
-        this.periodStart = limitPeriod.getPeriodStart(now);
-        this.periodEnd = limitPeriod.getPeriodEnd(now);
+        initializePeriod(limitPeriod, periodReference);
+    }
+
+    private void initializePeriod(VelocityLimitPeriod limitPeriod, LocalDateTime periodReference) {
+        this.periodStart = limitPeriod.getPeriodStart(periodReference);
+        this.periodEnd = limitPeriod.getPeriodEnd(periodReference);
     }
 
     // Getters and setters
@@ -271,8 +271,7 @@ public class VelocityLimit {
      *
      * @return true if the current period is active
      */
-    public boolean isPeriodActive() {
-        LocalDateTime now = LocalDateTime.now();
+    public boolean isPeriodActive(LocalDateTime now) {
         return !now.isBefore(periodStart) && now.isBefore(periodEnd);
     }
 
@@ -319,12 +318,12 @@ public class VelocityLimit {
      *
      * @param newPeriodStart the start of the new period
      */
-    public void resetForNewPeriod(LocalDateTime newPeriodStart) {
+    public void resetForNewPeriod(LocalDateTime newPeriodStart, LocalDateTime resetAt) {
         this.currentCount = 0;
         this.currentAmount = BigDecimal.ZERO;
         this.periodStart = newPeriodStart;
         this.periodEnd = limitPeriod.getPeriodEnd(newPeriodStart);
-        this.lastResetAt = LocalDateTime.now();
+        this.lastResetAt = resetAt;
     }
 
     /**

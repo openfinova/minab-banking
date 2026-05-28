@@ -45,7 +45,6 @@ import com.openfinova.banking.setup.api.DateTimeService;
 public class ExchangeRateSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(ExchangeRateSyncService.class);
-    private static final String SYSTEM_USER = "system:exchange-rate-sync";
 
     private final ExchangeRateRepository repository;
     private final ExchangeRateProvider provider;
@@ -119,7 +118,6 @@ public class ExchangeRateSyncService {
             }
 
             ExchangeRate entity = new ExchangeRate(baseCurrency, currency, rate, today, RateType.SPOT);
-            entity.setCreatedBy(SYSTEM_USER);
             repository.save(entity);
             inserted.add(currency);
         }

@@ -10,18 +10,19 @@ import com.openfinova.banking.customer.account.api.entity.HoldStatus;
 import com.openfinova.banking.customer.account.testsupport.AccountTestFixtures;
 
 class AccountHoldTest {
+    private static final LocalDateTime BASE_TIME = LocalDateTime.of(2026, 1, 1, 0, 0);
 
     @Test
     void isActive_requiresActiveStatusAndNotExpired() {
         Account a = AccountTestFixtures.checkingAccount();
         AccountHold hold = new AccountHold(a, new BigDecimal("10.0000"), "USD", "fraud check");
-        assertThat(hold.isActive()).isTrue();
+        assertThat(hold.isActive(BASE_TIME)).isTrue();
 
-        hold.setExpiresAt(LocalDateTime.now().minusMinutes(1));
-        assertThat(hold.isActive()).isFalse();
+        hold.setExpiresAt(BASE_TIME.minusMinutes(1));
+        assertThat(hold.isActive(BASE_TIME)).isFalse();
 
-        hold.setExpiresAt(LocalDateTime.now().plusHours(1));
+        hold.setExpiresAt(BASE_TIME.plusHours(1));
         hold.setStatus(HoldStatus.RELEASED);
-        assertThat(hold.isActive()).isFalse();
+        assertThat(hold.isActive(BASE_TIME)).isFalse();
     }
 }

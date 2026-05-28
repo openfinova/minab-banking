@@ -137,11 +137,11 @@ public class CompensationWorkflowService {
             step.setFailedAt(dateTimeService.now());
 
             // Increment workflow retry count
-            workflow.incrementRetryCount();
+            workflow.incrementRetryCount(dateTimeService.now());
 
             // Check if we should escalate or retry
             if (!workflow.canRetry()) {
-                workflow.escalate("Maximum retries exceeded", "SYSTEM");
+                workflow.escalate("Maximum retries exceeded", "SYSTEM", dateTimeService.now());
                 logger.warn("Compensation workflow escalated due to max retries: {}", workflow.getId());
             }
         } finally {
@@ -150,7 +150,10 @@ public class CompensationWorkflowService {
 
         // Check if all steps are completed
         if (workflow.areAllStepsCompleted()) {
-            workflow.transitionTo(CompensationStatus.COMPLETED, "All compensation steps completed successfully");
+            workflow.transitionTo(
+                    CompensationStatus.COMPLETED,
+                    "All compensation steps completed successfully",
+                    dateTimeService.now());
             compensationWorkflowRepository.save(workflow);
             logger.info("Compensation workflow completed: {}", workflow.getId());
         }
@@ -204,7 +207,7 @@ public class CompensationWorkflowService {
         }
 
         // For now, we'll escalate the workflow to effectively pause it
-        workflow.escalate("Manually paused: " + reason, "SYSTEM");
+        workflow.escalate("Manually paused: " + reason, "SYSTEM", dateTimeService.now());
         compensationWorkflowRepository.save(workflow);
 
         logger.info("Compensation workflow paused: {}", workflowId);
@@ -244,7 +247,7 @@ public class CompensationWorkflowService {
             throw new IllegalStateException("Cannot skip step in terminal state: " + step.getStatus());
         }
 
-        step.markSkipped("Manually skipped by " + skippedBy + ": " + reason);
+        step.markSkipped("Manually skipped by " + skippedBy + ": " + reason, dateTimeService.now());
         compensationWorkflowRepository.save(workflow);
 
         logger.info("Compensation step skipped: {} by: {}", stepId, skippedBy);
@@ -286,7 +289,10 @@ public class CompensationWorkflowService {
             throw new IllegalStateException("Workflow is already in terminal state: " + workflow.getWorkflowStatus());
         }
 
-        workflow.transitionTo(CompensationStatus.COMPLETED, "Force completed by " + completedBy + ": " + reason);
+        workflow.transitionTo(
+                CompensationStatus.COMPLETED,
+                "Force completed by " + completedBy + ": " + reason,
+                dateTimeService.now());
         compensationWorkflowRepository.save(workflow);
 
         logger.info("Compensation workflow force completed: {} by: {}", workflowId, completedBy);
@@ -360,7 +366,7 @@ public class CompensationWorkflowService {
     public CompensationWorkflowReport getWorkflowReport(LocalDate startDate, LocalDate endDate) {
         logger.info("Generating compensation workflow report from {} to {}", startDate, endDate);
 
-        CompensationWorkflowReport report = new CompensationWorkflowReport(startDate, endDate);
+        CompensationWorkflowReport report = new CompensationWorkflowReport(startDate, endDate, dateTimeService.today());
 
         // Get all workflows in the date range
         List<CompensationWorkflow> workflows = compensationWorkflowRepository
@@ -589,7 +595,7 @@ public class CompensationWorkflowService {
         CompensationWorkflow workflow = compensationWorkflowRepository.findById(workflowId)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow not found: " + workflowId));
 
-        workflow.transitionTo(CompensationStatus.IN_PROGRESS, "Starting compensation execution");
+        workflow.transitionTo(CompensationStatus.IN_PROGRESS, "Starting compensation execution", dateTimeService.now());
         compensationWorkflowRepository.save(workflow);
 
         // Execute steps in order

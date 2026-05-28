@@ -3,10 +3,10 @@ package com.openfinova.banking.customer.service;
 import com.openfinova.banking.customer.dto.CustomerDataExport;
 import com.openfinova.banking.customer.entity.*;
 import com.openfinova.banking.customer.repository.*;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -30,15 +30,17 @@ public class DataExportService {
     private final ContactDetailRepository contactDetailRepository;
     private final IdentificationDocumentRepository documentRepository;
     private final CustomerConsentRepository consentRepository;
+    private final DateTimeService dateTimeService;
 
     public DataExportService(CustomerRepository customerRepository, CustomerAddressRepository addressRepository,
             ContactDetailRepository contactDetailRepository, IdentificationDocumentRepository documentRepository,
-            CustomerConsentRepository consentRepository) {
+            CustomerConsentRepository consentRepository, DateTimeService dateTimeService) {
         this.customerRepository = customerRepository;
         this.addressRepository = addressRepository;
         this.contactDetailRepository = contactDetailRepository;
         this.documentRepository = documentRepository;
         this.consentRepository = consentRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -53,7 +55,7 @@ public class DataExportService {
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
         CustomerDataExport export = new CustomerDataExport();
-        export.setExportedAt(LocalDateTime.now());
+        export.setExportedAt(dateTimeService.now());
         export.setDataSubjectRequestId(dataSubjectRequestId);
 
         // Core identity

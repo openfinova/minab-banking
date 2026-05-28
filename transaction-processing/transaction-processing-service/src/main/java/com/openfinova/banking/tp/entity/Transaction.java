@@ -166,19 +166,19 @@ public class Transaction {
     public Transaction() {
     }
 
-    public Transaction(TransactionRequest request) {
+    public Transaction(TransactionRequest request, LocalDate transactionDate, LocalDateTime now) {
         this.request = request;
         this.currency = request.getCurrency();
         this.principalAmount = request.getAmount();
         this.sourceAccountId = request.getSourceAccountId();
         this.destinationAccountId = request.getDestinationAccountId();
-        this.transactionDate = Optional.ofNullable(request.getRequestedTransactionDate()).orElse(LocalDate.now());
+        this.transactionDate = Optional.ofNullable(request.getRequestedTransactionDate()).orElse(transactionDate);
         this.valueDate = Optional.ofNullable(request.getRequestedValueDate()).orElse(this.transactionDate);
         this.reservationTimeout = Optional.ofNullable(request.getRequestedReservationTimeout()).orElse(30);
-        this.processingStartedAt = LocalDateTime.now();
+        this.processingStartedAt = now;
         this.status = TransactionStatus.INITIATED;
         this.estimatedFeeAmount = BigDecimal.ZERO; // To be updated by FeeService
-        this.feeCalculationAt = LocalDateTime.now();
+        this.feeCalculationAt = now;
     }
 
     // Business logic methods
@@ -190,7 +190,7 @@ public class Transaction {
      * @param context   additional context for the transition
      * @throws IllegalStateException if transition is not valid
      */
-    public void transitionTo(TransactionStatus newStatus, String context) {
+    public void transitionTo(TransactionStatus newStatus, String context, LocalDateTime now) {
         if (!status.canTransitionTo(newStatus)) {
             throw new IllegalStateException(String.format("Invalid state transition from %s to %s", status, newStatus));
         }
@@ -205,17 +205,17 @@ public class Transaction {
             }
             case AUTHORIZED -> {
                 // Lock the fee during authorization
-                this.feeCalculationAt = LocalDateTime.now();
+                this.feeCalculationAt = now;
                 if (this.feeAmount == null || this.feeAmount.compareTo(BigDecimal.ZERO) == 0) {
                     this.feeAmount = this.estimatedFeeAmount;
                 }
             }
-            case POSTED -> this.completedAt = LocalDateTime.now();
+            case POSTED -> this.completedAt = now;
             case FAILED -> {
-                this.failedAt = LocalDateTime.now();
+                this.failedAt = now;
                 this.failureReason = context;
             }
-            case REVERSED -> this.completedAt = LocalDateTime.now();
+            case REVERSED -> this.completedAt = now;
         }
 
         // Record the state change event
@@ -236,7 +236,6 @@ public class Transaction {
         event.setEventSequence(events.size() + 1);
         event.setPreviousStatus(previousStatus);
         event.setNewStatus(newStatus);
-        event.setCreatedBy("SYSTEM"); // Could be parameterized
 
         if (context != null) {
             event.setEventData(Map.of("context", context));

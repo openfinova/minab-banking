@@ -24,7 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.exchangerate.api.exception.ExchangeRateValidationException;
 import com.openfinova.banking.exchangerate.api.exception.InvalidCurrencyPairException;
-import com.openfinova.banking.identity.exception.PasswordPolicyViolationException;
+import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.OptimisticLockException;
@@ -140,7 +140,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(PasswordPolicyViolationException.class)
     ProblemDetail handlePasswordPolicyViolation(PasswordPolicyViolationException ex) {
-        log.warn("Password policy violation: {}", ex.getMessage());
+        log.warn("Password policy violation: {}", ex.getClass().getSimpleName());
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         pd.setTitle("Password Policy Violation");
         pd.setType(URI.create("/errors/password-policy"));

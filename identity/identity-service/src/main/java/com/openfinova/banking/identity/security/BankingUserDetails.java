@@ -22,6 +22,10 @@ import com.openfinova.banking.identity.entity.BankingUser;
  *
  * Exposes additional banking-specific fields so that {@link TokenCustomizerConfig} can inject them
  * as JWT claims without making a second database call.
+ *
+ * Callers must supply a {@link Clock} from {@link com.openfinova.banking.setup.api.DateTimeService#clock()}
+ * (typically {@code dateTimeService.clock()}) so account lock, expiry, and permission resolution align
+ * with platform time. This type is not a Spring bean and cannot resolve {@code DateTimeService} itself.
  */
 public class BankingUserDetails implements UserDetails {
 
@@ -29,14 +33,6 @@ public class BankingUserDetails implements UserDetails {
     private final Set<GrantedAuthority> authorities;
     private final PasswordPolicyProperties passwordPolicy;
     private final Clock clock;
-
-    public BankingUserDetails(BankingUser user) {
-        this(user, Clock.systemDefaultZone(), new PasswordPolicyProperties());
-    }
-
-    public BankingUserDetails(BankingUser user, Clock clock) {
-        this(user, clock, new PasswordPolicyProperties());
-    }
 
     public BankingUserDetails(BankingUser user, Clock clock, PasswordPolicyProperties passwordPolicy) {
         this.user = user;
@@ -96,7 +92,7 @@ public class BankingUserDetails implements UserDetails {
     @Override
     public boolean isAccountNonExpired() {
         LocalDateTime expiresAt = user.getAccountExpiresAt();
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
         return expiresAt == null || expiresAt.isAfter(now);
     }
 
@@ -106,7 +102,7 @@ public class BankingUserDetails implements UserDetails {
             return false;
         }
         LocalDateTime autoLockUntil = user.getFailedLoginLockedUntil();
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
         if (autoLockUntil != null && autoLockUntil.isAfter(now)) {
             return false;
         }
@@ -118,14 +114,14 @@ public class BankingUserDetails implements UserDetails {
         if (user.isForcePasswordChange()) {
             return true;
         }
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
         LocalDateTime effective = PasswordLifecycleEvaluator.effectivePasswordExpiresAt(user, passwordPolicy);
         return effective == null || effective.isAfter(now);
     }
 
     @Override
     public boolean isEnabled() {
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
         if (!user.isEnabled()) {
             return false;
         }

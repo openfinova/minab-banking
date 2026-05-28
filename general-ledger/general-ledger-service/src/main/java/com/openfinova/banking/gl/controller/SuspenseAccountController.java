@@ -20,9 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.openfinova.banking.gl.dto.ClearSuspenseRequest;
 import com.openfinova.banking.gl.dto.SuspenseAgingReportDTO;
+import com.openfinova.banking.gl.dto.SuspenseEscalationResponse;
 import com.openfinova.banking.gl.dto.SuspenseItemFilterDTO;
 import com.openfinova.banking.gl.dto.SuspenseItemResponse;
-import com.openfinova.banking.gl.entity.SuspenseEscalation;
+import com.openfinova.banking.gl.mapper.SuspenseMapper;
 import com.openfinova.banking.gl.service.SuspenseAccountService;
 import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 
@@ -49,9 +50,11 @@ import jakarta.validation.Valid;
 public class SuspenseAccountController {
 
     private final SuspenseAccountService suspenseAccountService;
+    private final SuspenseMapper suspenseMapper;
 
-    public SuspenseAccountController(SuspenseAccountService suspenseAccountService) {
+    public SuspenseAccountController(SuspenseAccountService suspenseAccountService, SuspenseMapper suspenseMapper) {
         this.suspenseAccountService = suspenseAccountService;
+        this.suspenseMapper = suspenseMapper;
     }
 
     /**
@@ -107,8 +110,6 @@ public class SuspenseAccountController {
         return ResponseEntity.ok(response);
     }
 
-    // ========== Aging & Analysis ==========
-
     /**
      * Get aging report for suspense items.
      */
@@ -155,17 +156,15 @@ public class SuspenseAccountController {
         return ResponseEntity.ok(stats);
     }
 
-    // ========== Escalation Management ==========
-
     /**
      * Get all unresolved escalations.
      */
     @GetMapping("/escalations")
     @PreAuthorize("hasAuthority('gl:read')")
     @Operation(summary = "Get escalations", description = "Get all unresolved suspense escalations")
-    public ResponseEntity<List<SuspenseEscalation>> getEscalations() {
-        List<SuspenseEscalation> escalations = suspenseAccountService.getUnresolvedEscalations();
-        return ResponseEntity.ok(escalations);
+    public ResponseEntity<List<SuspenseEscalationResponse>> getEscalations() {
+        return ResponseEntity
+                .ok(suspenseMapper.toEscalationResponseList(suspenseAccountService.getUnresolvedEscalations()));
     }
 
     /**
@@ -174,9 +173,9 @@ public class SuspenseAccountController {
     @GetMapping("/escalations/overdue")
     @PreAuthorize("hasAuthority('gl:read')")
     @Operation(summary = "Get overdue escalations", description = "Get escalations that are past their due date")
-    public ResponseEntity<List<SuspenseEscalation>> getOverdueEscalations() {
-        List<SuspenseEscalation> escalations = suspenseAccountService.getOverdueEscalations();
-        return ResponseEntity.ok(escalations);
+    public ResponseEntity<List<SuspenseEscalationResponse>> getOverdueEscalations() {
+        return ResponseEntity
+                .ok(suspenseMapper.toEscalationResponseList(suspenseAccountService.getOverdueEscalations()));
     }
 
     /**
@@ -192,8 +191,6 @@ public class SuspenseAccountController {
         suspenseAccountService.resolveEscalation(escalationId, resolvedBy, resolutionNotes);
         return ResponseEntity.ok().build();
     }
-
-    // ========== Manual Trigger Endpoints (Admin Only) ==========
 
     /**
      * Manually trigger automatic clearing rules.

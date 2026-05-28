@@ -132,9 +132,9 @@ public class FiscalPeriod {
         return FiscalPeriodStatus.CLOSED.equals(status) || FiscalPeriodStatus.LOCKED.equals(status);
     }
 
-    public void close(String userId) {
+    public void close(String userId, LocalDateTime closedAt) {
         this.status = FiscalPeriodStatus.CLOSED;
-        this.closedAt = LocalDateTime.now();
+        this.closedAt = closedAt;
         this.closedBy = userId;
     }
 
@@ -149,11 +149,11 @@ public class FiscalPeriod {
      *
      * @param userId the user authorising the reopen (must not be blank)
      */
-    public void reopen(String userId) {
+    public void reopen(String userId, LocalDateTime reopenedAt) {
         this.status = FiscalPeriodStatus.OPEN;
         this.closedAt = null;
         this.closedBy = null;
-        this.reopenedAt = LocalDateTime.now();
+        this.reopenedAt = reopenedAt;
         this.reopenedBy = userId;
     }
 

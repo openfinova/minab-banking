@@ -121,8 +121,8 @@ public class IdentificationDocument {
     }
 
     // Business Logic
-    public boolean isValid() {
-        return expiryDate == null || expiryDate.isAfter(LocalDate.now());
+    public boolean isValid(LocalDate currentDate) {
+        return expiryDate == null || expiryDate.isAfter(currentDate);
     }
 
     // Getters and Setters

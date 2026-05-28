@@ -27,13 +27,4 @@ public interface AccountLimitRepository extends JpaRepository<AccountLimit, UUID
     List<AccountLimit> findActiveEffectiveLimitsByAccount(@Param("accountId") UUID accountId,
             @Param("now") Instant now);
 
-    /**
-     * Find active and effective limits for an account (using current time).
-     *
-     * @param accountId the account ID
-     * @return list of active effective limits
-     */
-    default List<AccountLimit> findActiveEffectiveLimitsByAccount(UUID accountId) {
-        return findActiveEffectiveLimitsByAccount(accountId, Instant.now());
-    }
 }

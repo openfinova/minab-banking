@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,6 +64,7 @@ public class FeeManagementService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public BigDecimal calculateFees(Transaction transaction) {
         logger.debug("Calculating fees for transaction: {}", transaction.getId());
 
@@ -69,9 +72,11 @@ public class FeeManagementService {
         com.openfinova.banking.tp.api.entity.CustomerTier customerTier = getCustomerTierForTransaction(transaction);
 
         // Find applicable fee rule
-        FeeRule applicableRule = getApplicableFeeRule(transaction.getRequest().getTransactionType(), customerTier);
+        Optional<FeeRule> applicableRule = getApplicableFeeRule(
+                transaction.getRequest().getTransactionType(),
+                customerTier);
 
-        if (applicableRule == null) {
+        if (applicableRule.isEmpty()) {
             logger.warn(
                     "No applicable fee rule found for transaction type: {} and tier: {}",
                     transaction.getRequest().getTransactionType(),
@@ -80,10 +85,10 @@ public class FeeManagementService {
         }
 
         // Calculate base fee
-        BigDecimal baseFee = calculateBaseFee(transaction, applicableRule);
+        BigDecimal baseFee = calculateBaseFee(transaction, applicableRule.get());
 
         // Apply waivers
-        BigDecimal finalFee = applyWaivers(transaction, applicableRule);
+        BigDecimal finalFee = applyWaivers(transaction, applicableRule.get());
 
         logger.debug("Calculated fee for transaction {}: base={}, final={}", transaction.getId(), baseFee, finalFee);
 
@@ -92,7 +97,8 @@ public class FeeManagementService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "feeRules", key = "#type + '_' + #tier")
-    public FeeRule getApplicableFeeRule(TransactionType type, com.openfinova.banking.tp.api.entity.CustomerTier tier) {
+    public Optional<FeeRule> getApplicableFeeRule(TransactionType type,
+            com.openfinova.banking.tp.api.entity.CustomerTier tier) {
         logger.debug("Finding applicable fee rule for type: {} and tier: {}", type, tier);
 
         List<FeeRule> effectiveRules = feeRuleRepository
@@ -100,11 +106,11 @@ public class FeeManagementService {
 
         if (effectiveRules.isEmpty()) {
             logger.warn("No effective fee rules found for type: {} and tier: {}", type, tier);
-            return null;
+            return Optional.empty();
         }
 
         // Return the highest priority rule
-        return effectiveRules.get(0);
+        return Optional.of(effectiveRules.get(0));
     }
 
     public BigDecimal applyWaivers(Transaction transaction, FeeRule rule) {
@@ -144,6 +150,7 @@ public class FeeManagementService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "customerTiers", key = "#customerId")
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public CustomerTier evaluateTierEligibility(UUID customerId) {
         logger.debug("Evaluating tier eligibility for customer: {}", customerId);
         return customerInfoService.getCustomer(customerId).map(this::customerInfoToTier).orElse(CustomerTier.BASIC);
@@ -162,10 +169,6 @@ public class FeeManagementService {
 
         // Validate the rule configuration
         rule.validateConfiguration();
-
-        // Set audit fields
-        rule.setCreatedBy("SYSTEM"); // In real implementation, get from security context
-        rule.setUpdatedBy("SYSTEM");
 
         FeeRule savedRule = feeRuleRepository.save(rule);
         logger.info("Created fee rule with ID: {}", savedRule.getId());
@@ -187,13 +190,32 @@ public class FeeManagementService {
         // Validate the updated rule configuration
         updatedRule.validateConfiguration();
 
-        // Update fields (preserve audit fields)
-        updatedRule.setId(existingRule.getId());
-        updatedRule.setCreatedAt(existingRule.getCreatedAt());
-        updatedRule.setCreatedBy(existingRule.getCreatedBy());
-        updatedRule.setUpdatedBy("SYSTEM"); // In real implementation, get from security context
+        // Update fields on the managed entity
+        existingRule.setRuleName(updatedRule.getRuleName());
+        existingRule.setTransactionType(updatedRule.getTransactionType());
+        existingRule.setCustomerTier(updatedRule.getCustomerTier());
+        existingRule.setPriority(updatedRule.getPriority());
+        existingRule.setCompoundable(updatedRule.isCompoundable());
+        existingRule.setGlRevenueAccountId(updatedRule.getGlRevenueAccountId());
+        existingRule.setFeeType(updatedRule.getFeeType());
+        existingRule.setFixedAmount(updatedRule.getFixedAmount());
+        existingRule.setCurrency(updatedRule.getCurrency());
+        existingRule.setPercentageRate(updatedRule.getPercentageRate());
+        existingRule.setMinimumFee(updatedRule.getMinimumFee());
+        existingRule.setMaximumFee(updatedRule.getMaximumFee());
+        existingRule.setTierConfiguration(updatedRule.getTierConfiguration());
+        existingRule.setMinTransactionAmount(updatedRule.getMinTransactionAmount());
+        existingRule.setMaxTransactionAmount(updatedRule.getMaxTransactionAmount());
+        existingRule.setTimeBasedStart(updatedRule.getTimeBasedStart());
+        existingRule.setTimeBasedEnd(updatedRule.getTimeBasedEnd());
+        existingRule.setIsActive(updatedRule.getIsActive());
+        existingRule.setIsPromotional(updatedRule.getIsPromotional());
+        existingRule.setEffectiveFrom(updatedRule.getEffectiveFrom());
+        existingRule.setEffectiveTo(updatedRule.getEffectiveTo());
+        existingRule.setMetadata(updatedRule.getMetadata());
+        existingRule.setDescription(updatedRule.getDescription());
 
-        FeeRule savedRule = feeRuleRepository.save(updatedRule);
+        FeeRule savedRule = feeRuleRepository.save(existingRule);
         logger.info("Updated fee rule: {}", savedRule.getId());
 
         return savedRule;
@@ -259,6 +281,7 @@ public class FeeManagementService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public FeeCalculationResult calculateDetailedFees(Transaction transaction) {
         if (transaction == null) {
             throw new IllegalArgumentException("Transaction cannot be null");
@@ -267,11 +290,14 @@ public class FeeManagementService {
         logger.debug("Calculating detailed fees for transaction: {}", transaction.getId());
 
         CustomerTier customerTier = getCustomerTierForTransaction(transaction);
-        FeeRule applicableRule = getApplicableFeeRule(transaction.getRequest().getTransactionType(), customerTier);
+        Optional<FeeRule> applicableRule = getApplicableFeeRule(
+                transaction.getRequest().getTransactionType(),
+                customerTier);
 
         FeeCalculationResult result = new FeeCalculationResult();
+        result.setCalculationTimestamp(dateTimeService.now());
 
-        if (applicableRule == null) {
+        if (applicableRule.isEmpty()) {
             result.setBaseFee(BigDecimal.ZERO);
             result.setAdjustedFee(BigDecimal.ZERO);
             result.setTotalFee(BigDecimal.ZERO);
@@ -280,21 +306,22 @@ public class FeeManagementService {
         }
 
         // Calculate base fee
-        BigDecimal baseFee = calculateBaseFee(transaction, applicableRule);
+        FeeRule rule = applicableRule.get();
+        BigDecimal baseFee = calculateBaseFee(transaction, rule);
         result.setBaseFee(baseFee);
 
         // Build fee components
-        List<FeeCalculationResult.FeeComponent> components = buildFeeComponents(transaction, applicableRule);
+        List<FeeCalculationResult.FeeComponent> components = buildFeeComponents(transaction, rule);
         result.setFeeComponents(components);
 
         // Apply waivers and build waiver details
         List<FeeCalculationResult.AppliedWaiver> appliedWaivers = new ArrayList<>();
-        BigDecimal adjustedFee = applyWaiversDetailed(transaction, applicableRule, appliedWaivers);
+        BigDecimal adjustedFee = applyWaiversDetailed(transaction, rule, appliedWaivers);
         result.setAdjustedFee(adjustedFee);
         result.setAppliedWaivers(appliedWaivers);
 
         result.setTotalFee(adjustedFee);
-        result.setCalculationMethod(applicableRule.getFeeType().name());
+        result.setCalculationMethod(rule.getFeeType().name());
 
         return result;
     }
@@ -334,7 +361,7 @@ public class FeeManagementService {
         }
 
         // Check if waiver is currently effective
-        if (!waiver.isCurrentlyEffective()) {
+        if (!waiver.isCurrentlyEffective(dateTimeService.now())) {
             return false;
         }
 

@@ -1,6 +1,7 @@
 package com.openfinova.banking.gl.scheduler;
 
 import com.openfinova.banking.gl.service.GLSnapshotService;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -41,9 +42,11 @@ public class GLSnapshotScheduler {
     private static final Logger log = LoggerFactory.getLogger(GLSnapshotScheduler.class);
 
     private final GLSnapshotService snapshotService;
+    private final DateTimeService dateTimeService;
 
-    public GLSnapshotScheduler(GLSnapshotService snapshotService) {
+    public GLSnapshotScheduler(GLSnapshotService snapshotService, DateTimeService dateTimeService) {
         this.snapshotService = snapshotService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -116,7 +119,7 @@ public class GLSnapshotScheduler {
         log.info("Starting scheduled missing snapshot generation");
 
         try {
-            LocalDate yesterday = LocalDate.now().minusDays(1);
+            LocalDate yesterday = dateTimeService.today().minusDays(1);
             int count = snapshotService.generateMissingSnapshots(yesterday);
             log.info("Generated {} missing snapshots for {}", count, yesterday);
         } catch (Exception e) {
@@ -156,7 +159,7 @@ public class GLSnapshotScheduler {
         log.info("Starting scheduled snapshot archival");
 
         try {
-            LocalDate archiveBeforeDate = LocalDate.now().minusYears(1);
+            LocalDate archiveBeforeDate = dateTimeService.today().minusYears(1);
             int count = snapshotService.archiveOldSnapshots(archiveBeforeDate);
             log.info("Archived {} snapshots before {}", count, archiveBeforeDate);
         } catch (Exception e) {

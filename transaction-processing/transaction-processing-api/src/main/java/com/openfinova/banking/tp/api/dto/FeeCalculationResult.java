@@ -21,7 +21,6 @@ public class FeeCalculationResult {
 
     // Constructors
     public FeeCalculationResult() {
-        this.calculationTimestamp = LocalDateTime.now();
     }
 
     public FeeCalculationResult(BigDecimal baseFee, BigDecimal adjustedFee, BigDecimal totalFee) {

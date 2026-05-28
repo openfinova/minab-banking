@@ -5,9 +5,9 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
-import org.hibernate.annotations.CreationTimestamp;
-// import org.hibernate.annotations.Type;
-// import io.hypersistence.utils.hibernate.type.json.JsonType;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -24,6 +24,7 @@ import java.util.UUID;
  * accounts.
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "account_relationships", indexes = {
         @Index(name = "idx_account_relationships_user", columnList = "user_profile_id"),
         @Index(name = "idx_account_relationships_account", columnList = "customer_account_id"),
@@ -84,10 +85,11 @@ public class AccountRelationship {
     @Column(name = "status", nullable = false, length = 20)
     private com.openfinova.banking.customer.account.api.entity.RelationshipStatus status = com.openfinova.banking.customer.account.api.entity.RelationshipStatus.ACTIVE;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @CreatedBy
     @Column(name = "created_by", nullable = false, length = 100)
     private String createdBy;
 
@@ -98,16 +100,14 @@ public class AccountRelationship {
     private LocalDateTime effectiveUntil;
 
     public AccountRelationship() {
-        this.effectiveFrom = LocalDateTime.now();
     }
 
     public AccountRelationship(Account customerAccount, UUID userProfileId, RelationshipType relationshipType,
-            String createdBy) {
-        this();
+            LocalDateTime effectiveFrom) {
         this.customerAccount = customerAccount;
         this.userProfileId = userProfileId;
         this.relationshipType = relationshipType;
-        this.createdBy = createdBy;
+        this.effectiveFrom = effectiveFrom;
         this.permissions = relationshipType.getDefaultPermissions();
     }
 
@@ -126,10 +126,10 @@ public class AccountRelationship {
      *
      * @return true if the relationship is active and within effective date range
      */
-    public boolean isEffective() {
-        LocalDateTime now = LocalDateTime.now();
+    public boolean isEffective(LocalDateTime evaluatedAt) {
         return status == com.openfinova.banking.customer.account.api.entity.RelationshipStatus.ACTIVE
-                && !now.isBefore(effectiveFrom) && (effectiveUntil == null || !now.isAfter(effectiveUntil));
+                && !evaluatedAt.isBefore(effectiveFrom)
+                && (effectiveUntil == null || !evaluatedAt.isAfter(effectiveUntil));
     }
 
     /**

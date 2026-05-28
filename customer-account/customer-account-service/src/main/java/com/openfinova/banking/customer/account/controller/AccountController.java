@@ -88,7 +88,7 @@ public class AccountController {
         log.info("Fetching account with ID: {}", id);
 
         return accountService.getAccountById(id).map(account -> {
-            log.info("Found account: {}", account.getAccountNumber());
+            log.info("Found account with ID: {}", account.getId());
             return ResponseEntity.ok(accountMapper.toResponse(account));
         }).orElseGet(() -> {
             log.warn("Account not found with ID: {}", id);
@@ -105,13 +105,13 @@ public class AccountController {
     public ResponseEntity<AccountResponse> getAccountByNumber(
             @Parameter(description = "Account number", required = true) @PathVariable String accountNumber) {
 
-        log.info("Fetching account with number: {}", accountNumber);
+        log.info("Fetching account by account number");
 
         return accountService.getAccountByNumber(accountNumber).map(account -> {
             log.info("Found account with ID: {}", account.getId());
             return ResponseEntity.ok(accountMapper.toResponse(account));
         }).orElseGet(() -> {
-            log.warn("Account not found with number: {}", accountNumber);
+            log.warn("Account not found by account number lookup");
             return ResponseEntity.notFound().build();
         });
     }
@@ -125,13 +125,13 @@ public class AccountController {
     public ResponseEntity<AccountResponse> getAccountByIban(
             @Parameter(description = "IBAN", required = true) @PathVariable String iban) {
 
-        log.info("Fetching account with IBAN: {}", iban);
+        log.info("Fetching account by IBAN");
 
         return accountService.getAccountByIban(iban).map(account -> {
             log.info("Found account with ID: {}", account.getId());
             return ResponseEntity.ok(accountMapper.toResponse(account));
         }).orElseGet(() -> {
-            log.warn("Account not found with IBAN: {}", iban);
+            log.warn("Account not found by IBAN lookup");
             return ResponseEntity.notFound().build();
         });
     }
@@ -195,7 +195,7 @@ public class AccountController {
         accountService.updateAccountStatus(id, request.getNewStatus(), request.getReason(), actor);
 
         return accountService.getAccountById(id).map(account -> {
-            log.info("Successfully updated status of account: {}", account.getAccountNumber());
+            log.info("Successfully updated status of account: {}", id);
             return ResponseEntity.ok(accountMapper.toResponse(account));
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -212,14 +212,9 @@ public class AccountController {
 
         log.info("Closing account with ID: {}", id);
 
-        try {
-            accountService.closeAccount(id, reason);
-            log.info("Successfully closed account: {}", id);
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            log.error("Failed to close account: {}", id, e);
-            return ResponseEntity.badRequest().build();
-        }
+        accountService.closeAccount(id, reason);
+        log.info("Successfully closed account: {}", id);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{id}/validate")
@@ -231,7 +226,7 @@ public class AccountController {
             @Parameter(description = "Account ID", required = true) @PathVariable UUID id,
             @Parameter(description = "Transaction amount") @RequestParam BigDecimal amount) {
 
-        log.info("Validating account {} for transaction amount: {}", id, amount);
+        log.info("Validating account {} for transaction", id);
 
         ValidationResult result = accountService.validateAccountForTransaction(id, amount);
 

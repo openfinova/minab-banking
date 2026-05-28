@@ -14,6 +14,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.openfinova.banking.customer.api.entity.CustomerStatus;
 import com.openfinova.banking.customer.api.entity.CustomerType;
@@ -23,7 +24,7 @@ import com.openfinova.banking.customer.repository.CustomerRelationshipRepository
 import com.openfinova.banking.customer.repository.CustomerRepository;
 import com.openfinova.banking.customer.repository.IdentificationDocumentRepository;
 import com.openfinova.banking.customer.repository.KYCWorkflowRepository;
-import org.springframework.context.ApplicationEventPublisher;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceTest {
@@ -38,6 +39,8 @@ class CustomerServiceTest {
     private IdentificationDocumentRepository identificationDocumentRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private DateTimeService dateTimeService;
 
     private CustomerService customerService;
 
@@ -48,7 +51,8 @@ class CustomerServiceTest {
                 relationshipRepository,
                 kycWorkflowRepository,
                 identificationDocumentRepository,
-                eventPublisher);
+                eventPublisher,
+                dateTimeService);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.openfinova.banking.customer.controller;
 
+import com.openfinova.banking.customer.dto.AddressRequest;
 import com.openfinova.banking.customer.dto.AddressResponse;
 import com.openfinova.banking.customer.entity.CustomerAddress;
 import com.openfinova.banking.customer.mapper.CustomerMapper;
@@ -51,11 +52,11 @@ public class AddressController {
             @ApiResponse(responseCode = "400", description = "Invalid address data") })
     public ResponseEntity<AddressResponse> addAddress(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
-            @Valid @RequestBody CustomerAddress address) {
+            @Valid @RequestBody AddressRequest address) {
 
         log.info("Adding address for customer: {}, type: {}", customerId, address.getType());
 
-        CustomerAddress created = addressService.addAddress(customerId, address);
+        CustomerAddress created = addressService.addAddress(customerId, CustomerMapper.toAddressEntity(address));
 
         log.info("Successfully added address with ID: {}", created.getId());
 
@@ -103,11 +104,12 @@ public class AddressController {
     public ResponseEntity<AddressResponse> updateAddress(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID customerId,
             @Parameter(description = "Address ID", required = true) @PathVariable UUID addressId,
-            @Valid @RequestBody CustomerAddress addressDetails) {
+            @Valid @RequestBody AddressRequest addressDetails) {
 
         log.info("Updating address: {}", addressId);
 
-        CustomerAddress updated = addressService.updateAddress(customerId, addressId, addressDetails);
+        CustomerAddress updated = addressService
+                .updateAddress(customerId, addressId, CustomerMapper.toAddressEntity(addressDetails));
 
         log.info("Successfully updated address: {}", addressId);
 

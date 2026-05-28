@@ -3,6 +3,7 @@ package com.openfinova.banking.loan.scheduler;
 import java.time.LocalDate;
 
 import com.openfinova.banking.loan.service.LoanAccountScheduledTasks;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,12 +35,14 @@ public class LoanScheduler {
     private final LoanAccountService loanAccountService;
     private final LoanScheduleService scheduleService;
     private final LoanAccountScheduledTasks scheduledTasks;
+    private final DateTimeService dateTimeService;
 
     public LoanScheduler(LoanAccountService loanAccountService, LoanScheduleService scheduleService,
-            LoanAccountScheduledTasks scheduledTasks) {
+            LoanAccountScheduledTasks scheduledTasks, DateTimeService dateTimeService) {
         this.loanAccountService = loanAccountService;
         this.scheduleService = scheduleService;
         this.scheduledTasks = scheduledTasks;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -54,7 +57,7 @@ public class LoanScheduler {
     public void processInterestAccrual() {
         log.info("Starting scheduled loan interest accrual");
         try {
-            LocalDate accrualDate = LocalDate.now();
+            LocalDate accrualDate = dateTimeService.today();
             int count = loanAccountService.processInterestAccrual(accrualDate);
             log.info("Processed interest accrual for {} loan accounts", count);
         } catch (Exception e) {
@@ -74,7 +77,7 @@ public class LoanScheduler {
     public void processOverdueDetection() {
         log.info("Starting scheduled overdue detection");
         try {
-            LocalDate currentDate = LocalDate.now();
+            LocalDate currentDate = dateTimeService.today();
             int count = scheduleService.processOverdueSchedules(currentDate);
             log.info("Marked {} loan schedules as overdue", count);
         } catch (Exception e) {
@@ -113,7 +116,7 @@ public class LoanScheduler {
     public void processProvisionCalculation() {
         log.info("Starting scheduled provision calculation");
         try {
-            LocalDate calculationDate = LocalDate.now();
+            LocalDate calculationDate = dateTimeService.today();
             int count = scheduledTasks.calculateProvisions(calculationDate);
             log.info("Calculated provisions for {} loan accounts", count);
         } catch (Exception e) {
@@ -133,7 +136,7 @@ public class LoanScheduler {
     public void processQuoteExpiration() {
         log.info("Starting scheduled quote expiration");
         try {
-            LocalDate currentDate = LocalDate.now();
+            LocalDate currentDate = dateTimeService.today();
             int count = scheduledTasks.expireOldQuotes(currentDate);
             log.info("Expired {} old settlement quotes", count);
         } catch (Exception e) {
@@ -153,7 +156,7 @@ public class LoanScheduler {
     public void processLoanMaturity() {
         log.info("Starting scheduled loan maturity processing");
         try {
-            LocalDate currentDate = LocalDate.now();
+            LocalDate currentDate = dateTimeService.today();
             int count = scheduledTasks.processMaturedLoans(currentDate);
             log.info("Processed {} matured loans", count);
         } catch (Exception e) {
@@ -173,7 +176,7 @@ public class LoanScheduler {
     public void generatePaymentReminders() {
         log.info("Starting scheduled payment reminder generation");
         try {
-            LocalDate currentDate = LocalDate.now();
+            LocalDate currentDate = dateTimeService.today();
             int reminderDays = 3; // Configurable
             int count = scheduleService.generatePaymentReminders(currentDate, reminderDays);
             log.info("Generated {} payment reminders", count);
@@ -194,7 +197,7 @@ public class LoanScheduler {
     public void processAutomaticPayments() {
         log.info("Starting scheduled automatic payment processing");
         try {
-            LocalDate currentDate = LocalDate.now();
+            LocalDate currentDate = dateTimeService.today();
             int count = scheduledTasks.processAutomaticPayments(currentDate);
             log.info("Processed {} automatic payments", count);
         } catch (Exception e) {
@@ -214,7 +217,7 @@ public class LoanScheduler {
     public void updatePerformanceMetrics() {
         log.info("Starting scheduled performance metrics update");
         try {
-            LocalDate currentDate = LocalDate.now();
+            LocalDate currentDate = dateTimeService.today();
             scheduledTasks.updatePerformanceMetrics(currentDate);
             log.info("Successfully updated loan performance metrics");
         } catch (Exception e) {

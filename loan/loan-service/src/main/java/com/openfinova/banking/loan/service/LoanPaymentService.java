@@ -8,9 +8,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.entity.LoanPayment;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
 import com.openfinova.banking.loan.repository.LoanPaymentRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Implementation of LoanPaymentService for managing loan payment processing.
@@ -95,13 +97,16 @@ public class LoanPaymentService {
     private final LoanAccountRepository loanAccountRepository;
     private final LoanScheduleService loanScheduleService;
     private final ApplicationEventPublisher eventPublisher;
+    private final DateTimeService dateTimeService;
 
     public LoanPaymentService(LoanPaymentRepository paymentRepository, LoanAccountRepository loanAccountRepository,
-            LoanScheduleService loanScheduleService, ApplicationEventPublisher eventPublisher) {
+            LoanScheduleService loanScheduleService, ApplicationEventPublisher eventPublisher,
+            DateTimeService dateTimeService) {
         this.paymentRepository = paymentRepository;
         this.loanAccountRepository = loanAccountRepository;
         this.loanScheduleService = loanScheduleService;
         this.eventPublisher = eventPublisher;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -109,6 +114,7 @@ public class LoanPaymentService {
      * Used for idempotent posting from transaction processing and payment rails.
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('service:loan:read')")
     public boolean repaymentExistsForTransactionReference(String transactionReference) {
         if (transactionReference == null || transactionReference.isBlank()) {
             return false;
@@ -160,6 +166,7 @@ public class LoanPaymentService {
      * @return the created payment record with allocation details
      * @throws IllegalArgumentException if loan account not found or invalid parameters
      */
+    @PreAuthorize("hasAnyAuthority('loan:collect', 'loan:write', 'service:loan:write')")
     public LoanPayment recordPayment(UUID loanAccountId, BigDecimal paymentAmount, LocalDate paymentDate,
             PaymentMethod paymentMethod, String transactionReference, String recordedBy) {
         if (transactionReference != null && !transactionReference.isBlank()
@@ -264,6 +271,7 @@ public class LoanPaymentService {
      * @return the created payment record with specified allocation
      * @throws IllegalArgumentException if loan account not found, allocation invalid, or parameters invalid
      */
+    @PreAuthorize("hasAnyAuthority('loan:collect', 'loan:write')")
     public LoanPayment recordPaymentWithAllocation(UUID loanAccountId, BigDecimal paymentAmount,
             BigDecimal principalPaid, BigDecimal interestPaid, BigDecimal feesPaid, BigDecimal penaltiesPaid,
             LocalDate paymentDate, PaymentType paymentType, PaymentMethod paymentMethod, String transactionReference,
@@ -329,6 +337,7 @@ public class LoanPaymentService {
      * @return Optional containing the payment if found, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanPayment> getPaymentById(UUID id) {
         return paymentRepository.findById(id);
     }
@@ -347,6 +356,7 @@ public class LoanPaymentService {
      * @return Optional containing the payment if found, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanPayment> getPaymentByReference(String paymentReference) {
         return paymentRepository.findByPaymentReference(paymentReference);
     }
@@ -366,6 +376,7 @@ public class LoanPaymentService {
      * @return page of payments for the loan account
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanPayment> getPaymentsByLoanAccount(UUID loanAccountId, Pageable pageable) {
         return paymentRepository.findByLoanAccountId(loanAccountId, pageable);
     }
@@ -387,6 +398,7 @@ public class LoanPaymentService {
      * @return page of payments within the specified date range
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanPayment> getPaymentsByLoanAccountAndDateRange(UUID loanAccountId, LocalDate startDate,
             LocalDate endDate, Pageable pageable) {
         return paymentRepository.findByLoanAccountIdAndPaymentDateBetween(loanAccountId, startDate, endDate, pageable);
@@ -407,6 +419,7 @@ public class LoanPaymentService {
      * @return page of payments of the specified type
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanPayment> getPaymentsByType(PaymentType paymentType, Pageable pageable) {
         return paymentRepository.findByPaymentType(paymentType, pageable);
     }
@@ -433,6 +446,7 @@ public class LoanPaymentService {
      * @return page of payments using the specified method
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanPayment> getPaymentsByMethod(PaymentMethod paymentMethod, Pageable pageable) {
         return paymentRepository.findByPaymentMethod(paymentMethod, pageable);
     }
@@ -455,6 +469,7 @@ public class LoanPaymentService {
      * @return page of reversed payments
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<LoanPayment> getReversedPayments(Pageable pageable) {
         return paymentRepository.findReversedPayments(pageable);
     }
@@ -508,6 +523,7 @@ public class LoanPaymentService {
      * @throws IllegalArgumentException if payment not found
      * @throws IllegalStateException if payment is already reversed
      */
+    @PreAuthorize("hasAuthority('loan:collect')")
     public LoanPayment reversePayment(UUID paymentId, String reversalReason, String reversedBy) {
         LoanPayment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
@@ -529,7 +545,7 @@ public class LoanPaymentService {
 
         payment.setIsReversed(true);
         payment.setReversalReason(reversalReason);
-        payment.setReversedAt(Instant.now());
+        payment.setReversedAt(dateTimeService.instant());
 
         return paymentRepository.save(payment);
     }
@@ -587,6 +603,7 @@ public class LoanPaymentService {
      * @throws IllegalArgumentException if loan account not found
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public PaymentAllocation calculatePaymentAllocation(UUID loanAccountId, BigDecimal paymentAmount) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Loan account not found: " + loanAccountId));
@@ -632,6 +649,7 @@ public class LoanPaymentService {
      * @return the total amount of all payments received
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateTotalPayments(UUID loanAccountId) {
         return paymentRepository.sumPaymentsByLoanAccount(loanAccountId);
     }
@@ -652,6 +670,7 @@ public class LoanPaymentService {
      * @return the total principal amount paid
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateTotalPrincipalPaid(UUID loanAccountId) {
         return paymentRepository.sumPrincipalPaidByLoanAccount(loanAccountId);
     }
@@ -672,6 +691,7 @@ public class LoanPaymentService {
      * @return the total interest amount paid
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public BigDecimal calculateTotalInterestPaid(UUID loanAccountId) {
         return paymentRepository.sumInterestPaidByLoanAccount(loanAccountId);
     }
@@ -689,6 +709,7 @@ public class LoanPaymentService {
      * @return Optional containing the last payment if any payments exist, empty otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<LoanPayment> getLastPayment(UUID loanAccountId) {
         return paymentRepository.findLastPaymentByLoanAccount(loanAccountId);
     }
@@ -707,6 +728,7 @@ public class LoanPaymentService {
      * @return true if at least one payment exists, false otherwise
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public boolean hasPayments(UUID loanAccountId) {
         return paymentRepository.hasPayments(loanAccountId);
     }
@@ -725,6 +747,7 @@ public class LoanPaymentService {
      * @return the total count of payments
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countPayments(UUID loanAccountId) {
         return paymentRepository.countByLoanAccountId(loanAccountId);
     }

@@ -7,6 +7,7 @@ import com.openfinova.banking.tp.api.entity.VelocityLimitPeriod;
 import com.openfinova.banking.tp.entity.*;
 import com.openfinova.banking.tp.repository.VelocityLimitBreachRepository;
 import com.openfinova.banking.tp.repository.VelocityLimitRepository;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,13 +37,14 @@ public class VelocityLimitService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public boolean checkLimits(UUID accountId, TransactionType type, BigDecimal amount, String currency) {
         List<VelocityLimit> limits = velocityLimitRepository
                 .findByAccountIdAndTransactionTypeAndIsActiveTrue(accountId, type);
 
         for (VelocityLimit limit : limits) {
             // Reset limit if period has expired
-            if (!limit.isPeriodActive()) {
+            if (!limit.isPeriodActive(dateTimeService.now())) {
                 resetLimitPeriod(limit);
             }
 
@@ -75,13 +77,14 @@ public class VelocityLimitService {
         return true;
     }
 
+    @PreAuthorize("hasAnyAuthority('transaction:write', 'service:transaction:write')")
     public void incrementUsage(UUID accountId, TransactionType type, BigDecimal amount, String currency) {
         List<VelocityLimit> limits = velocityLimitRepository
                 .findByAccountIdAndTransactionTypeAndIsActiveTrue(accountId, type);
 
         for (VelocityLimit limit : limits) {
             // Reset limit if period has expired
-            if (!limit.isPeriodActive()) {
+            if (!limit.isPeriodActive(dateTimeService.now())) {
                 resetLimitPeriod(limit);
             }
 
@@ -105,7 +108,7 @@ public class VelocityLimitService {
         List<VelocityLimit> limits = velocityLimitRepository.findByAccountIdAndIsActive(accountId, true);
 
         for (VelocityLimit limit : limits) {
-            if (!limit.isPeriodActive()) {
+            if (!limit.isPeriodActive(dateTimeService.now())) {
                 resetLimitPeriod(limit);
             }
         }
@@ -176,11 +179,12 @@ public class VelocityLimitService {
     // Real-time monitoring methods
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public VelocityLimitStatus getCurrentLimitStatus(UUID accountId, TransactionType type) {
         List<VelocityLimit> limits = velocityLimitRepository
                 .findByAccountIdAndTransactionTypeAndIsActiveTrue(accountId, type);
 
-        VelocityLimitStatus status = new VelocityLimitStatus(accountId, type);
+        VelocityLimitStatus status = new VelocityLimitStatus(accountId, type, dateTimeService.now());
 
         Map<VelocityLimitPeriod, LimitUsage> currentUsage = new HashMap<>();
         Map<VelocityLimitPeriod, BigDecimal> remainingAmounts = new HashMap<>();
@@ -217,6 +221,7 @@ public class VelocityLimitService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('transaction:read', 'service:transaction:read')")
     public BigDecimal getRemainingLimit(UUID accountId, TransactionType type, VelocityLimitPeriod period) {
         List<VelocityLimit> limits = velocityLimitRepository
                 .findByAccountIdAndTransactionTypeAndIsActiveTrue(accountId, type);
@@ -329,7 +334,7 @@ public class VelocityLimitService {
     private void resetLimitPeriod(VelocityLimit limit) {
         LocalDateTime now = dateTimeService.now();
         LocalDateTime newPeriodStart = limit.getVelocityLimitPeriod().getPeriodStart(now);
-        limit.resetForNewPeriod(newPeriodStart);
+        limit.resetForNewPeriod(newPeriodStart, now);
         velocityLimitRepository.save(limit);
     }
 

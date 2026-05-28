@@ -6,8 +6,11 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.openfinova.banking.tp.api.entity.CustomerTier;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.openfinova.banking.common.lib.converter.MapToJsonConverter;
 import com.openfinova.banking.tp.api.entity.TransactionType;
@@ -15,6 +18,7 @@ import com.openfinova.banking.tp.api.entity.TransactionType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -34,6 +38,7 @@ import jakarta.validation.constraints.NotNull;
  * - Promotional fee waiver support
  */
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "fee_waivers", indexes = { @Index(name = "idx_fee_waivers_account", columnList = "account_id"),
         @Index(name = "idx_fee_waivers_transaction_type", columnList = "transaction_type"),
         @Index(name = "idx_fee_waivers_active", columnList = "is_active"),
@@ -93,20 +98,22 @@ public class FeeWaiver {
     @Column(name = "metadata", columnDefinition = "jsonb")
     private Map<String, Object> metadata;
 
-    @CreationTimestamp
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp
+    @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Version
     private Long version;
 
+    @CreatedBy
     @Column(name = "created_by", nullable = false, length = 100)
     private String createdBy;
 
+    @LastModifiedBy
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 
@@ -114,11 +121,10 @@ public class FeeWaiver {
     public FeeWaiver() {
     }
 
-    public FeeWaiver(String waiverName, String campaignCode) {
+    public FeeWaiver(String waiverName, String campaignCode, LocalDateTime effectiveFrom) {
         this.waiverName = waiverName;
         this.campaignCode = campaignCode;
-        this.effectiveFrom = LocalDateTime.now();
-        this.createdBy = "SYSTEM";
+        this.effectiveFrom = effectiveFrom;
     }
 
     // Business logic methods
@@ -128,12 +134,11 @@ public class FeeWaiver {
      *
      * @return true if waiver is active and within effective date range
      */
-    public boolean isCurrentlyEffective() {
+    public boolean isCurrentlyEffective(LocalDateTime now) {
         if (!isActive) {
             return false;
         }
 
-        LocalDateTime now = LocalDateTime.now();
         if (effectiveFrom != null && now.isBefore(effectiveFrom)) {
             return false;
         }

@@ -114,17 +114,20 @@ public class AuthorizationServerConfig {
             LoginRateLimitFilter loginRateLimitFilter, MfaChallengeFilter mfaChallengeFilter) throws Exception {
         http.cors(Customizer.withDefaults());
         http.authorizeHttpRequests(
-                auth -> auth.requestMatchers(
-                        "/mfa/challenge",
-                        "/mfa/verify",
-                        "/css/**",
-                        "/js/**",
-                        "/login",
-                        "/login/**",
-                        "/logout",
-                        "/logout/**",
-                        "/logged-out",
-                        "/logged-out/**").permitAll().anyRequest().authenticated())
+                auth -> auth
+                        // MFA challenge pages shown between password auth and token issuance
+                        .requestMatchers("/mfa/challenge", "/mfa/verify").permitAll()
+                        // Static assets for the server-rendered login portal
+                        .requestMatchers("/css/**", "/js/**").permitAll()
+                        // Form login, logout, and post-logout confirmation pages
+                        .requestMatchers(
+                                "/login",
+                                "/login/**",
+                                "/logout",
+                                "/logout/**",
+                                "/logged-out",
+                                "/logged-out/**")
+                        .permitAll().anyRequest().authenticated())
                 .formLogin(
                         form -> form.loginPage("/login").successHandler(loginEventHandlers.successHandler())
                                 .failureHandler(loginEventHandlers.failureHandler()))

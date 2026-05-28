@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import com.openfinova.banking.loan.entity.EarlySettlement;
 import com.openfinova.banking.loan.entity.LoanAccount;
 import com.openfinova.banking.loan.repository.EarlySettlementRepository;
 import com.openfinova.banking.loan.repository.LoanAccountRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
  * Implementation of EarlySettlementService for managing loan early settlement requests.
@@ -54,11 +56,13 @@ public class EarlySettlementService {
 
     private final EarlySettlementRepository settlementRepository;
     private final LoanAccountRepository loanAccountRepository;
+    private final DateTimeService dateTimeService;
 
     public EarlySettlementService(EarlySettlementRepository settlementRepository,
-            LoanAccountRepository loanAccountRepository) {
+            LoanAccountRepository loanAccountRepository, DateTimeService dateTimeService) {
         this.settlementRepository = settlementRepository;
         this.loanAccountRepository = loanAccountRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -86,6 +90,7 @@ public class EarlySettlementService {
      * @return the generated settlement quote with QUOTE status
      * @throws IllegalArgumentException if loan account not found
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public EarlySettlement generateSettlementQuote(UUID loanAccountId, LocalDate settlementDate,
             SettlementCalculationMethod calculationMethod, String requestedBy) {
         LoanAccount loanAccount = loanAccountRepository.findById(loanAccountId)
@@ -129,6 +134,7 @@ public class EarlySettlementService {
      * @return list of all early settlements for the loan account (all statuses)
      */
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public List<EarlySettlement> getEarlySettlementsByLoanAccount(UUID loanAccountId) {
         return settlementRepository.findByLoanAccountId(loanAccountId);
     }
@@ -173,18 +179,21 @@ public class EarlySettlementService {
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Optional<EarlySettlement> getEarlySettlementForLoanAccount(UUID loanAccountId, UUID settlementId) {
         return settlementRepository.findById(settlementId)
                 .filter(s -> s.getLoanAccount() != null && loanAccountId.equals(s.getLoanAccount().getId()));
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public Page<EarlySettlement> getEarlySettlementsByLoanAccountAndStatus(UUID loanAccountId, SettlementStatus status,
             Pageable pageable) {
         return settlementRepository.findByLoanAccount_IdAndStatus(loanAccountId, status, pageable);
     }
 
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAuthority('loan:read')")
     public long countPendingSettlementsForLoanAccount(UUID loanAccountId) {
         return settlementRepository.countByLoanAccount_IdAndStatus(loanAccountId, SettlementStatus.PENDING_APPROVAL);
     }
@@ -234,6 +243,7 @@ public class EarlySettlementService {
      * @return the approved settlement with approval details
      * @throws IllegalArgumentException if settlementId is null, approvedBy is null/empty, or settlement not found
      */
+    @PreAuthorize("hasAuthority('loan:approve')")
     public EarlySettlement approveSettlement(UUID loanAccountId, UUID settlementId, String approvedBy) {
         if (loanAccountId == null) {
             throw new IllegalArgumentException("Loan account ID cannot be null");
@@ -254,7 +264,7 @@ public class EarlySettlementService {
         }
 
         settlement.setStatus(SettlementStatus.APPROVED);
-        settlement.setApprovedDate(LocalDate.now());
+        settlement.setApprovedDate(dateTimeService.today());
         settlement.setApprovedBy(approvedBy);
 
         return settlementRepository.save(settlement);
@@ -273,6 +283,7 @@ public class EarlySettlementService {
      * @return the rejected settlement with rejection details
      * @throws IllegalArgumentException if settlementId is null, rejectionReason is null/empty, rejectedBy is null/empty, or settlement not found
      */
+    @PreAuthorize("hasAuthority('loan:approve')")
     public EarlySettlement rejectSettlement(UUID loanAccountId, UUID settlementId, String rejectionReason,
             String rejectedBy) {
         if (loanAccountId == null) {
@@ -297,7 +308,7 @@ public class EarlySettlementService {
         }
 
         settlement.setStatus(SettlementStatus.REJECTED);
-        settlement.setRejectedDate(LocalDate.now());
+        settlement.setRejectedDate(dateTimeService.today());
         settlement.setRejectedBy(rejectedBy);
         settlement.setRejectionReason(rejectionReason);
 
@@ -320,6 +331,7 @@ public class EarlySettlementService {
      * @throws IllegalArgumentException if settlementId is null, paymentDate is null, processedBy is null/empty, or settlement not found
      * @throws IllegalStateException if settlement is not in APPROVED status
      */
+    @PreAuthorize("hasAuthority('loan:collect')")
     public EarlySettlement processSettlement(UUID loanAccountId, UUID settlementId, LocalDate paymentDate,
             String processedBy) {
         if (loanAccountId == null) {
@@ -331,7 +343,7 @@ public class EarlySettlementService {
         if (paymentDate == null) {
             throw new IllegalArgumentException("Payment date cannot be null");
         }
-        if (paymentDate.isAfter(LocalDate.now())) {
+        if (paymentDate.isAfter(dateTimeService.today())) {
             throw new IllegalArgumentException("Payment date cannot be in the future");
         }
         if (processedBy == null || processedBy.trim().isEmpty()) {
@@ -368,6 +380,7 @@ public class EarlySettlementService {
      * @return the cancelled settlement with cancellation details
      * @throws IllegalArgumentException if settlementId is null, cancellationReason is null/empty, cancelledBy is null/empty, or settlement not found
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public EarlySettlement cancelSettlement(UUID loanAccountId, UUID settlementId, String cancellationReason,
             String cancelledBy) {
         if (loanAccountId == null) {
@@ -393,7 +406,7 @@ public class EarlySettlementService {
         }
 
         settlement.setStatus(SettlementStatus.CANCELLED);
-        settlement.setCancelledDate(LocalDate.now());
+        settlement.setCancelledDate(dateTimeService.today());
         settlement.setCancelledBy(cancelledBy);
         settlement.setCancellationReason(cancellationReason);
 
@@ -539,7 +552,7 @@ public class EarlySettlementService {
             errors.add("Loan must be active for early settlement");
         }
 
-        if (settlementDate.isBefore(LocalDate.now())) {
+        if (settlementDate.isBefore(dateTimeService.today())) {
             errors.add("Settlement date cannot be in the past");
         }
 

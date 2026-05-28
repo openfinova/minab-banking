@@ -9,7 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.openfinova.banking.identity.config.PasswordPolicyProperties;
-import com.openfinova.banking.identity.exception.PasswordPolicyViolationException;
+import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
 
 /**
  * Validates passwords against configurable complexity rules and prevents

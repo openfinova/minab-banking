@@ -24,7 +24,8 @@ import com.openfinova.banking.tp.api.dto.CompensationWorkflowReport;
 import com.openfinova.banking.tp.api.dto.CompensationWorkflowResponse;
 import com.openfinova.banking.tp.api.entity.CompensationStatus;
 import com.openfinova.banking.tp.api.entity.TransactionType;
-import com.openfinova.banking.tp.entity.CompensationStep;
+import com.openfinova.banking.tp.dto.CompensationStepRequest;
+import com.openfinova.banking.tp.dto.CompensationStepResponse;
 import com.openfinova.banking.tp.entity.CompensationWorkflow;
 import com.openfinova.banking.tp.mapper.CompensationWorkflowMapper;
 import com.openfinova.banking.tp.service.CompensationWorkflowService;
@@ -106,16 +107,16 @@ public class CompensationWorkflowController {
     @Operation(summary = "Get workflow steps", description = "Retrieves all compensation steps for a workflow in execution order")
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Steps retrieved successfully"),
             @ApiResponse(responseCode = "404", description = "Workflow not found") })
-    public ResponseEntity<List<CompensationStep>> getWorkflowSteps(
+    public ResponseEntity<List<CompensationStepResponse>> getWorkflowSteps(
             @Parameter(description = "Workflow ID", required = true) @PathVariable UUID workflowId) {
 
         log.info("Fetching workflow steps: {}", workflowId);
 
-        List<CompensationStep> steps = compensationService.getWorkflowSteps(workflowId);
+        var steps = compensationService.getWorkflowSteps(workflowId);
 
         log.info("Found {} steps for workflow: {}", steps.size(), workflowId);
 
-        return ResponseEntity.ok(steps);
+        return ResponseEntity.ok(workflowMapper.toStepResponseList(steps));
     }
 
     @GetMapping("/active")
@@ -272,11 +273,12 @@ public class CompensationWorkflowController {
             @ApiResponse(responseCode = "400", description = "Invalid workflow configuration") })
     public ResponseEntity<CompensationWorkflowResponse> createCustomWorkflow(
             @Parameter(description = "Transaction ID") @RequestParam UUID transactionId,
-            @Valid @RequestBody List<CompensationStep> steps) {
+            @Valid @RequestBody List<CompensationStepRequest> steps) {
 
         log.info("Creating custom workflow for transaction {}: {} steps", transactionId, steps.size());
 
-        CompensationWorkflow workflow = compensationService.createCustomWorkflow(transactionId, steps);
+        CompensationWorkflow workflow = compensationService
+                .createCustomWorkflow(transactionId, workflowMapper.toStepEntityList(steps));
 
         log.info("Successfully created custom workflow with ID: {}", workflow.getId());
 

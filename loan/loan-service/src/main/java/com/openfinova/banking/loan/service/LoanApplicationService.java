@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,15 +20,18 @@ import com.openfinova.banking.loan.dto.AffordabilityAssessment;
 import com.openfinova.banking.loan.dto.ApplicationValidationResult;
 import com.openfinova.banking.loan.entity.LoanApplication;
 import com.openfinova.banking.loan.repository.LoanApplicationRepository;
+import com.openfinova.banking.setup.api.DateTimeService;
 
 @Service
 @Transactional
 public class LoanApplicationService {
 
     private final LoanApplicationRepository applicationRepository;
+    private final DateTimeService dateTimeService;
 
-    public LoanApplicationService(LoanApplicationRepository applicationRepository) {
+    public LoanApplicationService(LoanApplicationRepository applicationRepository, DateTimeService dateTimeService) {
         this.applicationRepository = applicationRepository;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -133,7 +137,7 @@ public class LoanApplicationService {
         application.setStatus(ApplicationStatus.UNDER_REVIEW);
         application.setUnderwriterId(underwriterId);
         application.setUnderwriterAssignedBy(assignedBy);
-        application.setUnderwriterAssignedAt(Instant.now());
+        application.setUnderwriterAssignedAt(dateTimeService.instant());
 
         return applicationRepository.save(application);
     }
@@ -148,6 +152,7 @@ public class LoanApplicationService {
      * @return the calculated credit score
      * @throws IllegalArgumentException if application not found
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public BigDecimal performCreditScoring(UUID applicationId) {
         LoanApplication application = applicationRepository.findById(applicationId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Application not found: %s", applicationId)));
@@ -184,6 +189,7 @@ public class LoanApplicationService {
      * @return the assigned risk rating (A, B, C, or D)
      * @throws IllegalArgumentException if application not found
      */
+    @PreAuthorize("hasAuthority('loan:write')")
     public String performRiskAssessment(UUID applicationId) {
         LoanApplication application = applicationRepository.findById(applicationId).orElseThrow(
                 () -> new IllegalArgumentException(String.format("Application not found: %s", applicationId)));
@@ -237,7 +243,7 @@ public class LoanApplicationService {
         application.setApprovedTenorMonths(approvedTenorMonths);
         application.setApprovedInterestRate(approvedInterestRate);
         application.setGuarantorsRequired(guarantorsRequired);
-        application.setApprovalDate(LocalDate.now());
+        application.setApprovalDate(dateTimeService.today());
         application.setApprovedBy(approvedBy);
 
         return applicationRepository.save(application);
@@ -264,7 +270,7 @@ public class LoanApplicationService {
 
         application.setStatus(ApplicationStatus.REJECTED);
         application.setRejectionReason(rejectionReason);
-        application.setRejectionDate(LocalDate.now());
+        application.setRejectionDate(dateTimeService.today());
         application.setRejectedBy(rejectedBy);
 
         return applicationRepository.save(application);

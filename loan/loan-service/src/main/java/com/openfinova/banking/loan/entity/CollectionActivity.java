@@ -106,8 +106,8 @@ public class CollectionActivity {
         return CollectionStatus.PENDING.equals(status);
     }
 
-    public boolean requiresFollowUp() {
-        return followUpDate != null && !followUpDate.isBefore(LocalDate.now());
+    public boolean requiresFollowUp(LocalDate currentDate) {
+        return followUpDate != null && !followUpDate.isBefore(currentDate);
     }
 
     /**

@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -133,7 +134,7 @@ public class AccountService {
                 savedAccount,
                 primaryUserProfileId,
                 RelationshipType.PRIMARY_HOLDER,
-                createdBy);
+                dateTimeService.now());
         primaryHolder.setStatus(RelationshipStatus.ACTIVE);
         accountRelationshipRepository.save(primaryHolder);
         logger.info(
@@ -203,7 +204,7 @@ public class AccountService {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
 
-        account.changeStatus(newStatus, reason, changedBy);
+        account.changeStatus(newStatus, reason, changedBy, dateTimeService.now());
         accountRepository.save(account);
 
         logger.info("Account status updated successfully for account: {}", id);
@@ -248,7 +249,7 @@ public class AccountService {
         }
 
         // Close the account
-        account.changeStatus(AccountStatus.CLOSED, reason, "SYSTEM");
+        account.changeStatus(AccountStatus.CLOSED, reason, "SYSTEM", dateTimeService.now());
 
         // Release any active holds
         releaseAllActiveHolds(account);
@@ -383,7 +384,8 @@ public class AccountService {
                     account.changeStatus(
                             AccountStatus.DORMANT,
                             "Account marked as dormant due to " + inactivityMonths + " months of inactivity",
-                            "SYSTEM");
+                            "SYSTEM",
+                            dateTimeService.now());
                     accountRepository.save(account);
                     dormantCount++;
 
@@ -563,7 +565,7 @@ public class AccountService {
         relationship.setUserProfileId(userProfileId);
         relationship.setRelationshipType(relationshipType);
         relationship.setStatus(RelationshipStatus.ACTIVE);
-        relationship.setCreatedBy(createdBy);
+        relationship.setEffectiveFrom(dateTimeService.now());
 
         AccountRelationship savedRelationship = accountRelationshipRepository.save(relationship);
         logger.info("Account relationship created: {}", savedRelationship.getId());
@@ -586,7 +588,6 @@ public class AccountService {
         if (relationship.isPresent()) {
             AccountRelationship rel = relationship.get();
             rel.setStatus(RelationshipStatus.INACTIVE);
-            rel.setUpdatedBy(removedBy);
             accountRelationshipRepository.save(rel);
             logger.info("Account relationship removed: {}", rel.getId());
         } else {
@@ -609,7 +610,6 @@ public class AccountService {
                 .orElseThrow(() -> new IllegalArgumentException("Relationship not found: " + relationshipId));
 
         relationship.setPermissions(permissions);
-        relationship.setUpdatedBy(updatedBy);
 
         return accountRelationshipRepository.save(relationship);
     }
@@ -695,7 +695,6 @@ public class AccountService {
         interestRate.setRateType(rateType);
         interestRate.setAnnualPercentageRate(annualPercentageRate);
         interestRate.setEffectiveFrom(effectiveFrom);
-        interestRate.setCreatedBy(setBy);
 
         return interestRateRepository.save(interestRate);
     }
@@ -709,7 +708,7 @@ public class AccountService {
      */
     @Transactional(readOnly = true)
     public Optional<InterestRate> getCurrentInterestRate(UUID accountId, InterestRate.RateType rateType) {
-        return interestRateRepository.findCurrentRateByAccountAndType(accountId, rateType, LocalDateTime.now());
+        return interestRateRepository.findCurrentRateByAccountAndType(accountId, rateType, dateTimeService.now());
     }
 
     /**
@@ -885,7 +884,7 @@ public class AccountService {
         List<StatementPeriod> periods = new ArrayList<>();
         LocalDate start = account.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
                 .withDayOfMonth(1);
-        LocalDate now = LocalDate.now().withDayOfMonth(1);
+        LocalDate now = dateTimeService.today().withDayOfMonth(1);
         LocalDate cursor = start;
         while (!cursor.isAfter(now)) {
             periods.add(new StatementPeriod(cursor.getYear(), cursor.getMonthValue()));
@@ -942,7 +941,8 @@ public class AccountService {
     }
 
     private void expireAllActiveLimits(Account account) {
-        List<AccountLimit> activeLimits = accountLimitRepository.findActiveEffectiveLimitsByAccount(account.getId());
+        List<AccountLimit> activeLimits = accountLimitRepository
+                .findActiveEffectiveLimitsByAccount(account.getId(), dateTimeService.instant());
         for (AccountLimit limit : activeLimits) {
             try {
                 limit.expire("SYSTEM");
@@ -952,4 +952,23 @@ public class AccountService {
             }
         }
     }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('account:read', 'service:account:read')")
+    public Optional<UUID> getPrimaryUserProfileIdForAccount(UUID accountId) {
+        return accountRepository.findById(accountId).map(Account::getPrimaryUserProfileId);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('account:read', 'service:account:read')")
+    public boolean accountExists(UUID accountId) {
+        return accountRepository.existsById(accountId);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyAuthority('account:read', 'service:account:read')")
+    public boolean isAccountEligibleForTransaction(UUID accountId) {
+        return accountRepository.findById(accountId).map(Account::canTransact).orElse(false);
+    }
+
 }

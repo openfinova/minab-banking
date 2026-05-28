@@ -1,6 +1,7 @@
 package com.openfinova.banking.config;
 
 import java.io.IOException;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.MediaType;
@@ -11,9 +12,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.openfinova.banking.identity.api.IdentityService;
 import com.openfinova.banking.identity.api.principal.BankingPrincipal;
-import com.openfinova.banking.identity.entity.BankingUser;
-import com.openfinova.banking.identity.repository.UserRepository;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -27,10 +27,10 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class PasswordManagementEnforcementFilter extends OncePerRequestFilter {
 
-    private final UserRepository userRepository;
+    private final IdentityService identityService;
 
-    public PasswordManagementEnforcementFilter(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public PasswordManagementEnforcementFilter(IdentityService identityService) {
+        this.identityService = identityService;
     }
 
     @Override
@@ -60,29 +60,27 @@ public class PasswordManagementEnforcementFilter extends OncePerRequestFilter {
         if (!Boolean.TRUE.equals(jwt.getClaim(BankingPrincipal.CLAIM_FORCE_PASSWORD_CHANGE))) {
             return false;
         }
-        BankingUser user = resolveUser(jwt);
-        if (user == null) {
-            // Fallback to token claim when user cannot be resolved.
+        Optional<UUID> userId = resolveUserId(jwt);
+        if (userId.isEmpty()) {
             return true;
         }
-        return user.isForcePasswordChange();
+        return identityService.isForcePasswordChangeRequired(userId.get());
     }
 
-    private BankingUser resolveUser(Jwt jwt) {
+    private Optional<UUID> resolveUserId(Jwt jwt) {
         String sub = jwt.getSubject();
         if (sub != null && !sub.isBlank()) {
             try {
-                UUID userId = UUID.fromString(sub);
-                return userRepository.findById(userId).orElse(null);
+                return Optional.of(UUID.fromString(sub));
             } catch (IllegalArgumentException ignored) {
                 // Older tokens may still have username in sub.
             }
         }
         String username = jwt.getClaimAsString("preferred_username");
         if (username != null && !username.isBlank()) {
-            return userRepository.findByUsername(username).orElse(null);
+            return identityService.getUserIdByUsername(username);
         }
-        return null;
+        return Optional.empty();
     }
 
     private static boolean isAllowedWhileForcedPasswordChange(HttpServletRequest request) {

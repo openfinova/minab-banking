@@ -3,6 +3,7 @@ package com.openfinova.banking.gl.scheduler;
 import com.openfinova.banking.gl.api.dto.BalanceReconciliationReport;
 import com.openfinova.banking.gl.api.dto.ValidationResult;
 import com.openfinova.banking.gl.service.GLOperationsService;
+import com.openfinova.banking.setup.api.DateTimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,9 +58,11 @@ public class GLOperationsScheduler {
     private boolean sequentialValidationEnabled;
 
     private final GLOperationsService operationsService;
+    private final DateTimeService dateTimeService;
 
-    public GLOperationsScheduler(GLOperationsService operationsService) {
+    public GLOperationsScheduler(GLOperationsService operationsService, DateTimeService dateTimeService) {
         this.operationsService = operationsService;
+        this.dateTimeService = dateTimeService;
     }
 
     /**
@@ -84,7 +87,7 @@ public class GLOperationsScheduler {
         log.info("Starting scheduled end-of-day processing");
 
         try {
-            LocalDate businessDate = LocalDate.now();
+            LocalDate businessDate = dateTimeService.today();
             operationsService.performEndOfDayProcessing(businessDate);
             log.info("Successfully completed end-of-day processing for {}", businessDate);
         } catch (Exception e) {

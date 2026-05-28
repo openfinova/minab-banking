@@ -26,8 +26,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.openfinova.banking.customer.api.entity.CustomerStatus;
 import com.openfinova.banking.customer.dto.CustomerComplianceUpdate;
+import com.openfinova.banking.customer.dto.CustomerCreateRequest;
 import com.openfinova.banking.customer.dto.CustomerProfileUpdate;
 import com.openfinova.banking.customer.dto.CustomerResponse;
+import com.openfinova.banking.customer.dto.CustomerUpdateRequest;
 import com.openfinova.banking.customer.entity.Customer;
 import com.openfinova.banking.customer.mapper.CustomerMapper;
 import com.openfinova.banking.customer.service.CustomerService;
@@ -66,11 +68,11 @@ public class CustomerController {
     @ApiResponses(value = { @ApiResponse(responseCode = "201", description = "Customer created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid customer data"),
             @ApiResponse(responseCode = "409", description = "Customer with tax ID already exists") })
-    public ResponseEntity<CustomerResponse> createCustomer(@Valid @RequestBody Customer customer) {
+    public ResponseEntity<CustomerResponse> createCustomer(@Valid @RequestBody CustomerCreateRequest request) {
 
         log.info("Creating customer");
 
-        Customer created = customerService.createCustomer(customer);
+        Customer created = customerService.createCustomer(CustomerMapper.toCustomerEntity(request));
 
         log.info("Successfully created customer with ID: {}", created.getId());
 
@@ -121,11 +123,11 @@ public class CustomerController {
             @ApiResponse(responseCode = "400", description = "Invalid customer data") })
     public ResponseEntity<CustomerResponse> updateCustomer(
             @Parameter(description = "Customer ID", required = true) @PathVariable UUID id,
-            @Valid @RequestBody Customer customerDetails) {
+            @Valid @RequestBody CustomerUpdateRequest customerDetails) {
 
         log.info("Updating customer: {}", id);
 
-        Customer updated = customerService.updateCustomer(id, customerDetails);
+        Customer updated = customerService.updateCustomer(id, CustomerMapper.toCustomerEntity(customerDetails));
 
         log.info("Successfully updated customer: {}", id);
 

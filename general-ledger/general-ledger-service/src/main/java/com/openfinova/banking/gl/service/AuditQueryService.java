@@ -6,6 +6,7 @@ import com.openfinova.banking.gl.entity.GLAuditTrail;
 import com.openfinova.banking.gl.repository.GLAuditTrailRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,6 +70,8 @@ public class AuditQueryService {
      * @param entityId UUID of the entity
      * @return list of audit records in chronological order (newest first)
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getEntityHistory(GLEntityType entityType, UUID entityId) {
         logger.debug("Retrieving audit history for {} {}", entityType, entityId);
         return auditTrailRepository.findByEntityTypeAndEntityIdOrderByPerformedAtDesc(entityType, entityId);
@@ -93,6 +96,8 @@ public class AuditQueryService {
      * @param date the date to query
      * @return list of audit records for the date
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getRecentChanges(LocalDate date) {
         Instant startOfDay = date.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = date.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
@@ -110,6 +115,8 @@ public class AuditQueryService {
      * @param endDate end date (inclusive)
      * @return list of reversal audit records
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getReversalsInPeriod(LocalDate startDate, LocalDate endDate) {
         Instant start = startDate.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant end = endDate.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
@@ -126,6 +133,8 @@ public class AuditQueryService {
      * @param to end date (inclusive)
      * @return list of audit records for the user
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getUserActivityReport(String username, LocalDate from, LocalDate to) {
         Instant startTime = from.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endTime = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
@@ -140,6 +149,8 @@ public class AuditQueryService {
      * @param to end date (inclusive)
      * @return list of high-risk audit records
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getHighRiskActions(LocalDate from, LocalDate to) {
         Instant startTime = from.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endTime = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
@@ -155,6 +166,8 @@ public class AuditQueryService {
      * @param to end date (inclusive)
      * @return list of non-compliant audit records
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getChangesWithoutReason(LocalDate from, LocalDate to) {
         Instant startTime = from.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endTime = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
@@ -172,6 +185,8 @@ public class AuditQueryService {
      * @param to end date (inclusive)
      * @return list of high-value audit records
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getLargeAmountChanges(BigDecimal threshold, LocalDate from, LocalDate to) {
         Instant startTime = from.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endTime = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
@@ -195,6 +210,8 @@ public class AuditQueryService {
      * @param correlationId UUID linking related audit entries
      * @return list of correlated audit records in chronological order
      */
+    @PreAuthorize("hasAuthority('gl:read')")
+
     public List<GLAuditTrail> getCorrelatedAuditTrail(UUID correlationId) {
         logger.debug("Retrieving correlated audit trail for correlation ID {}", correlationId);
         return auditTrailRepository.findByCorrelationIdOrderByPerformedAtAsc(correlationId);

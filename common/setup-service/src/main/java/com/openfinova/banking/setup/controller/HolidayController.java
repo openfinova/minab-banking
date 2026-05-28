@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.openfinova.banking.setup.api.HolidayService;
+import com.openfinova.banking.setup.service.HolidayManagementService;
 import com.openfinova.banking.setup.api.dto.HolidayDTO;
 import com.openfinova.banking.setup.dto.HolidayCheckResponse;
 
@@ -44,10 +44,10 @@ public class HolidayController {
 
     private static final Logger log = LoggerFactory.getLogger(HolidayController.class);
 
-    private final HolidayService holidayService;
+    private final HolidayManagementService holidayManagementService;
 
-    public HolidayController(HolidayService holidayService) {
-        this.holidayService = holidayService;
+    public HolidayController(HolidayManagementService holidayManagementService) {
+        this.holidayManagementService = holidayManagementService;
     }
 
     @GetMapping
@@ -63,7 +63,7 @@ public class HolidayController {
 
         log.info("Fetching holidays for year: {}, country: {}, region: {}", year, countryCode, regionCode);
 
-        List<HolidayDTO> holidays = holidayService.getHolidays(year, countryCode, regionCode);
+        List<HolidayDTO> holidays = holidayManagementService.getHolidays(year, countryCode, regionCode);
 
         log.info("Retrieved {} holidays for {}/{}", holidays.size(), countryCode, regionCode);
 
@@ -83,13 +83,13 @@ public class HolidayController {
 
         log.info("Checking if {} is a holiday for {}/{}", date, countryCode, regionCode);
 
-        boolean isHoliday = holidayService.isHoliday(date, countryCode, regionCode);
+        boolean isHoliday = holidayManagementService.isHoliday(date, countryCode, regionCode);
 
         HolidayCheckResponse response = new HolidayCheckResponse(date, countryCode, regionCode, isHoliday);
 
         // If it's a holiday, populate the holiday name
         if (isHoliday) {
-            holidayService.getHoliday(date, countryCode, regionCode)
+            holidayManagementService.getHoliday(date, countryCode, regionCode)
                     .ifPresent(holiday -> response.setHolidayName(holiday.getName()));
         }
 
@@ -109,8 +109,8 @@ public class HolidayController {
 
         log.info("Fetching holiday details for {}: {}", countryCode, date);
 
-        return holidayService.getHoliday(date, countryCode, regionCode).map(holiday -> {
-            log.info("Holiday details retrieved: {}", holiday.getName());
+        return holidayManagementService.getHoliday(date, countryCode, regionCode).map(holiday -> {
+            log.info("Holiday details retrieved for {}: {}", countryCode, date);
             return ResponseEntity.ok(holiday);
         }).orElseGet(() -> {
             log.info("Holiday not found for date: {}, country: {}, region: {}", date, countryCode, regionCode);
@@ -127,14 +127,14 @@ public class HolidayController {
             @ApiResponse(responseCode = "500", description = "Error creating holiday") })
     public ResponseEntity<HolidayDTO> createHoliday(@Valid @RequestBody HolidayDTO holidayDTO) {
         log.info(
-                "Creating new holiday: {} for {}/{}",
-                holidayDTO.getName(),
+                "Creating new holiday for {}/{} on {}",
                 holidayDTO.getCountryCode(),
-                holidayDTO.getRegionCode());
+                holidayDTO.getRegionCode(),
+                holidayDTO.getDate());
 
-        holidayService.addHoliday(holidayDTO);
+        holidayManagementService.addHoliday(holidayDTO);
 
-        log.info("Holiday created successfully: {} on {}", holidayDTO.getName(), holidayDTO.getDate());
+        log.info("Holiday created successfully on {}", holidayDTO.getDate());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(holidayDTO);
     }
@@ -153,7 +153,7 @@ public class HolidayController {
 
         log.info("Deleting holiday for date: {}, country: {}, region: {}", date, countryCode, regionCode);
 
-        boolean removed = holidayService.removeHoliday(date, countryCode, regionCode);
+        boolean removed = holidayManagementService.removeHoliday(date, countryCode, regionCode);
 
         if (removed) {
             log.info("Holiday deleted successfully for date: {}", date);

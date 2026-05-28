@@ -54,4 +54,7 @@ public interface IdentityService {
      * Unknown usernames are omitted from the result.
      */
     Map<String, UserSummary> resolveUsers(Set<String> usernames);
+
+    /** Returns whether the user must change their password before using banking APIs. */
+    boolean isForcePasswordChangeRequired(UUID userId);
 }

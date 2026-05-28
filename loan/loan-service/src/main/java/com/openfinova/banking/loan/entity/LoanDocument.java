@@ -85,8 +85,8 @@ public class LoanDocument {
         return DocumentStatus.ACTIVE.equals(status);
     }
 
-    public boolean isExpired() {
-        return expiryDate != null && expiryDate.isBefore(LocalDate.now());
+    public boolean isExpired(LocalDate currentDate) {
+        return expiryDate != null && expiryDate.isBefore(currentDate);
     }
 
     // Getters and Setters
