@@ -200,11 +200,15 @@ public class AuthorizationServerConfig {
         RegisteredClient customerApp = RegisteredClient.withId(UUID.randomUUID().toString()).clientId("customer-app")
                 .clientSecret(passwordEncoder.encode("customer-secret"))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://localhost:3000/callback").postLogoutRedirectUri("http://localhost:3000/")
-                .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope("banking.customer")
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .redirectUri("http://localhost:3001/auth/callback").postLogoutRedirectUri("http://localhost:3001/login")
+                .postLogoutRedirectUri("http://localhost:3001/").postLogoutRedirectUri("http://127.0.0.1:3001/login")
+                .postLogoutRedirectUri("http://127.0.0.1:3001").scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL).scope("offline_access").scope("banking.customer")
+                .clientSettings(
+                        ClientSettings.builder().requireAuthorizationConsent(false).requireProofKey(true).build())
                 .tokenSettings(shortLivedTokens).build();
 
         return new InMemoryRegisteredClientRepository(staffApp, customerApp);
