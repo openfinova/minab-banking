@@ -1,7 +1,7 @@
 # Openfinova Banking — local stack
 # Usage:
 #   Postgres + pgAdmin only: docker compose up -d postgres pgadmin
-#   Full stack (API + dashboard): ./mvnw -pl banking-app -am clean install && docker compose up -d postgres pgadmin dashboard
+#   Full stack (API + frontend apps): ./mvnw -pl banking-app -am clean install && docker compose up -d postgres pgadmin dashboard customer-app
 #   (Jib creates openfinova/banking-app:local during package/install; omit image with -Djib.skip=true.)
 #
 # JDBC from host when using default port: jdbc:postgresql://localhost:5432/openfinova_local
@@ -57,7 +57,7 @@ services:
 
   dashboard:
     build:
-      context: ../minab-banking-dashboard
+      context: ../minab-banking-staff-app
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
@@ -68,6 +68,22 @@ services:
         NEXT_PUBLIC_OIDC_SCOPES: openid profile email offline_access banking.staff
     ports:
       - "3000:3000"
+    depends_on:
+      - banking-app
+
+  customer-app:
+    build:
+      context: ../minab-banking-customer-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+        NEXT_PUBLIC_OIDC_AUTHORITY: http://localhost:8080
+        NEXT_PUBLIC_OIDC_CLIENT_ID: customer-app
+        NEXT_PUBLIC_OIDC_REDIRECT_URI: http://localhost:3001/auth/callback
+        NEXT_PUBLIC_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3001/login
+        NEXT_PUBLIC_OIDC_SCOPES: openid profile email offline_access banking.customer
+    ports:
+      - "3001:3001"
     depends_on:
       - banking-app
 
