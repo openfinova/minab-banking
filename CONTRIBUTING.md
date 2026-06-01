@@ -150,7 +150,7 @@ git checkout -b feat/my-new-feature
 # ... make your changes ...
 
 # Run tests locally before pushing
-npm test
+./mvnw --batch-mode verify
 
 # Push and open a PR
 git push origin feat/my-new-feature
@@ -179,7 +179,7 @@ Branch naming conventions:
 
 Run the linter before submitting:  
 ```bash
-npm run lint
+./mvnw --batch-mode formatter:validate
 ```
 
 ---
