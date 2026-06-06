@@ -1,6 +1,10 @@
 package com.openfinova.banking.identity.security;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
@@ -51,7 +55,28 @@ public class PromptLoginReauthenticationFilter extends OncePerRequestFilter {
             session.invalidate();
         }
         SecurityContextHolder.clearContext();
-        response.sendRedirect(authorizeUrlWithoutPrompt(request));
+        redirectToAuthorizeWithoutPrompt(request, response);
+    }
+
+    /**
+     * Redirects to the authorize endpoint with {@code prompt} removed. The target is rebuilt from a
+     * fixed path plus decoded query parameters (never the raw query string) and validated as a
+     * relative URI before {@link HttpServletResponse#sendRedirect(String)} to satisfy open-redirect
+     * checks (CodeQL {@code java/unvalidated-url-redirection}).
+     */
+    private static void redirectToAuthorizeWithoutPrompt(HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        String target = authorizeUrlWithoutPrompt(request);
+        try {
+            URI uri = new URI(target);
+            if (!uri.isAbsolute() && !target.startsWith("//") && AUTHORIZE_ENDPOINT.equals(uri.getPath())) {
+                response.sendRedirect(uri.toString());
+                return;
+            }
+        } catch (URISyntaxException ignored) {
+            // Fall through to the fixed authorize path.
+        }
+        response.sendRedirect(AUTHORIZE_ENDPOINT);
     }
 
     private static boolean requiresFreshLogin(HttpServletRequest request) {
@@ -70,17 +95,18 @@ public class PromptLoginReauthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Rebuilds the authorize URL preserving the original (already-encoded) query string but dropping
-     * the {@code prompt} parameter, so the post-login replay does not trigger this filter again.
+     * Rebuilds the authorize URL from a fixed path and decoded parameters, dropping {@code prompt}
+     * so the post-login replay does not trigger this filter again.
      */
     private static String authorizeUrlWithoutPrompt(HttpServletRequest request) {
-        String query = request.getQueryString();
-        if (query == null || query.isEmpty()) {
-            return request.getRequestURI();
-        }
-        String filtered = Arrays.stream(query.split("&"))
-                .filter(pair -> !pair.equals(PROMPT_PARAM) && !pair.startsWith(PROMPT_PARAM + "="))
+        String query = request.getParameterMap().entrySet().stream()
+                .filter(entry -> !PROMPT_PARAM.equalsIgnoreCase(entry.getKey()))
+                .flatMap(entry -> Arrays.stream(entry.getValue()).map(value -> encodeQueryParam(entry.getKey(), value)))
                 .collect(Collectors.joining("&"));
-        return filtered.isEmpty() ? request.getRequestURI() : request.getRequestURI() + "?" + filtered;
+        return query.isEmpty() ? AUTHORIZE_ENDPOINT : AUTHORIZE_ENDPOINT + "?" + query;
+    }
+
+    private static String encodeQueryParam(String name, String value) {
+        return URLEncoder.encode(name, StandardCharsets.UTF_8) + "=" + URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }
