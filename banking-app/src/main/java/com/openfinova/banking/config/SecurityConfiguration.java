@@ -45,8 +45,7 @@ public class SecurityConfiguration {
     @Bean
     @Order(3)
     public SecurityFilterChain bankingApiFilterChain(HttpSecurity http,
-            PasswordManagementEnforcementFilter passwordManagementFilter, 
-            StepUpAcrFilter stepUpAcrFilter,
+            PasswordManagementEnforcementFilter passwordManagementFilter, StepUpAcrFilter stepUpAcrFilter,
             AuthenticationEntryPoint bankingBearerAuthenticationEntryPoint,
             AccessDeniedHandler bankingApiAccessDeniedHandler) throws Exception {
         http.cors(Customizer.withDefaults()).csrf(AbstractHttpConfigurer::disable).exceptionHandling(
