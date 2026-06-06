@@ -62,6 +62,7 @@ public class AuditingConcurrentLimitAuthorizationService implements OAuth2Author
     private final SecurityAuditService auditService;
     private final UserRepository userRepository;
     private final OAuth2TokenPolicyProperties tokenPolicy;
+    private final RegisteredClientRepository registeredClientRepository;
 
     /**
      * Per {@code principal|clientId} queue of authorization IDs in creation order.
@@ -85,6 +86,18 @@ public class AuditingConcurrentLimitAuthorizationService implements OAuth2Author
         this.auditService = auditService;
         this.userRepository = userRepository;
         this.tokenPolicy = tokenPolicy;
+        this.registeredClientRepository = registeredClientRepository;
+    }
+
+    private int resolveMaxActiveAuthorizations(String registeredClientInternalId) {
+        if (registeredClientInternalId == null) {
+            return 0;
+        }
+        var registered = registeredClientRepository.findById(registeredClientInternalId);
+        if (registered == null) {
+            return 0;
+        }
+        return tokenPolicy.policyForClientId(registered.getClientId()).getMaxActiveAuthorizationsPerUser();
     }
 
     /**
@@ -121,7 +134,7 @@ public class AuditingConcurrentLimitAuthorizationService implements OAuth2Author
             return;
         }
 
-        int max = tokenPolicy.getMaxActiveAuthorizationsPerUser();
+        int max = resolveMaxActiveAuthorizations(authorization.getRegisteredClientId());
         if (max > 0) {
             Object lock = queueLocks.computeIfAbsent(queueKey, k -> new Object());
             synchronized (lock) {

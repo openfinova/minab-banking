@@ -40,9 +40,9 @@ public class OpenApiConfiguration {
                                 "oauth2",
                                 new SecurityScheme().type(SecurityScheme.Type.OAUTH2).description(
                                         "Authorization Code flow with refresh tokens. "
-                                                + "Dev clients: staff-app (Swagger redirect registered), customer-app. "
-                                                + "JWT access tokens include a `permissions` claim used for "
-                                                + "`@PreAuthorize` authorities.")
+                                                + "Dev clients: staff-app (Swagger), staff-portal and customer-portal (Next.js BFF). "
+                                                + "JWT access tokens include `permissions`, `acr`, and `amr` claims for "
+                                                + "`@PreAuthorize` authorities and step-up checks.")
                                         .flows(new OAuthFlows().authorizationCode(authorizationCode))));
     }
 
@@ -72,7 +72,8 @@ public class OpenApiConfiguration {
                 | Token | `%s` |
                 | JWK set | `%s/oauth2/jwks` |
 
-                Supported grant types (registered clients): **authorization_code**, **refresh_token**. \
+                Registered clients: **staff-app** (Swagger), **staff-portal** (staff BFF, no refresh), \
+                **customer-portal** (customer BFF, refresh + rotation). Grant types vary by client. \
                 Interactive staff login and optional step-up MFA use browser routes such as `/login`, \
                 `/mfa/challenge`, and `POST /mfa/verify` (HTML form: 6-digit TOTP or 8-digit recovery code), \
                 not OpenAPI.

@@ -1,35 +1,29 @@
 package com.openfinova.banking.identity.config;
 
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Component;
 
 /**
- * Stateless API token policy (OAuth2 access / refresh TTLs and concurrent login cap).
+ * Per-client OAuth2 token policy (access / refresh TTLs, rotation, concurrent session cap).
+ *
  * <p>
- * Maps to banking session expectations: short access tokens, bounded refresh lifetime, optional
- * limit on simultaneous authorizations per user per registered client.
+ * Keys under {@code identity.oauth2.clients.<client-id>.*} match registered {@code client_id}
+ * values (e.g. {@code staff-portal}, {@code customer-portal}).
  */
 @Component
 @ConfigurationProperties(prefix = "identity.oauth2")
 public class OAuth2TokenPolicyProperties {
 
-    /** Access token time-to-live in minutes. */
-    private int accessTokenTtlMinutes = 60;
-
-    /** Refresh token time-to-live in days. */
-    private int refreshTokenTtlDays = 7;
-
-    /**
-     * When false, each refresh issues a new refresh token and the old one is invalidated (refresh
-     * token rotation).
-     */
-    private boolean reuseRefreshTokens = false;
-
-    /**
-     * Maximum simultaneous OAuth2 authorizations per principal per registered client. Oldest
-     * authorizations are revoked when exceeded. {@code 0} means unlimited.
-     */
-    private int maxActiveAuthorizationsPerUser = 0;
+    public static final String CLIENT_STAFF_PORTAL = "staff-portal";
+    public static final String CLIENT_CUSTOMER_PORTAL = "customer-portal";
+    public static final String CLIENT_STAFF_APP = "staff-app";
+    /** Reserved for future native mobile client — not registered in dev yet. */
+    public static final String CLIENT_MOBILE_APP = "mobile-app";
 
     /**
      * When true and the request is available, include the client IP in the JWT as {@code client_ip}
@@ -37,37 +31,7 @@ public class OAuth2TokenPolicyProperties {
      */
     private boolean includeClientIpClaim = true;
 
-    public int getAccessTokenTtlMinutes() {
-        return accessTokenTtlMinutes;
-    }
-
-    public void setAccessTokenTtlMinutes(int accessTokenTtlMinutes) {
-        this.accessTokenTtlMinutes = accessTokenTtlMinutes;
-    }
-
-    public int getRefreshTokenTtlDays() {
-        return refreshTokenTtlDays;
-    }
-
-    public void setRefreshTokenTtlDays(int refreshTokenTtlDays) {
-        this.refreshTokenTtlDays = refreshTokenTtlDays;
-    }
-
-    public boolean isReuseRefreshTokens() {
-        return reuseRefreshTokens;
-    }
-
-    public void setReuseRefreshTokens(boolean reuseRefreshTokens) {
-        this.reuseRefreshTokens = reuseRefreshTokens;
-    }
-
-    public int getMaxActiveAuthorizationsPerUser() {
-        return maxActiveAuthorizationsPerUser;
-    }
-
-    public void setMaxActiveAuthorizationsPerUser(int maxActiveAuthorizationsPerUser) {
-        this.maxActiveAuthorizationsPerUser = maxActiveAuthorizationsPerUser;
-    }
+    private Map<String, OAuth2ClientTokenPolicy> clients = new LinkedHashMap<>();
 
     public boolean isIncludeClientIpClaim() {
         return includeClientIpClaim;
@@ -75,5 +39,44 @@ public class OAuth2TokenPolicyProperties {
 
     public void setIncludeClientIpClaim(boolean includeClientIpClaim) {
         this.includeClientIpClaim = includeClientIpClaim;
+    }
+
+    public Map<String, OAuth2ClientTokenPolicy> getClients() {
+        return clients;
+    }
+
+    public void setClients(Map<String, OAuth2ClientTokenPolicy> clients) {
+        this.clients = clients;
+    }
+
+    /**
+     * Returns policy for the given {@code client_id}, or a conservative default when unset.
+     */
+    public OAuth2ClientTokenPolicy policyForClientId(String clientId) {
+        OAuth2ClientTokenPolicy policy = clients.get(clientId);
+        if (policy != null) {
+            return policy;
+        }
+        OAuth2ClientTokenPolicy fallback = new OAuth2ClientTokenPolicy();
+        fallback.setClientId(clientId);
+        fallback.setAccessTokenTtlMinutes(60);
+        fallback.setRefreshTokenTtlMinutes(0);
+        fallback.setReuseRefreshTokens(false);
+        fallback.setMaxActiveAuthorizationsPerUser(0);
+        return fallback;
+    }
+
+    /**
+     * Builds Spring Authorization Server {@link TokenSettings} for a registered client.
+     */
+    public TokenSettings toTokenSettings(String clientId) {
+        OAuth2ClientTokenPolicy policy = policyForClientId(clientId);
+        var builder = TokenSettings.builder()
+                .accessTokenTimeToLive(Duration.ofMinutes(policy.getAccessTokenTtlMinutes()))
+                .reuseRefreshTokens(policy.isReuseRefreshTokens());
+        if (policy.getRefreshTokenTtlMinutes() > 0) {
+            builder.refreshTokenTimeToLive(Duration.ofMinutes(policy.getRefreshTokenTtlMinutes()));
+        }
+        return builder.build();
     }
 }

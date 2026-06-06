@@ -9,6 +9,10 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
@@ -27,8 +31,11 @@ import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.security.BankingUserDetails;
 import com.openfinova.banking.identity.security.ClientIpResolver;
+import com.openfinova.banking.identity.security.MfaChallengeFilter;
 import com.openfinova.banking.identity.security.PasswordLifecycleEvaluator;
 import com.openfinova.banking.setup.api.DateTimeService;
+
+import jakarta.servlet.http.HttpSession;
 
 /**
  * Injects banking-specific claims into every JWT issued by the Authorization Server.
@@ -96,7 +103,12 @@ public class TokenCustomizerConfig {
 
                 Optional<KYCStatus> kycOpt = Optional.empty();
                 if (customerInfo != null && partyId != null) {
-                    kycOpt = customerInfo.getKycStatus(partyId);
+                    // The customer module guards KYC reads with @PreAuthorize(customer:read or
+                    // service:customer:read). During token issuance the active principal is the
+                    // end-user being logged in (a CUSTOMER), who holds neither authority, so a direct
+                    // read is denied with a 403 and no access token is issued. Read under a dedicated
+                    // service authority — this is a trusted inter-module system call, not a user read.
+                    kycOpt = readKycStatusAsServicePrincipal(customerInfo, partyId);
                 }
 
                 if (requireVerifiedKycForCustomers) {
@@ -160,6 +172,58 @@ public class TokenCustomizerConfig {
             boolean forceChange = freshUser != null ? freshUser.isForcePasswordChange()
                     : details.isForcePasswordChange();
             claims.claim(BankingPrincipal.CLAIM_FORCE_PASSWORD_CHANGE, forceChange);
+
+            boolean mfaVerified = isMfaVerifiedInCurrentSession();
+            if (mfaVerified) {
+                claims.claim(BankingPrincipal.CLAIM_ACR, BankingPrincipal.ACR_GOLD);
+                claims.claim(BankingPrincipal.CLAIM_AMR, List.of("pwd", "mfa"));
+            } else {
+                claims.claim(BankingPrincipal.CLAIM_ACR, BankingPrincipal.ACR_SILVER);
+                claims.claim(BankingPrincipal.CLAIM_AMR, List.of("pwd"));
+            }
         };
+    }
+
+    /** Authority that authorises trusted service-to-service customer reads (see CustomerService). */
+    private static final String SERVICE_CUSTOMER_READ_AUTHORITY = "service:customer:read";
+
+    /**
+     * Reads customer KYC status during token issuance using a short-lived service principal.
+     *
+     * The customer module guards KYC reads with
+     * {@code @PreAuthorize("hasAnyAuthority('customer:read', 'service:customer:read')")}. While a
+     * token is being issued, the authenticated principal is the end-user logging in (a CUSTOMER),
+     * which holds neither authority, so a direct call is denied with a 403 and the access token is
+     * never generated. Token issuance is a trusted system operation, so this swaps in an
+     * authentication carrying {@code service:customer:read} for the duration of the read and restores
+     * the original security context afterwards.
+     *
+     * @param customerInfo the customer module facade
+     * @param partyId the linked customer party id whose KYC status is read
+     * @return the KYC status if a customer record exists, otherwise empty
+     */
+    private static Optional<KYCStatus> readKycStatusAsServicePrincipal(CustomerInfoService customerInfo, UUID partyId) {
+        SecurityContext original = SecurityContextHolder.getContext();
+        try {
+            SecurityContext systemContext = SecurityContextHolder.createEmptyContext();
+            systemContext.setAuthentication(
+                    new UsernamePasswordAuthenticationToken(
+                            "token-issuer",
+                            "N/A",
+                            List.of(new SimpleGrantedAuthority(SERVICE_CUSTOMER_READ_AUTHORITY))));
+            SecurityContextHolder.setContext(systemContext);
+            return customerInfo.getKycStatus(partyId);
+        } finally {
+            SecurityContextHolder.setContext(original);
+        }
+    }
+
+    private static boolean isMfaVerifiedInCurrentSession() {
+        var attrs = RequestContextHolder.getRequestAttributes();
+        if (!(attrs instanceof ServletRequestAttributes sra)) {
+            return false;
+        }
+        HttpSession session = sra.getRequest().getSession(false);
+        return session != null && Boolean.TRUE.equals(session.getAttribute(MfaChallengeFilter.MFA_VERIFIED_ATTR));
     }
 }

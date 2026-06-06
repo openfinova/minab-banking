@@ -37,7 +37,7 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
         /**
          * OAuth2 authorization id from JWT {@link #CLAIM_AUTHZ_ID}; null if absent.
          */
-        String authSessionId, List<String> permissions) {
+        String authSessionId, List<String> permissions, String acr, List<String> amr) {
 
     private static final Logger LOG = Logger.getLogger(BankingPrincipal.class.getName());
 
@@ -68,9 +68,30 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
      */
     public static final String CLAIM_FORCE_PASSWORD_CHANGE = "force_password_change";
 
-    /** Normalizes {@code permissions} to an unmodifiable list. */
+    /**
+     * OpenID Authentication Context Class Reference. {@value #ACR_GOLD} indicates MFA was completed
+     * for the current login when the access token was issued.
+     */
+    public static final String CLAIM_ACR = "acr";
+
+    /** Authentication methods reference (e.g. {@code pwd}, {@code mfa}). */
+    public static final String CLAIM_AMR = "amr";
+
+    /** Password-only assurance (no MFA in current login session). */
+    public static final String ACR_SILVER = "urn:mace:incommon:iap:silver";
+
+    /** MFA completed in current login session — required for step-up protected mutations. */
+    public static final String ACR_GOLD = "urn:mace:incommon:iap:gold";
+
+    /** Normalizes {@code permissions} and {@code amr} to unmodifiable lists. */
     public BankingPrincipal {
         permissions = List.copyOf(permissions != null ? permissions : List.of());
+        amr = List.copyOf(amr != null ? amr : List.of());
+    }
+
+    /** Whether this token was issued after MFA in the current login session. */
+    public boolean hasGoldAcr() {
+        return ACR_GOLD.equals(acr);
     }
 
     /**
@@ -110,6 +131,9 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
                 authzId = jwt.getClaimAsString(LEGACY_AUTHZ_ID_CLAIM);
             }
 
+            String acr = jwt.getClaimAsString(CLAIM_ACR);
+            List<String> amr = jwt.getClaimAsStringList(CLAIM_AMR);
+
             return new BankingPrincipal(
                     userId,
                     jwt.getClaimAsString("preferred_username") != null ? jwt.getClaimAsString("preferred_username")
@@ -121,7 +145,9 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
                     jwt.getClaimAsString(CLAIM_GL_APPROVAL_ROLE),
                     jwt.getClaimAsString(CLAIM_KYC_STATUS),
                     authzId,
-                    permissions);
+                    permissions,
+                    acr,
+                    amr);
         }
 
         // Fallback for non-JWT authentication (tests, Basic auth dev mode)
@@ -135,7 +161,9 @@ public record BankingPrincipal(UUID userId, String username, UserType userType, 
                 null,
                 null,
                 null,
-                null);
+                null,
+                ACR_GOLD,
+                List.of("pwd"));
     }
 
     public boolean isStaff() {

@@ -42,7 +42,7 @@ import jakarta.servlet.http.HttpSession;
  */
 public class MfaChallengeFilter extends OncePerRequestFilter {
 
-    static final String MFA_VERIFIED_ATTR = "MFA_VERIFIED";
+    public static final String MFA_VERIFIED_ATTR = "MFA_VERIFIED";
     private static final String MFA_CHALLENGE_URL = "/mfa/challenge";
     private static final String MFA_VERIFY_URL = "/mfa/verify";
 
@@ -211,7 +211,7 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
             throws IOException {
         SavedRequest savedRequest = requestCache.getRequest(request, response);
         if (savedRequest == null) {
-            redirectStrategy.sendRedirect(request, response, "/");
+            redirectStrategy.sendRedirect(request, response, "/logged-out");
             return;
         }
         String redirectUrl = savedRequest.getRedirectUrl();
