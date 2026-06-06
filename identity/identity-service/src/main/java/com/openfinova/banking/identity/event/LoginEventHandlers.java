@@ -19,19 +19,21 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
+import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
 import com.openfinova.banking.identity.audit.AuditEventDetail;
+import com.openfinova.banking.identity.config.LockoutProperties;
+import com.openfinova.banking.identity.config.PasswordPolicyProperties;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
 import com.openfinova.banking.identity.repository.UserRepository;
-import com.openfinova.banking.identity.config.LockoutProperties;
-import com.openfinova.banking.identity.config.PasswordPolicyProperties;
 import com.openfinova.banking.identity.security.BankingUserDetails;
 import com.openfinova.banking.identity.security.BankingUserDetailsService;
 import com.openfinova.banking.identity.security.ClientIpResolver;
 import com.openfinova.banking.identity.service.PasswordPolicyService;
-import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
 import com.openfinova.banking.identity.service.SecurityAuditService;
 import com.openfinova.banking.setup.api.DateTimeService;
 
@@ -60,11 +62,12 @@ public class LoginEventHandlers {
     private final PasswordPolicyService passwordPolicyService;
     private final BankingUserDetailsService userDetailsService;
     private final DateTimeService dateTimeService;
+    private final RequestCache requestCache;
 
     public LoginEventHandlers(UserRepository userRepository, SecurityAuditService auditService,
             LockoutProperties lockoutProps, PasswordPolicyProperties passwordPolicyProps,
             PasswordPolicyService passwordPolicyService, BankingUserDetailsService userDetailsService,
-            DateTimeService dateTimeService) {
+            DateTimeService dateTimeService, RequestCache requestCache) {
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.lockoutProps = lockoutProps;
@@ -72,10 +75,15 @@ public class LoginEventHandlers {
         this.passwordPolicyService = passwordPolicyService;
         this.userDetailsService = userDetailsService;
         this.dateTimeService = dateTimeService;
+        this.requestCache = requestCache;
     }
 
     public AuthenticationSuccessHandler successHandler() {
-        return new SuccessHandler();
+        SuccessHandler handler = new SuccessHandler();
+        handler.setRequestCache(requestCache);
+        // When /login is opened directly (no pending OAuth authorize), avoid redirecting to "/" (404).
+        handler.setDefaultTargetUrl("/logged-out");
+        return handler;
     }
 
     public AuthenticationFailureHandler failureHandler() {

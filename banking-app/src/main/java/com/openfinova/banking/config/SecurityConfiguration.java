@@ -45,7 +45,7 @@ public class SecurityConfiguration {
     @Bean
     @Order(3)
     public SecurityFilterChain bankingApiFilterChain(HttpSecurity http,
-            PasswordManagementEnforcementFilter passwordManagementFilter,
+            PasswordManagementEnforcementFilter passwordManagementFilter, StepUpAcrFilter stepUpAcrFilter,
             AuthenticationEntryPoint bankingBearerAuthenticationEntryPoint,
             AccessDeniedHandler bankingApiAccessDeniedHandler) throws Exception {
         http.cors(Customizer.withDefaults()).csrf(AbstractHttpConfigurer::disable).exceptionHandling(
@@ -74,7 +74,8 @@ public class SecurityConfiguration {
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .jwt(jwt -> jwt.jwtAuthenticationConverter(bankingJwtAuthenticationConverter())))
-                .addFilterAfter(passwordManagementFilter, BearerTokenAuthenticationFilter.class);
+                .addFilterAfter(passwordManagementFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(stepUpAcrFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 
@@ -116,7 +117,12 @@ public class SecurityConfiguration {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of("http://localhost:3000", "http://127.0.0.1:3000"));
+        config.setAllowedOrigins(
+                List.of(
+                        "http://localhost:3000",
+                        "http://127.0.0.1:3000",
+                        "http://localhost:3001",
+                        "http://127.0.0.1:3001"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("WWW-Authenticate"));

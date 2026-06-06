@@ -6,9 +6,9 @@ import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.time.Duration;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -31,7 +31,6 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -52,6 +51,7 @@ import com.openfinova.banking.identity.event.LoginEventHandlers;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.security.LoginRateLimitFilter;
 import com.openfinova.banking.identity.security.MfaChallengeFilter;
+import com.openfinova.banking.identity.security.PromptLoginReauthenticationFilter;
 import com.openfinova.banking.identity.service.MfaService;
 import com.openfinova.banking.identity.service.SecurityAuditService;
 
@@ -79,6 +79,11 @@ public class AuthorizationServerConfig {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(AuthorizationServerConfig.class);
 
+    /** Custom OAuth2 scopes registered for dev clients (see {@link #registeredClientRepository}). */
+    private static final String SCOPE_OFFLINE_ACCESS = "offline_access";
+    private static final String SCOPE_BANKING_STAFF = "banking.staff";
+    private static final String SCOPE_BANKING_CUSTOMER = "banking.customer";
+
     @Bean
     public RequestCache requestCache() {
         return new HttpSessionRequestCache();
@@ -92,18 +97,37 @@ public class AuthorizationServerConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http, MfaChallengeFilter mfaChallengeFilter)
-            throws Exception {
+    public SecurityFilterChain authorizationServerFilterChain(HttpSecurity http, MfaChallengeFilter mfaChallengeFilter,
+            RequestCache requestCache) throws Exception {
+        LoginUrlAuthenticationEntryPoint loginEntryPoint = new LoginUrlAuthenticationEntryPoint("/login");
+
         http.cors(Customizer.withDefaults());
+        // OAuth2 protocol endpoints include server-to-server POSTs (/oauth2/token, introspection, revoke)
+        // that do not carry browser CSRF tokens. Enforce client auth instead of CSRF for this chain.
+        http.csrf(csrf -> csrf.disable());
+        http.requestCache(cache -> cache.requestCache(requestCache));
         http.oauth2AuthorizationServer(authServer -> {
             http.securityMatcher(authServer.getEndpointsMatcher());
-            authServer.oidc(
-                    oidc -> oidc.logoutEndpoint(
-                            logout -> logout.errorResponseHandler(AuthorizationServerConfig::handleOidcLogoutFailure)));
+            authServer.authorizationServerMetadataEndpoint(
+                    metadata -> metadata.authorizationServerMetadataCustomizer(
+                            customizer -> customizer.scope(SCOPE_OFFLINE_ACCESS).scope(SCOPE_BANKING_STAFF)
+                                    .scope(SCOPE_BANKING_CUSTOMER)));
+            authServer.oidc(oidc -> {
+                oidc.providerConfigurationEndpoint(
+                        provider -> provider.providerConfigurationCustomizer(
+                                builder -> builder.scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
+                                        .scope(OidcScopes.EMAIL).scope(SCOPE_OFFLINE_ACCESS).scope(SCOPE_BANKING_STAFF)
+                                        .scope(SCOPE_BANKING_CUSTOMER)));
+                oidc.userInfoEndpoint(Customizer.withDefaults());
+                oidc.logoutEndpoint(
+                        logout -> logout.errorResponseHandler(AuthorizationServerConfig::handleOidcLogoutFailure));
+            });
         }).authorizeHttpRequests(auth -> auth.anyRequest().authenticated()).exceptionHandling(
                 ex -> ex.defaultAuthenticationEntryPointFor(
-                        new LoginUrlAuthenticationEntryPoint("/login"),
+                        loginEntryPoint,
                         new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
+        // Runs before MFA so prompt=login forces a fresh login/MFA even when an SSO session exists.
+        http.addFilterBefore(new PromptLoginReauthenticationFilter(), AuthorizationFilter.class);
         http.addFilterBefore(mfaChallengeFilter, AuthorizationFilter.class);
         return http.build();
     }
@@ -111,8 +135,10 @@ public class AuthorizationServerConfig {
     @Bean
     @Order(2)
     public SecurityFilterChain loginFormFilterChain(HttpSecurity http, LoginEventHandlers loginEventHandlers,
-            LoginRateLimitFilter loginRateLimitFilter, MfaChallengeFilter mfaChallengeFilter) throws Exception {
+            LoginRateLimitFilter loginRateLimitFilter, MfaChallengeFilter mfaChallengeFilter, RequestCache requestCache)
+            throws Exception {
         http.cors(Customizer.withDefaults());
+        http.requestCache(cache -> cache.requestCache(requestCache));
         http.authorizeHttpRequests(
                 auth -> auth
                         // MFA challenge pages shown between password auth and token issuance
@@ -161,57 +187,64 @@ public class AuthorizationServerConfig {
     /**
      * In-memory OAuth2 clients for dev/test.
      *
-     * {@code staff-app} — Swagger UI on {@code localhost:8080} (confidential: basic auth +
-     * {@code staff-secret}) and the management portal SPA on {@code localhost:3000} (public: PKCE,
-     * no secret on the token request). Both {@link ClientAuthenticationMethod#CLIENT_SECRET_BASIC}
-     * and {@link ClientAuthenticationMethod#NONE} are registered so either flow works.
+     * <ul>
+     * <li>{@code staff-app} — Swagger UI on {@code localhost:8080} only (longer TTL for API exploration).</li>
+     * <li>{@code staff-portal} — staff Next.js BFF ({@code localhost:3000}); confidential, no refresh grant.</li>
+     * <li>{@code customer-portal} — customer Next.js BFF ({@code localhost:3001}); confidential, refresh + rotation.</li>
+     * </ul>
      *
-     * {@code customer-app} — used by the customer mobile / web application.
+     * Future {@code mobile-app} is documented in {@code docs/security/oauth-session-policy.md} but not registered here.
      *
      * Replace with a DB-backed {@link RegisteredClientRepository} for production.
      */
     @Bean
     public RegisteredClientRepository registeredClientRepository(PasswordEncoder passwordEncoder,
             OAuth2TokenPolicyProperties tokenPolicy) {
-        TokenSettings shortLivedTokens = TokenSettings.builder()
-                .accessTokenTimeToLive(Duration.ofMinutes(tokenPolicy.getAccessTokenTtlMinutes()))
-                .refreshTokenTimeToLive(Duration.ofDays(tokenPolicy.getRefreshTokenTtlDays()))
-                .reuseRefreshTokens(tokenPolicy.isReuseRefreshTokens()).build();
+        ClientSettings pkceRequired = ClientSettings.builder().requireAuthorizationConsent(false).requireProofKey(true)
+                .build();
 
-        RegisteredClient staffApp = RegisteredClient.withId(UUID.randomUUID().toString()).clientId("staff-app")
+        RegisteredClient staffApp = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId(OAuth2TokenPolicyProperties.CLIENT_STAFF_APP)
                 .clientSecret(passwordEncoder.encode("staff-secret"))
-                // CLIENT_SECRET_BASIC: Swagger UI sends client_id:secret in Authorization header.
-                // NONE: dashboard SPA cannot keep a secret; relies on PKCE code verifier instead.
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri("http://localhost:8080/login/oauth2/code/staff-app")
                 .redirectUri("http://localhost:8080/swagger-ui/oauth2-redirect.html")
-                .redirectUri("http://localhost:3000/auth/callback").postLogoutRedirectUri("http://localhost:8080/")
-                .postLogoutRedirectUri("http://localhost:3000/").postLogoutRedirectUri("http://localhost:3000")
-                .postLogoutRedirectUri("http://127.0.0.1:3000/").postLogoutRedirectUri("http://127.0.0.1:3000")
-                .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL).scope("offline_access")
-                .scope("banking.staff")
-                .clientSettings(
-                        ClientSettings.builder().requireAuthorizationConsent(false).requireProofKey(true).build())
-                .tokenSettings(shortLivedTokens).build();
+                .postLogoutRedirectUri("http://localhost:8080/").scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL).scope(SCOPE_BANKING_STAFF).clientSettings(pkceRequired)
+                .tokenSettings(tokenPolicy.toTokenSettings(OAuth2TokenPolicyProperties.CLIENT_STAFF_APP)).build();
 
-        RegisteredClient customerApp = RegisteredClient.withId(UUID.randomUUID().toString()).clientId("customer-app")
-                .clientSecret(passwordEncoder.encode("customer-secret"))
+        RegisteredClient staffPortal = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId(OAuth2TokenPolicyProperties.CLIENT_STAFF_PORTAL)
+                .clientSecret(passwordEncoder.encode("staff-portal-secret"))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("http://localhost:3000/api/auth/callback")
+                .redirectUri("http://127.0.0.1:3000/api/auth/callback")
+                .postLogoutRedirectUri("http://localhost:3000/login").postLogoutRedirectUri("http://localhost:3000/")
+                .postLogoutRedirectUri("http://127.0.0.1:3000/login").scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL).scope(SCOPE_BANKING_STAFF).clientSettings(pkceRequired)
+                .tokenSettings(tokenPolicy.toTokenSettings(OAuth2TokenPolicyProperties.CLIENT_STAFF_PORTAL)).build();
+
+        RegisteredClient customerPortal = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId(OAuth2TokenPolicyProperties.CLIENT_CUSTOMER_PORTAL)
+                .clientSecret(passwordEncoder.encode("customer-portal-secret"))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://localhost:3001/auth/callback").postLogoutRedirectUri("http://localhost:3001/login")
-                .postLogoutRedirectUri("http://localhost:3001/").postLogoutRedirectUri("http://127.0.0.1:3001/login")
-                .postLogoutRedirectUri("http://127.0.0.1:3001").scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
-                .scope(OidcScopes.EMAIL).scope("offline_access").scope("banking.customer")
-                .clientSettings(
-                        ClientSettings.builder().requireAuthorizationConsent(false).requireProofKey(true).build())
-                .tokenSettings(shortLivedTokens).build();
+                .redirectUri("http://localhost:3001/api/auth/callback")
+                .redirectUri("http://127.0.0.1:3001/api/auth/callback")
+                .postLogoutRedirectUri("http://localhost:3001/login").postLogoutRedirectUri("http://localhost:3001/")
+                .postLogoutRedirectUri("http://127.0.0.1:3001/login").scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL).scope(SCOPE_OFFLINE_ACCESS).scope(SCOPE_BANKING_CUSTOMER)
+                .clientSettings(pkceRequired)
+                .tokenSettings(tokenPolicy.toTokenSettings(OAuth2TokenPolicyProperties.CLIENT_CUSTOMER_PORTAL)).build();
 
-        return new InMemoryRegisteredClientRepository(staffApp, customerApp);
+        return new InMemoryRegisteredClientRepository(staffApp, staffPortal, customerPortal);
     }
 
     /**
@@ -245,8 +278,10 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder().build();
+    public AuthorizationServerSettings authorizationServerSettings(
+            @Value("${spring.security.oauth2.authorizationserver.issuer}") String issuer) {
+        // Fixed issuer for all endpoints (including token calls from internal Docker hostnames).
+        return AuthorizationServerSettings.builder().issuer(issuer).build();
     }
 
     @Bean

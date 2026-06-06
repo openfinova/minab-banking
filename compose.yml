@@ -60,12 +60,28 @@ services:
       context: ../minab-banking-staff-app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
-        NEXT_PUBLIC_OIDC_AUTHORITY: http://localhost:8080
-        NEXT_PUBLIC_OIDC_CLIENT_ID: staff-app
-        NEXT_PUBLIC_OIDC_REDIRECT_URI: http://localhost:3000/auth/callback
-        NEXT_PUBLIC_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3000/
-        NEXT_PUBLIC_OIDC_SCOPES: openid profile email offline_access banking.staff
+        API_BASE_URL: http://banking-app:8080
+        OIDC_AUTHORITY: http://localhost:8080
+        OIDC_CLIENT_ID: staff-portal
+        OIDC_CLIENT_SECRET: staff-portal-secret
+        OIDC_REDIRECT_URI: http://localhost:3000/api/auth/callback
+        OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3000/login
+        OIDC_SCOPES: openid profile email banking.staff
+        SESSION_SECRET: local-dev-session-secret-change-me-32chars
+        SESSION_IDLE_MS: "600000"
+    environment:
+      PORT: "3000"
+      APP_PUBLIC_URL: http://localhost:3000
+      API_BASE_URL: http://banking-app:8080
+      OIDC_AUTHORITY: http://localhost:8080
+      OIDC_TOKEN_AUTHORITY: http://banking-app:8080
+      OIDC_CLIENT_ID: staff-portal
+      OIDC_CLIENT_SECRET: staff-portal-secret
+      OIDC_REDIRECT_URI: http://localhost:3000/api/auth/callback
+      OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3000/login
+      OIDC_SCOPES: openid profile email banking.staff
+      SESSION_SECRET: local-dev-session-secret-change-me-32chars
+      SESSION_IDLE_MS: "600000"
     ports:
       - "3000:3000"
     depends_on:
@@ -76,12 +92,30 @@ services:
       context: ../minab-banking-customer-app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
-        NEXT_PUBLIC_OIDC_AUTHORITY: http://localhost:8080
-        NEXT_PUBLIC_OIDC_CLIENT_ID: customer-app
-        NEXT_PUBLIC_OIDC_REDIRECT_URI: http://localhost:3001/auth/callback
-        NEXT_PUBLIC_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3001/login
-        NEXT_PUBLIC_OIDC_SCOPES: openid profile email offline_access banking.customer
+        API_BASE_URL: http://banking-app:8080
+        OIDC_AUTHORITY: http://localhost:8080
+        OIDC_CLIENT_ID: customer-portal
+        OIDC_CLIENT_SECRET: customer-portal-secret
+        OIDC_REDIRECT_URI: http://localhost:3001/api/auth/callback
+        OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3001/login
+        OIDC_SCOPES: openid profile email offline_access banking.customer
+        SESSION_SECRET: local-dev-session-secret-change-me-32chars
+        SESSION_IDLE_MS: "900000"
+        SESSION_ALLOW_REFRESH: "true"
+    environment:
+      PORT: "3001"
+      APP_PUBLIC_URL: http://localhost:3001
+      API_BASE_URL: http://banking-app:8080
+      OIDC_AUTHORITY: http://localhost:8080
+      OIDC_TOKEN_AUTHORITY: http://banking-app:8080
+      OIDC_CLIENT_ID: customer-portal
+      OIDC_CLIENT_SECRET: customer-portal-secret
+      OIDC_REDIRECT_URI: http://localhost:3001/api/auth/callback
+      OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:3001/login
+      OIDC_SCOPES: openid profile email offline_access banking.customer
+      SESSION_SECRET: local-dev-session-secret-change-me-32chars
+      SESSION_IDLE_MS: "900000"
+      SESSION_ALLOW_REFRESH: "true"
     ports:
       - "3001:3001"
     depends_on:

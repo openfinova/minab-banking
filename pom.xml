@@ -197,6 +197,7 @@
 				<version>2.29.0</version>
 				<configuration>
 					<configFile>${maven.multiModuleProjectDirectory}/java-formatter.xml</configFile>
+					<lineEnding>LF</lineEnding>
 				</configuration>
 			</plugin>
 		</plugins>
