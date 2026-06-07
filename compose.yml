@@ -69,6 +69,8 @@ services:
         OIDC_SCOPES: openid profile email banking.staff
         SESSION_SECRET: local-dev-session-secret-change-me-32chars
         SESSION_IDLE_MS: "600000"
+        NEXT_PUBLIC_IDLE_TIMEOUT_MS: "600000"
+        NEXT_PUBLIC_IDLE_WARNING_MS: "120000"
     environment:
       PORT: "3000"
       APP_PUBLIC_URL: http://localhost:3000
@@ -102,6 +104,8 @@ services:
         SESSION_SECRET: local-dev-session-secret-change-me-32chars
         SESSION_IDLE_MS: "900000"
         SESSION_ALLOW_REFRESH: "true"
+        NEXT_PUBLIC_IDLE_TIMEOUT_MS: "900000"
+        NEXT_PUBLIC_IDLE_WARNING_MS: "120000"
     environment:
       PORT: "3001"
       APP_PUBLIC_URL: http://localhost:3001
