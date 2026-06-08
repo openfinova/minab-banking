@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import jakarta.servlet.FilterChain;
@@ -29,7 +30,8 @@ import jakarta.servlet.http.HttpSession;
  *
  * Behaviour
  * When a {@code GET /oauth2/authorize} request carries {@code prompt=login}, the current
- * authorization-server session is invalidated and the security context cleared, then the browser is
+ * authorization-server authentication is cleared (without invalidating the HTTP session, so the
+ * Spring Security {@code RequestCache} survives for the OAuth redirect chain), then the browser is
  * redirected back to the same authorize request with the {@code prompt} parameter removed. The
  * unauthenticated replay drives a fresh form login (and MFA) before a code is issued.
  *
@@ -50,9 +52,13 @@ public class PromptLoginReauthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Clear authentication only — do not invalidate the HTTP session. Session invalidation
+        // destroys RequestCache entries that the authorize → login → MFA chain relies on; when MFA
+        // completes with no saved request the user is sent to /logged-out and cannot finish OAuth.
         HttpSession session = request.getSession(false);
         if (session != null) {
-            session.invalidate();
+            session.removeAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+            session.removeAttribute(MfaChallengeFilter.MFA_VERIFIED_ATTR);
         }
         SecurityContextHolder.clearContext();
         redirectToAuthorizeWithoutPrompt(request, response);

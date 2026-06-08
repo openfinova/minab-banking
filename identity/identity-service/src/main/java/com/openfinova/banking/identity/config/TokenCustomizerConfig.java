@@ -31,11 +31,8 @@ import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.repository.UserRepository;
 import com.openfinova.banking.identity.security.BankingUserDetails;
 import com.openfinova.banking.identity.security.ClientIpResolver;
-import com.openfinova.banking.identity.security.MfaChallengeFilter;
 import com.openfinova.banking.identity.security.PasswordLifecycleEvaluator;
 import com.openfinova.banking.setup.api.DateTimeService;
-
-import jakarta.servlet.http.HttpSession;
 
 /**
  * Injects banking-specific claims into every JWT issued by the Authorization Server.
@@ -173,8 +170,18 @@ public class TokenCustomizerConfig {
                     : details.isForcePasswordChange();
             claims.claim(BankingPrincipal.CLAIM_FORCE_PASSWORD_CHANGE, forceChange);
 
-            boolean mfaVerified = isMfaVerifiedInCurrentSession();
-            if (mfaVerified) {
+            // ACR/AMR reflect the strength of the completed authentication. MFA completion cannot be
+            // read from the HTTP session here: for the authorization_code grant this customizer runs
+            // during the server-to-server /oauth2/token exchange (no Authorization Server session
+            // cookie), and it also runs on refresh-token grants that have no session at all — both
+            // would always look like "no MFA" and wrongly downgrade the token to silver.
+            //
+            // Derive it from the user instead: MfaChallengeFilter blocks authorization-code issuance
+            // for MFA-enabled users until the TOTP challenge is passed, so an MFA-enabled user holding
+            // a token has necessarily completed MFA. This holds for initial login, refresh, and
+            // step-up alike.
+            boolean mfaCompleted = freshUser != null ? freshUser.isMfaEnabled() : details.isMfaEnabled();
+            if (mfaCompleted) {
                 claims.claim(BankingPrincipal.CLAIM_ACR, BankingPrincipal.ACR_GOLD);
                 claims.claim(BankingPrincipal.CLAIM_AMR, List.of("pwd", "mfa"));
             } else {
@@ -216,14 +223,5 @@ public class TokenCustomizerConfig {
         } finally {
             SecurityContextHolder.setContext(original);
         }
-    }
-
-    private static boolean isMfaVerifiedInCurrentSession() {
-        var attrs = RequestContextHolder.getRequestAttributes();
-        if (!(attrs instanceof ServletRequestAttributes sra)) {
-            return false;
-        }
-        HttpSession session = sra.getRequest().getSession(false);
-        return session != null && Boolean.TRUE.equals(session.getAttribute(MfaChallengeFilter.MFA_VERIFIED_ATTR));
     }
 }
