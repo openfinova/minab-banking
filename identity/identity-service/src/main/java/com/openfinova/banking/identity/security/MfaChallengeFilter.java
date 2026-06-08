@@ -43,6 +43,8 @@ import jakarta.servlet.http.HttpSession;
 public class MfaChallengeFilter extends OncePerRequestFilter {
 
     public static final String MFA_VERIFIED_ATTR = "MFA_VERIFIED";
+    /** Backup resume URL when {@link org.springframework.security.web.savedrequest.RequestCache} is empty after MFA. */
+    static final String MFA_PENDING_AUTHORIZE_URL_ATTR = "MFA_PENDING_AUTHORIZE_URL";
     private static final String MFA_CHALLENGE_URL = "/mfa/challenge";
     private static final String MFA_VERIFY_URL = "/mfa/verify";
 
@@ -106,6 +108,8 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
         }
 
         // Persist the intercepted URL so we can resume the OAuth authorize flow after MFA.
+        session = request.getSession(true);
+        session.setAttribute(MFA_PENDING_AUTHORIZE_URL_ATTR, authorizeResumeUrl(request));
         requestCache.saveRequest(request, response);
         response.sendRedirect(MFA_CHALLENGE_URL);
     }
@@ -210,13 +214,44 @@ public class MfaChallengeFilter extends OncePerRequestFilter {
     private void redirectAfterSuccessfulMfa(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
         SavedRequest savedRequest = requestCache.getRequest(request, response);
-        if (savedRequest == null) {
-            redirectStrategy.sendRedirect(request, response, "/logged-out");
+        if (savedRequest != null) {
+            String redirectUrl = savedRequest.getRedirectUrl();
+            requestCache.removeRequest(request, response);
+            clearPendingAuthorizeUrl(request);
+            redirectStrategy.sendRedirect(request, response, redirectUrl);
             return;
         }
-        String redirectUrl = savedRequest.getRedirectUrl();
-        requestCache.removeRequest(request, response);
-        redirectStrategy.sendRedirect(request, response, redirectUrl);
+        String pendingAuthorize = pendingAuthorizeUrl(request);
+        if (pendingAuthorize != null) {
+            clearPendingAuthorizeUrl(request);
+            redirectStrategy.sendRedirect(request, response, pendingAuthorize);
+            return;
+        }
+        redirectStrategy.sendRedirect(request, response, "/logged-out");
+    }
+
+    private static String authorizeResumeUrl(HttpServletRequest request) {
+        String query = request.getQueryString();
+        if (query == null || query.isBlank()) {
+            return request.getRequestURI();
+        }
+        return request.getRequestURI() + "?" + query;
+    }
+
+    private static String pendingAuthorizeUrl(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null) {
+            return null;
+        }
+        Object value = session.getAttribute(MFA_PENDING_AUTHORIZE_URL_ATTR);
+        return value instanceof String url && !url.isBlank() ? url : null;
+    }
+
+    private static void clearPendingAuthorizeUrl(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.removeAttribute(MFA_PENDING_AUTHORIZE_URL_ATTR);
+        }
     }
 
     private static String resolveIp(HttpServletRequest request) {
