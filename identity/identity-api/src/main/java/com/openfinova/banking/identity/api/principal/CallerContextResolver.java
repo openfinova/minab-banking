@@ -1,6 +1,10 @@
 package com.openfinova.banking.identity.api.principal;
 
+import java.util.UUID;
+
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -39,6 +43,24 @@ public final class CallerContextResolver {
      */
     public static String resolveUsername(Authentication auth) {
         return BankingPrincipal.from(auth).username();
+    }
+
+    /**
+     * Returns the JWT {@code sub} claim as a user profile id for the current request.
+     * Intended for self-service service methods that must not trust a caller-supplied user id.
+     *
+     * @throws AccessDeniedException if there is no authenticated principal or {@code sub} is missing
+     */
+    public static UUID requireCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Not authenticated");
+        }
+        UUID userId = BankingPrincipal.from(authentication).userId();
+        if (userId == null) {
+            throw new AccessDeniedException("Cannot resolve user from token");
+        }
+        return userId;
     }
 
     /**

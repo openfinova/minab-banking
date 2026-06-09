@@ -182,24 +182,6 @@ public class AccountRelationshipController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/user/{userProfileId}/all")
-    @PreAuthorize("hasAuthority('account:read:own')")
-    @Operation(summary = "Get all accounts for user", description = "Retrieves all accounts where a user has any relationship")
-    @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "Accounts retrieved successfully") })
-    public ResponseEntity<List<AccountRelationshipResponse>> getAllAccountsForUser(
-            @Parameter(description = "User profile ID", required = true) @PathVariable UUID userProfileId) {
-
-        log.info("Fetching all accounts for user: {}", userProfileId);
-
-        List<AccountRelationship> relationships = relationshipService.getRelationshipsByUserProfile(userProfileId);
-        List<AccountRelationshipResponse> response = relationships.stream()
-                .map(relationship -> relationshipMapper.toResponse(relationship, dateTimeService.now())).toList();
-
-        log.info("Found {} account relationships for user: {}", response.size(), userProfileId);
-
-        return ResponseEntity.ok(response);
-    }
-
     @PostMapping("/{id}/permissions/check")
     @PreAuthorize("hasAuthority('account:read')")
     @Operation(summary = "Check permission", description = "Validates if a user has permission to perform an action")

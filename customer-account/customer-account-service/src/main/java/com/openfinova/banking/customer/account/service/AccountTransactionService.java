@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,8 +19,11 @@ import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.customer.account.api.entity.AccountTransactionType;
 import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountTransaction;
+import com.openfinova.banking.customer.account.entity.AccountTransactionSearchCriteria;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.AccountTransactionRepository;
+import com.openfinova.banking.customer.account.repository.AccountTransactionSpecifications;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import com.openfinova.banking.setup.api.DateTimeService;
 
 /*
@@ -235,6 +239,52 @@ public class AccountTransactionService {
         }
 
         return accountTransactionRepository.findByAccountAndDateRange(accountId, fromDate, toDate, pageable);
+    }
+
+    /**
+     * Searches statement transactions across all accounts owned by the authenticated user.
+     * When {@code accountId} is supplied it must belong to the caller.
+     */
+    @PreAuthorize("hasAuthority('account:read:own')")
+    @Transactional(readOnly = true)
+    public Page<AccountTransaction> searchMyTransactions(AccountTransactionSearchCriteria criteria, Pageable pageable) {
+        UUID userProfileId = CallerContextResolver.requireCurrentUserId();
+        if (criteria == null || criteria.getFromDate() == null || criteria.getToDate() == null) {
+            throw new IllegalArgumentException("Date range is required");
+        }
+        if (criteria.getFromDate().isAfter(criteria.getToDate())) {
+            throw new IllegalArgumentException("From date must be before or equal to to date");
+        }
+
+        if (criteria.getAccountId() != null) {
+            Account account = accountRepository.findById(criteria.getAccountId())
+                    .orElseThrow(() -> new AccessDeniedException("Account not accessible"));
+            if (!userProfileId.equals(account.getPrimaryUserProfileId())) {
+                throw new AccessDeniedException("Account not accessible");
+            }
+        }
+
+        if (pageable == null) {
+            pageable = PageRequest.of(0, 20, Sort.by("transactionDate").descending());
+        }
+
+        logger.debug(
+                "Searching transactions for user: {} from: {} to: {} accountId: {}",
+                userProfileId,
+                criteria.getFromDate(),
+                criteria.getToDate(),
+                criteria.getAccountId());
+
+        return accountTransactionRepository.findAll(
+                AccountTransactionSpecifications.byPrimaryUser(
+                        userProfileId,
+                        criteria.getFromDate(),
+                        criteria.getToDate(),
+                        criteria.getAccountId(),
+                        criteria.getTransactionType(),
+                        criteria.getStatus(),
+                        criteria.getSearch()),
+                pageable);
     }
 
     /*
