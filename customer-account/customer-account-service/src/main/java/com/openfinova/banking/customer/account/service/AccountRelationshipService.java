@@ -1,10 +1,15 @@
 package com.openfinova.banking.customer.account.service;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.openfinova.banking.customer.account.api.dto.AddBeneficiaryRequest;
 import com.openfinova.banking.customer.account.api.dto.ValidationResult;
@@ -15,11 +20,8 @@ import com.openfinova.banking.customer.account.entity.Account;
 import com.openfinova.banking.customer.account.entity.AccountRelationship;
 import com.openfinova.banking.customer.account.repository.AccountRelationshipRepository;
 import com.openfinova.banking.customer.account.repository.AccountRepository;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import com.openfinova.banking.setup.api.DateTimeService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -214,24 +216,21 @@ public class AccountRelationshipService {
     }
 
     /**
-     * Retrieves all active account relationships associated with a specific user profile.
-     *
-     * @param userProfileId the unique identifier of the user profile
-     * @return a list of active account relationships across all accounts
-     * @throws IllegalArgumentException if the user profile ID is missing
+     * Retrieves all active account relationships for the authenticated user.
+     * The user profile id is taken from the JWT subject — never from caller input.
      */
+    @PreAuthorize("hasAuthority('account:read:own')")
     @Transactional(readOnly = true)
-    public List<AccountRelationship> getRelationshipsByUserProfile(UUID userProfileId) {
+    public List<AccountRelationship> getMyRelationships() {
+        UUID userProfileId = CallerContextResolver.requireCurrentUserId();
+        return loadActiveRelationshipsForUser(userProfileId);
+    }
+
+    private List<AccountRelationship> loadActiveRelationshipsForUser(UUID userProfileId) {
         logger.debug("Getting relationships for user profile: {}", userProfileId);
 
-        if (userProfileId == null) {
-            throw new IllegalArgumentException("User profile ID is required");
-        }
-
-        // Find all accounts where this user has a relationship
         List<Account> accounts = accountRepository.findAccountsForUser(userProfileId);
 
-        // Get all relationships for this user across all accounts
         List<AccountRelationship> relationships = accounts.stream()
                 .flatMap(account -> account.getRelationships().stream())
                 .filter(rel -> userProfileId.equals(rel.getUserProfileId()))

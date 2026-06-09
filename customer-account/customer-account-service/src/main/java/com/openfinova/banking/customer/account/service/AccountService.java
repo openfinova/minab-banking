@@ -50,6 +50,7 @@ import com.openfinova.banking.customer.account.repository.AccountRelationshipRep
 import com.openfinova.banking.customer.account.repository.AccountRepository;
 import com.openfinova.banking.customer.account.repository.AccountTransactionRepository;
 import com.openfinova.banking.customer.account.repository.InterestRateRepository;
+import com.openfinova.banking.identity.api.principal.CallerContextResolver;
 import com.openfinova.banking.setup.api.DateTimeService;
 
 /**
@@ -179,14 +180,14 @@ public class AccountService {
     }
 
     /**
-     * Retrieves all accounts associated with a primary user profile.
-     *
-     * @param primaryUserProfileId the unique identifier of the primary user
-     * @return a list of accounts
+     * Retrieves all accounts where the authenticated user is the primary holder.
+     * The user profile id is taken from the JWT subject — never from caller input.
      */
+    @PreAuthorize("hasAuthority('account:read:own')")
     @Transactional(readOnly = true)
-    public List<Account> getAccountsByPrimaryUser(UUID primaryUserProfileId) {
-        return accountRepository.findByPrimaryUserProfileId(primaryUserProfileId);
+    public List<Account> getMyAccounts() {
+        UUID userProfileId = CallerContextResolver.requireCurrentUserId();
+        return accountRepository.findByPrimaryUserProfileId(userProfileId);
     }
 
     /**
