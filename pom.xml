@@ -35,7 +35,7 @@
 	
     <properties>
 		<java.version>25</java.version>
-		<swagger-annotations.version>2.2.50</swagger-annotations.version>
+		<swagger-annotations.version>2.2.51</swagger-annotations.version>
 		<jspecify.version>1.0.0</jspecify.version>
 	</properties>
 
