@@ -51,6 +51,7 @@
 		<module>loan</module>
 		<module>compliance</module>
 		<module>notification</module>
+		<module>tan</module>
 	</modules>
 
 	<dependencyManagement>
@@ -164,6 +165,16 @@
 			<dependency>
 				<groupId>com.openfinova</groupId>
 				<artifactId>notification-service</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>tan-api</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.openfinova</groupId>
+				<artifactId>tan-service</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 		<dependency>

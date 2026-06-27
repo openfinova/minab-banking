@@ -16,6 +16,7 @@
     <include file="db/changelog/loan-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/compliance-service.changelog.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/notification-service.changelog.xml" relativeToChangelogFile="false"/>
+    <include file="db/changelog/tan-service.changelog.xml" relativeToChangelogFile="false"/>
 
     <include file="seed/local-seed.changelog.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -1,8 +1,11 @@
 # Openfinova Banking — local stack
 # Usage:
+#   Full stack: docker compose up --build
 #   Postgres + pgAdmin only: docker compose up -d postgres pgadmin
-#   Full stack (API + frontend apps): ./mvnw -pl banking-app -am clean install && docker compose up -d postgres pgadmin dashboard customer-app
-#   (Jib creates openfinova/banking-app:local during package/install; omit image with -Djib.skip=true.)
+#   Faster banking-app rebuild (host Maven + Jib): ./mvnw -pl banking-app -am package -DskipTests && docker compose up -d banking-app
+#
+# Before first Keycloak start, build the SPI jar (once, or after SPI changes):
+#   mvn -f keycloak/extensions/pom.xml package -DskipTests
 #
 # JDBC from host when using default port: jdbc:postgresql://localhost:5432/openfinova_local
 # If 5432 is already in use locally: POSTGRES_PUBLISH_PORT=5433 docker compose up -d postgres
@@ -19,6 +22,8 @@ services:
       - "${POSTGRES_PUBLISH_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Creates the separate `keycloak` database on first volume init.
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U openfinova -d openfinova_local"]
       interval: 5s
@@ -40,7 +45,63 @@ services:
       postgres:
         condition: service_healthy
 
+  # Keycloak is the authentication authority (login, MFA, sessions, refresh tokens,
+  # persistent signing keys). Banking claims are injected by the custom SPI in
+  # ./keycloak/providers. The issuer is the LAN IP so the host browser, the Android
+  # device, and the other containers all resolve the same value; internal callers
+  # reach it via http://keycloak:8080 (backchannel dynamic).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    command: ["start-dev"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: openfinova
+      KC_DB_PASSWORD: openfinova
+      KC_HOSTNAME: http://192.168.2.127:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Consumed by the banking-claims protocol mapper / KYC authenticator SPI.
+      BANKING_INTERNAL_URL: http://banking-app:8080
+      BANKING_INTERNAL_TOKEN: ${BANKING_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
+    volumes:
+      - ./keycloak/providers:/opt/keycloak/providers:ro
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Applies the git-versioned realm idempotently on every `up`. Source of truth is
+  # ./keycloak/realm/*.yaml; the Keycloak admin UI is inspection-only.
+  keycloak-config:
+    image: adorsys/keycloak-config-cli:latest-26.1.0
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_USER: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_AVAILABILITYCHECK_ENABLED: "true"
+      KEYCLOAK_AVAILABILITYCHECK_TIMEOUT: 180s
+      IMPORT_VARSUBSTITUTION_ENABLED: "true"
+      IMPORT_FILES_LOCATIONS: /config/*.yaml
+      # Secrets referenced as $(env:...) inside the realm file (never committed).
+      STAFF_PORTAL_CLIENT_SECRET: ${STAFF_PORTAL_CLIENT_SECRET:-staff-portal-secret}
+      CUSTOMER_PORTAL_CLIENT_SECRET: ${CUSTOMER_PORTAL_CLIENT_SECRET:-customer-portal-secret}
+      STAFF_APP_CLIENT_SECRET: ${STAFF_APP_CLIENT_SECRET:-staff-secret}
+      KEYCLOAK_PROVISIONING_CLIENT_SECRET: ${KEYCLOAK_PROVISIONING_CLIENT_SECRET:-banking-provisioning-secret}
+    volumes:
+      - ./keycloak/realm:/config:ro
+    depends_on:
+      keycloak:
+        condition: service_started
+
   banking-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: openfinova/banking-app:local
     pull_policy: never
     environment:
@@ -48,12 +109,28 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/openfinova_local
       DB_USERNAME: openfinova
       DB_PASSWORD: openfinova
-      OAUTH2_ISSUER_URI: http://localhost:8080
+      # Browser/device-facing issuer; banking-app reaches Keycloak in-network for JWKS.
+      OAUTH2_ISSUER_URI: http://192.168.2.127:8081/realms/openfinova
+      OAUTH2_JWK_SET_URI: http://keycloak:8080/realms/openfinova/protocol/openid-connect/certs
+      # Shared secret guarding the internal claims endpoint the Keycloak SPI calls.
+      BANKING_INTERNAL_TOKEN: ${BANKING_INTERNAL_TOKEN:-local-dev-internal-token-change-me}
+      # Keycloak Admin API used to provision/enable/disable users from the banking side.
+      KEYCLOAK_ENABLED: "true"
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: openfinova
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_PROVISIONING_CLIENT_ID:-banking-provisioning}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_PROVISIONING_CLIENT_SECRET:-banking-provisioning-secret}
+      # Banking-owned persistent key for signing short-lived TAN enrollment JWTs.
+      TAN_ENROLLMENT_SIGNING_KEY_LOCATION: /var/lib/openfinova/tan/enrollment-jwk.json
+    volumes:
+      - tan_keys:/var/lib/openfinova/tan
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      keycloak-config:
+        condition: service_completed_successfully
 
   dashboard:
     build:
@@ -61,7 +138,7 @@ services:
       dockerfile: Dockerfile
       args:
         API_BASE_URL: http://banking-app:8080
-        OIDC_AUTHORITY: http://localhost:8080
+        OIDC_AUTHORITY: http://192.168.2.127:8081/realms/openfinova
         OIDC_CLIENT_ID: staff-portal
         OIDC_CLIENT_SECRET: staff-portal-secret
         OIDC_REDIRECT_URI: http://localhost:3000/api/auth/callback
@@ -75,8 +152,8 @@ services:
       PORT: "3000"
       APP_PUBLIC_URL: http://localhost:3000
       API_BASE_URL: http://banking-app:8080
-      OIDC_AUTHORITY: http://localhost:8080
-      OIDC_TOKEN_AUTHORITY: http://banking-app:8080
+      OIDC_AUTHORITY: http://192.168.2.127:8081/realms/openfinova
+      OIDC_TOKEN_AUTHORITY: http://keycloak:8080/realms/openfinova
       OIDC_CLIENT_ID: staff-portal
       OIDC_CLIENT_SECRET: staff-portal-secret
       OIDC_REDIRECT_URI: http://localhost:3000/api/auth/callback
@@ -95,7 +172,7 @@ services:
       dockerfile: Dockerfile
       args:
         API_BASE_URL: http://banking-app:8080
-        OIDC_AUTHORITY: http://localhost:8080
+        OIDC_AUTHORITY: http://192.168.2.127:8081/realms/openfinova
         OIDC_CLIENT_ID: customer-portal
         OIDC_CLIENT_SECRET: customer-portal-secret
         OIDC_REDIRECT_URI: http://localhost:3001/api/auth/callback
@@ -110,8 +187,8 @@ services:
       PORT: "3001"
       APP_PUBLIC_URL: http://localhost:3001
       API_BASE_URL: http://banking-app:8080
-      OIDC_AUTHORITY: http://localhost:8080
-      OIDC_TOKEN_AUTHORITY: http://banking-app:8080
+      OIDC_AUTHORITY: http://192.168.2.127:8081/realms/openfinova
+      OIDC_TOKEN_AUTHORITY: http://keycloak:8080/realms/openfinova
       OIDC_CLIENT_ID: customer-portal
       OIDC_CLIENT_SECRET: customer-portal-secret
       OIDC_REDIRECT_URI: http://localhost:3001/api/auth/callback
@@ -127,3 +204,4 @@ services:
 
 volumes:
   pgdata:
+  tan_keys:

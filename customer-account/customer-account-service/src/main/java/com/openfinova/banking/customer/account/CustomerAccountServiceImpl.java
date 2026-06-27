@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.openfinova.banking.customer.account.api.CustomerAccountService;
+import com.openfinova.banking.customer.account.api.dto.AccountPayeeInfo;
 import com.openfinova.banking.customer.account.api.entity.AccountTransactionType;
 import com.openfinova.banking.customer.account.api.entity.GLAccountMappingType;
 import com.openfinova.banking.customer.account.service.AccountBalanceService;
@@ -149,5 +150,11 @@ public class CustomerAccountServiceImpl implements CustomerAccountService {
     @Transactional
     public void syncTransactionReservedAmount(UUID accountId, BigDecimal reservedAmount) {
         accountBalanceService.syncTransactionReservedAmount(accountId, reservedAmount);
+    }
+
+    @Override
+    public Optional<AccountPayeeInfo> getAccountPayeeInfo(UUID accountId) {
+        return accountService.getAccountById(accountId)
+                .map(account -> new AccountPayeeInfo(account.getIban(), account.getDisplayName()));
     }
 }

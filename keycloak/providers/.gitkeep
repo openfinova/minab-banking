@@ -1,0 +1,2 @@
+# The custom Keycloak SPI jar (banking-keycloak-spi) is built into this directory
+# and mounted into Keycloak at /opt/keycloak/providers. See keycloak/extensions/.

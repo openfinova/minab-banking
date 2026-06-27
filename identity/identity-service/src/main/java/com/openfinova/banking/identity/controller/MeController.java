@@ -36,6 +36,7 @@ import com.openfinova.banking.identity.dto.SecurityAuditEventResponse;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
 import com.openfinova.banking.identity.repository.UserRepository;
+import com.openfinova.banking.identity.service.KeycloakUserProvisioningService;
 import com.openfinova.banking.identity.service.MfaService;
 import com.openfinova.banking.identity.service.SecurityAuditService;
 import com.openfinova.banking.identity.service.UserManagementService;
@@ -72,14 +73,17 @@ public class MeController {
     private final MfaService mfaService;
     private final SecurityAuditService auditService;
     private final PasswordEncoder passwordEncoder;
+    private final KeycloakUserProvisioningService keycloakProvisioning;
 
     public MeController(UserRepository userRepository, UserManagementService userService, MfaService mfaService,
-            SecurityAuditService auditService, PasswordEncoder passwordEncoder) {
+            SecurityAuditService auditService, PasswordEncoder passwordEncoder,
+            KeycloakUserProvisioningService keycloakProvisioning) {
         this.userRepository = userRepository;
         this.userService = userService;
         this.mfaService = mfaService;
         this.auditService = auditService;
         this.passwordEncoder = passwordEncoder;
+        this.keycloakProvisioning = keycloakProvisioning;
     }
 
     @GetMapping
@@ -165,6 +169,7 @@ public class MeController {
 
         user.setMfaEnabled(true);
         userRepository.save(user);
+        keycloakProvisioning.syncTotpCredential(user.getUsername(), user.getMfaSecret());
         AuditActor actor = AuditActor.fromPrincipal(BankingPrincipal.from(auth));
         auditService.recordParticipating(
                 SecurityAuditEventType.MFA_ENABLED,
@@ -197,6 +202,7 @@ public class MeController {
         user.setMfaSecret(null);
         user.setMfaRecoveryCodes(Set.of());
         userRepository.save(user);
+        keycloakProvisioning.removeTotpCredentials(user.getUsername());
         AuditActor actor = AuditActor.fromPrincipal(BankingPrincipal.from(auth));
         auditService.recordParticipating(
                 SecurityAuditEventType.MFA_DISABLED,

@@ -1,0 +1,361 @@
+# Git-versioned source of truth for the Keycloak "openfinova" realm.
+# Applied idempotently by keycloak-config-cli on every `docker compose up`.
+# Secrets are injected via env-var placeholders (see client `secret` fields) and never committed.
+#
+# Authentication lives here (credentials, TOTP, brute-force, sessions, refresh tokens).
+# Authorization data (permissions, customer_party_id, KYC, ...) stays in the banking
+# platform and is injected at token issuance by the custom "banking-claims-mapper" SPI.
+id: openfinova
+realm: openfinova
+displayName: Openfinova Banking
+enabled: true
+
+# --- Login / session behaviour ---
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+registrationAllowed: false
+resetPasswordAllowed: true
+rememberMe: false
+sslRequired: external
+
+# Short SSO sessions; refresh-token rotation with reuse detection (OAuth 2.0 BCP for
+# public clients). Absolute/idle windows bound how long a refresh chain survives.
+revokeRefreshToken: true
+refreshTokenMaxReuse: 0
+ssoSessionIdleTimeout: 1800
+ssoSessionMaxLifespan: 36000
+accessTokenLifespan: 300
+
+# --- Brute-force (replaces LoginRateLimitFilter + account auto-lock 5/30min) ---
+bruteForceProtected: true
+permanentLockout: false
+failureFactor: 5
+waitIncrementSeconds: 1800
+maxFailureWaitSeconds: 1800
+maxDeltaTimeSeconds: 1800
+quickLoginCheckMilliSeconds: 1000
+minimumQuickLoginWaitSeconds: 60
+
+# --- Password policy (mirrors identity.password.* expectations) ---
+passwordPolicy: "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername(undefined) and passwordHistory(12) and forceExpiredPasswordChange(90)"
+
+# --- MFA: TOTP, 6 digits / 30s (matches MfaService) ---
+otpPolicyType: totp
+otpPolicyAlgorithm: HmacSHA1
+otpPolicyDigits: 6
+otpPolicyPeriod: 30
+otpPolicyLookAheadWindow: 1
+
+# --- Step-up: map the legacy ACR URNs to Keycloak LoA levels ---
+attributes:
+  "acr.loa.map": "{\"urn:mace:incommon:iap:silver\":1,\"urn:mace:incommon:iap:gold\":2}"
+  userProfileEnabled: "true"
+
+# Keycloak 26 declarative user profile: custom attributes must be declared (or unmanaged
+# attributes allowed) or the Admin API silently drops them — breaking banking_user_id linkage.
+# Must retain the built-in username/email/firstName/lastName entries; Keycloak rejects their removal.
+userProfile:
+  attributes:
+    - name: username
+      displayName: "${username}"
+      validations:
+        length:
+          min: 3
+          max: 255
+        username-prohibited-characters: {}
+        up-username-not-idn-homograph: {}
+      permissions:
+        view: [admin, user]
+        edit: [admin, user]
+      multivalued: false
+    - name: email
+      displayName: "${email}"
+      validations:
+        email: {}
+        length:
+          max: 255
+      required:
+        roles: [user]
+      permissions:
+        view: [admin, user]
+        edit: [admin, user]
+      multivalued: false
+    - name: firstName
+      displayName: "${firstName}"
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+      permissions:
+        view: [admin, user]
+        edit: [admin]
+      multivalued: false
+    - name: lastName
+      displayName: "${lastName}"
+      validations:
+        length:
+          max: 255
+        person-name-prohibited-characters: {}
+      permissions:
+        view: [admin, user]
+        edit: [admin]
+      multivalued: false
+    - name: banking_user_id
+      displayName: Banking User ID
+      permissions:
+        view: [admin]
+        edit: [admin]
+      multivalued: false
+  groups:
+    - name: user-metadata
+      displayHeader: User metadata
+      displayDescription: Attributes, which refer to user metadata
+  unmanagedAttributePolicy: ADMIN_EDIT
+
+# --- Audit: forward auth events to the banking audit trail ---
+eventsEnabled: true
+adminEventsEnabled: true
+eventsListeners:
+  - jboss-logging
+  - banking-audit-listener
+
+# ===========================================================================
+# Client scopes
+# ===========================================================================
+clientScopes:
+  # Attaches the SPI mapper that injects all banking claims (permissions, sub,
+  # customer_party_id, user_type, acr/amr, gl_approval_role, branch/employee,
+  # force_password_change, kyc_status). Added as a default scope to every client.
+  - name: banking-claims
+    protocol: openid-connect
+    description: Injects banking authorization claims at token issuance.
+    attributes:
+      include.in.token.scope: "false"
+      display.on.consent.screen: "false"
+    protocolMappers:
+      - name: banking-claims
+        protocol: openid-connect
+        protocolMapper: banking-claims-mapper
+        consentRequired: false
+        config:
+          access.token.claim: "true"
+          id.token.claim: "true"
+          userinfo.token.claim: "false"
+  - name: banking.staff
+    protocol: openid-connect
+    description: Staff channel marker.
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "false"
+  - name: banking.customer
+    protocol: openid-connect
+    description: Customer channel marker.
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "false"
+  - name: "tan:generate"
+    protocol: openid-connect
+    description: TAN app scope.
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "false"
+
+# ===========================================================================
+# Clients
+# ===========================================================================
+clients:
+  # Staff API / Swagger (confidential, code+PKCE)
+  - clientId: staff-app
+    name: Staff API (Swagger)
+    enabled: true
+    publicClient: false
+    secret: $(env:STAFF_APP_CLIENT_SECRET)
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - http://localhost:8080/login/oauth2/code/staff-app
+      - http://localhost:8080/swagger-ui/oauth2-redirect.html
+    attributes:
+      "post.logout.redirect.uris": "http://localhost:8080/*"
+      "pkce.code.challenge.method": "S256"
+      "access.token.lifespan": "3600"
+    defaultClientScopes:
+      - profile
+      - email
+      - banking-claims
+      - banking.staff
+
+  # Staff Portal BFF (confidential, code+PKCE, no refresh)
+  - clientId: staff-portal
+    name: Staff Portal BFF
+    enabled: true
+    publicClient: false
+    secret: $(env:STAFF_PORTAL_CLIENT_SECRET)
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - http://localhost:3000/api/auth/callback
+      - http://127.0.0.1:3000/api/auth/callback
+    attributes:
+      "post.logout.redirect.uris": "http://localhost:3000/*##http://127.0.0.1:3000/*"
+      "pkce.code.challenge.method": "S256"
+      "access.token.lifespan": "600"
+    defaultClientScopes:
+      - profile
+      - email
+      - banking-claims
+      - banking.staff
+
+  # Customer Portal BFF (confidential, code+PKCE, refresh + offline_access)
+  - clientId: customer-portal
+    name: Customer Portal BFF
+    enabled: true
+    publicClient: false
+    secret: $(env:CUSTOMER_PORTAL_CLIENT_SECRET)
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - http://localhost:3001/api/auth/callback
+      - http://127.0.0.1:3001/api/auth/callback
+    attributes:
+      "post.logout.redirect.uris": "http://localhost:3001/*##http://127.0.0.1:3001/*"
+      "pkce.code.challenge.method": "S256"
+      "access.token.lifespan": "900"
+    defaultClientScopes:
+      - profile
+      - email
+      - banking-claims
+      - banking.customer
+    optionalClientScopes:
+      - offline_access
+
+  # Minab TAN app (public, native PKCE, rotating refresh tokens)
+  - clientId: minab-tan-app
+    name: Minab TAN App
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: true
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - openfinova.tan://oauth2/callback
+      - https://tan.openfinova.com/oauth2/callback
+      - http://localhost:8888/oauth2/callback
+    attributes:
+      "pkce.code.challenge.method": "S256"
+      "access.token.lifespan": "300"
+    defaultClientScopes:
+      - banking-claims
+      - "tan:generate"
+
+  # Service account used by banking-app to provision/enable/disable users.
+  - clientId: banking-provisioning
+    name: Banking Provisioning (service account)
+    enabled: true
+    publicClient: false
+    secret: $(env:KEYCLOAK_PROVISIONING_CLIENT_SECRET)
+    standardFlowEnabled: false
+    serviceAccountsEnabled: true
+
+# ===========================================================================
+# Users: provisioned by the banking platform via the Keycloak Admin API
+# (DataInitializer seeds the dev `admin`; UserManagementService handles the rest).
+# Each user carries a `banking_user_id` attribute = banking identity_users id,
+# which the claims-mapper SPI emits as the JWT `sub`. None are seeded here so the
+# banking-generated id stays authoritative.
+#
+# Service-account role grants for banking-provisioning (realm-management roles).
+# ===========================================================================
+users:
+  - username: service-account-banking-provisioning
+    serviceAccountClientId: banking-provisioning
+    enabled: true
+    clientRoles:
+      realm-management:
+        - manage-users
+        - view-users
+        - query-users
+
+# ===========================================================================
+# Authentication: default browser flow + conditional OTP + banking KYC gate.
+# Sub-flow steps must set authenticatorFlow/autheticatorFlow (Keycloak export shape).
+# ===========================================================================
+authenticatorConfig:
+  - alias: banking-loa-gold
+    config:
+      loa: "2"
+      maxAge: "36000"
+
+authenticationFlows:
+  - alias: "banking browser conditional otp"
+    providerId: basic-flow
+    topLevel: false
+    builtIn: false
+    authenticationExecutions:
+      # When acr_values requests gold (LoA 2), run OTP inside this sub-flow.
+      - authenticator: conditional-level-of-authentication
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: REQUIRED
+        priority: 5
+        userSetupAllowed: false
+        authenticatorConfig: banking-loa-gold
+      - authenticator: conditional-user-configured
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: REQUIRED
+        priority: 10
+        userSetupAllowed: false
+      - authenticator: auth-otp-form
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: REQUIRED
+        priority: 20
+        userSetupAllowed: false
+  - alias: "banking browser forms"
+    providerId: basic-flow
+    topLevel: false
+    builtIn: false
+    authenticationExecutions:
+      - authenticator: auth-username-password-form
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: REQUIRED
+        priority: 10
+        userSetupAllowed: false
+      - flowAlias: "banking browser conditional otp"
+        authenticatorFlow: true
+        autheticatorFlow: true
+        requirement: CONDITIONAL
+        priority: 20
+        userSetupAllowed: false
+      - authenticator: banking-kyc-authenticator
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: REQUIRED
+        priority: 30
+        userSetupAllowed: false
+  - alias: "banking browser"
+    providerId: basic-flow
+    topLevel: true
+    builtIn: false
+    authenticationExecutions:
+      - authenticator: auth-cookie
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: ALTERNATIVE
+        priority: 10
+        userSetupAllowed: false
+      - authenticator: identity-provider-redirector
+        authenticatorFlow: false
+        autheticatorFlow: false
+        requirement: ALTERNATIVE
+        priority: 20
+        userSetupAllowed: false
+      - flowAlias: "banking browser forms"
+        authenticatorFlow: true
+        autheticatorFlow: true
+        requirement: ALTERNATIVE
+        priority: 30
+        userSetupAllowed: false
+
+browserFlow: "banking browser"

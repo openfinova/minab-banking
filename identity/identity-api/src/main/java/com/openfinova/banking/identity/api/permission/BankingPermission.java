@@ -43,6 +43,7 @@ public enum BankingPermission {
     PROFILE_READ_OWN("profile:read:own", "View own roles and identity claims."),
     PASSWORD_CHANGE_OWN("password:change:own", "Change own password via self-service."),
     MFA_MANAGE_OWN("mfa:manage:own", "Enrol, verify, or disable own MFA."),
+    TAN_GENERATE("tan:generate", "Generate transaction-bound TAN codes via the Minab TAN app."),
     AUDIT_READ_OWN("audit:read:own", "View own security audit history."),
 
     // ── General Ledger ─────────────────────────────────────────────────────────

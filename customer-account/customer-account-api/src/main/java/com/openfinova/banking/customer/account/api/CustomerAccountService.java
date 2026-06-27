@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.openfinova.banking.customer.account.api.dto.AccountPayeeInfo;
 import com.openfinova.banking.customer.account.api.entity.GLAccountMappingType;
 
 /**
@@ -159,4 +160,12 @@ public interface CustomerAccountService {
      * @param reservedAmount total active reservation amount from TP
      */
     void syncTransactionReservedAmount(UUID accountId, BigDecimal reservedAmount);
+
+    /**
+     * Resolves IBAN and display name for a customer account (e.g. TAN payment authorization UI).
+     *
+     * @param accountId customer account id
+     * @return payee snapshot when the account exists
+     */
+    Optional<AccountPayeeInfo> getAccountPayeeInfo(UUID accountId);
 }

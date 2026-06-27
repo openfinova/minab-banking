@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="tan-devices-001" author="openfinova">
+        <createTable tableName="tan_devices">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="device_name" type="varchar(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="tan_secret" type="varchar(512)"/>
+            <column name="enrollment_nonce" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="platform_device_id" type="varchar(256)"/>
+            <column name="enrolled_at" type="timestamp with time zone"/>
+            <column name="last_used_at" type="timestamp with time zone"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="created_at" type="timestamp with time zone"/>
+            <column name="updated_by" type="varchar(255)"/>
+            <column name="updated_at" type="timestamp with time zone"/>
+        </createTable>
+        <createIndex tableName="tan_devices" indexName="idx_tan_devices_user_status">
+            <column name="user_id"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="tan-pending-authorizations-001" author="openfinova">
+        <createTable tableName="tan_pending_authorizations">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="transaction_id" type="uuid">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount" type="decimal(19,4)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="currency" type="varchar(3)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payee_iban" type="varchar(34)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payee_name" type="varchar(255)"/>
+            <column name="description" type="varchar(500)"/>
+            <column name="status" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="verified_at" type="timestamp with time zone"/>
+            <column name="tan_device_id" type="uuid"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="varchar(255)"/>
+            <column name="created_at" type="timestamp with time zone"/>
+            <column name="updated_by" type="varchar(255)"/>
+            <column name="updated_at" type="timestamp with time zone"/>
+        </createTable>
+        <createIndex tableName="tan_pending_authorizations" indexName="idx_tan_pending_auth_user_status">
+            <column name="user_id"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

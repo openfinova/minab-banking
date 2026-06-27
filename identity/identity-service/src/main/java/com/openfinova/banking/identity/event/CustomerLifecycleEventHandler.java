@@ -16,6 +16,7 @@ import com.openfinova.banking.identity.audit.AuditEventDetail;
 import com.openfinova.banking.identity.audit.SecurityAuditExtensions;
 import com.openfinova.banking.identity.entity.SecurityAuditEventType;
 import com.openfinova.banking.identity.repository.UserRepository;
+import com.openfinova.banking.identity.service.KeycloakUserProvisioningService;
 import com.openfinova.banking.identity.service.SecurityAuditService;
 import com.openfinova.banking.setup.api.DateTimeService;
 
@@ -45,12 +46,14 @@ public class CustomerLifecycleEventHandler {
     private final UserRepository userRepository;
     private final SecurityAuditService auditService;
     private final DateTimeService dateTimeService;
+    private final KeycloakUserProvisioningService keycloakProvisioning;
 
     public CustomerLifecycleEventHandler(UserRepository userRepository, SecurityAuditService auditService,
-            DateTimeService dateTimeService) {
+            DateTimeService dateTimeService, KeycloakUserProvisioningService keycloakProvisioning) {
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.dateTimeService = dateTimeService;
+        this.keycloakProvisioning = keycloakProvisioning;
     }
 
     /**
@@ -86,6 +89,9 @@ public class CustomerLifecycleEventHandler {
             user.setEnabled(false);
             user.setDisabledAt(dateTimeService.now());
             userRepository.save(user);
+
+            // Cascade the disable into Keycloak so the credential authority rejects the user too.
+            keycloakProvisioning.setEnabled(user.getUsername(), false);
 
             String details = "Automatically disabled: linked customer party " + event.getCustomerId()
                     + " transitioned to " + event.getNewStatus();

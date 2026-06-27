@@ -4,9 +4,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -14,7 +16,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -46,6 +52,7 @@ public class SecurityConfiguration {
     @Order(3)
     public SecurityFilterChain bankingApiFilterChain(HttpSecurity http,
             PasswordManagementEnforcementFilter passwordManagementFilter, StepUpAcrFilter stepUpAcrFilter,
+            InternalApiTokenFilter internalApiTokenFilter,
             AuthenticationEntryPoint bankingBearerAuthenticationEntryPoint,
             AccessDeniedHandler bankingApiAccessDeniedHandler) throws Exception {
         http.cors(Customizer.withDefaults()).csrf(AbstractHttpConfigurer::disable).exceptionHandling(
@@ -57,26 +64,39 @@ public class SecurityConfiguration {
                                 .requestMatchers("/actuator/**").permitAll()
                                 // OpenAPI/Swagger UI for local and CI API exploration
                                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                                // OAuth2/OIDC protocol endpoints — authenticated by Authorization Server chain (Order 1)
-                                .requestMatchers("/oauth2/**", "/connect/**", "/.well-known/**").permitAll()
-                                // Server-rendered auth portal pages and static assets for login/MFA/logout flows
-                                .requestMatchers(
-                                        "/login",
-                                        "/logout",
-                                        "/logout/**",
-                                        "/mfa/challenge",
-                                        "/mfa/verify",
-                                        "/logged-out",
-                                        "/css/**",
-                                        "/favicon.ico",
-                                        "/error")
-                                .permitAll().anyRequest().authenticated())
+                                // Internal machine-to-machine endpoints — guarded by the shared-secret
+                                // InternalApiTokenFilter (no end-user bearer token), not by JWT auth.
+                                .requestMatchers("/internal/**").permitAll()
+                                // Login/MFA/logout and OIDC protocol endpoints now live in Keycloak;
+                                // only the generic error/favicon paths remain server-rendered here.
+                                .requestMatchers("/favicon.ico", "/error").permitAll()
+                                // TAN enrollment bootstrap: short-lived signed enrollment JWT is the credential
+                                .requestMatchers(HttpMethod.GET, "/api/v1/tan/devices/attestation-nonce").permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/v1/tan/devices").permitAll().anyRequest()
+                                .authenticated())
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .jwt(jwt -> jwt.jwtAuthenticationConverter(bankingJwtAuthenticationConverter())))
+                .addFilterBefore(internalApiTokenFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(passwordManagementFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(stepUpAcrFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
+    }
+
+    /**
+     * Resource-server JWT decoder for Keycloak-issued access tokens.
+     *
+     * JWKS is fetched in-network ({@code banking.oauth2.jwk-set-uri}) so the container never has to
+     * reach the host IP, while the {@code iss} claim is validated against the browser/device-facing
+     * LAN-IP realm URL ({@code banking.oauth2.issuer}) together with the default timestamp checks.
+     */
+    @Bean
+    public JwtDecoder jwtDecoder(@Value("${banking.oauth2.jwk-set-uri}") String jwkSetUri,
+            @Value("${banking.oauth2.issuer}") String issuer) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        OAuth2TokenValidator<Jwt> validator = JwtValidators.createDefaultWithIssuer(issuer);
+        decoder.setJwtValidator(validator);
+        return decoder;
     }
 
     /**

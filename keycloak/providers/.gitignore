@@ -1,0 +1,2 @@
+# Built SPI artifact (produced by `mvn -f keycloak/extensions/pom.xml package`).
+*.jar

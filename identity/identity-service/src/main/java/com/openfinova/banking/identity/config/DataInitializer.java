@@ -17,6 +17,7 @@ import com.openfinova.banking.identity.entity.BankingRole;
 import com.openfinova.banking.identity.entity.BankingUser;
 import com.openfinova.banking.identity.repository.RoleRepository;
 import com.openfinova.banking.identity.repository.UserRepository;
+import com.openfinova.banking.identity.service.KeycloakUserProvisioningService;
 
 /**
  * Seeds the database with the default role catalogue and a dev admin user on startup. Safe to run
@@ -33,6 +34,12 @@ public class DataInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
+    /**
+     * Dev-only default password for the seeded {@code admin} user. Must satisfy the Keycloak realm
+     * password policy (length, complexity, notUsername) configured in {@code openfinova.yaml}.
+     */
+    private static final String DEV_ADMIN_PASSWORD = "Openfinova123!";
+
     /** Merged into every seeded role so all users can use identity self-service endpoints. */
     private static final Set<BankingPermission> IDENTITY_SELF_SERVICE = EnumSet.of(
             BankingPermission.PROFILE_READ_OWN,
@@ -43,12 +50,14 @@ public class DataInitializer implements ApplicationRunner {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final KeycloakUserProvisioningService keycloakProvisioning;
 
     public DataInitializer(RoleRepository roleRepository, UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, KeycloakUserProvisioningService keycloakProvisioning) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.keycloakProvisioning = keycloakProvisioning;
     }
 
     @Override
@@ -261,8 +270,10 @@ public class DataInitializer implements ApplicationRunner {
                         BankingPermission.ACCOUNT_TRANSFER_OWN,
                         BankingPermission.PAYMENT_INITIATE_OWN,
                         BankingPermission.CUSTOMER_READ_OWN,
-                        BankingPermission.CUSTOMER_WRITE_OWN));
+                        BankingPermission.CUSTOMER_WRITE_OWN,
+                        BankingPermission.TAN_GENERATE));
 
+        reconcileCustomerTanPermission();
         log.info("Identity role catalogue seeded.");
     }
 
@@ -270,6 +281,17 @@ public class DataInitializer implements ApplicationRunner {
      * ADMIN is defined as holding every {@link BankingPermission}. Existing deployments keep a
      * snapshot in {@code identity_role_permissions}; merge in any new enum values on startup.
      */
+    /** Ensures existing CUSTOMER deployments receive {@link BankingPermission#TAN_GENERATE}. */
+    private void reconcileCustomerTanPermission() {
+        roleRepository.findByName("CUSTOMER").ifPresentOrElse(customer -> {
+            if (!customer.getPermissions().contains(BankingPermission.TAN_GENERATE)) {
+                customer.getPermissions().add(BankingPermission.TAN_GENERATE);
+                roleRepository.save(customer);
+                log.info("Added tan:generate to CUSTOMER role.");
+            }
+        }, () -> log.warn("CUSTOMER role not present; skipping tan:generate reconcile."));
+    }
+
     private void reconcileAdminPermissionsWithEnum() {
         roleRepository.findByName("ADMIN").ifPresentOrElse(admin -> {
             EnumSet<BankingPermission> fullCatalog = EnumSet.allOf(BankingPermission.class);
@@ -329,22 +351,60 @@ public class DataInitializer implements ApplicationRunner {
         });
     }
 
+    private void syncKeycloakUser(BankingUser user) {
+        ensureDevAdminGlProfile(user);
+        keycloakProvisioning.ensureUser(user, DEV_ADMIN_PASSWORD, false);
+        if (user.isMfaEnabled() && user.getMfaSecret() != null && !user.getMfaSecret().isBlank()) {
+            try {
+                keycloakProvisioning.syncTotpCredential(user.getUsername(), user.getMfaSecret());
+            } catch (KeycloakUserProvisioningService.KeycloakProvisioningException ex) {
+                log.warn(
+                        "Failed to sync TOTP to Keycloak for {}; login MFA may be unavailable until re-enrolled",
+                        user.getUsername(),
+                        ex);
+            }
+        }
+    }
+
+    /**
+     * Dev admin must carry a GL approval role so the approvals API can resolve limits and queue rows.
+     * Production admins are assigned explicitly via user management.
+     */
+    private void ensureDevAdminGlProfile(BankingUser user) {
+        if (!"admin".equals(user.getUsername())) {
+            return;
+        }
+        if (user.getGlApprovalRole() == null || user.getGlApprovalRole().isBlank()) {
+            user.setGlApprovalRole("CFO");
+            userRepository.save(user);
+            log.info("Set dev admin gl_approval_role=CFO for GL approvals console");
+        }
+    }
+
     private void seedDefaultUsers() {
         if (userRepository.existsByUsername("admin")) {
-            log.info("Default admin user already exists.");
+            log.info("Default admin user already exists; ensuring Keycloak mirror is present.");
+            userRepository.findByUsername("admin").ifPresent(this::syncKeycloakUser);
             return;
         }
 
         BankingRole adminRole = roleRepository.findByName("ADMIN")
                 .orElseThrow(() -> new IllegalStateException("ADMIN role not found after seed"));
 
-        BankingUser admin = new BankingUser("admin", passwordEncoder.encode("admin"), UserType.STAFF);
+        BankingUser admin = new BankingUser("admin", passwordEncoder.encode(DEV_ADMIN_PASSWORD), UserType.STAFF);
         admin.setEmail("admin@openfinova.local");
         admin.setEmployeeId("EMP-0001");
+        admin.setGlApprovalRole("CFO");
         admin.setRoles(Set.of(adminRole));
-        userRepository.save(admin);
+        BankingUser saved = userRepository.save(admin);
+
+        // Keycloak is the credential authority: provision the dev admin there with banking_user_id
+        // set to the generated banking id, so the JWT sub resolves back to this account.
+        keycloakProvisioning.ensureUser(saved, DEV_ADMIN_PASSWORD, false);
+
         log.warn(
-                "Created default admin user (username=admin, password=admin). "
-                        + "Change this before production deployment.");
+                "Created default admin user (username=admin, password={}). "
+                        + "Change this before production deployment.",
+                DEV_ADMIN_PASSWORD);
     }
 }

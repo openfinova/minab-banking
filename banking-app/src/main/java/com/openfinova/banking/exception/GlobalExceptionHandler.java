@@ -25,6 +25,8 @@ import com.openfinova.banking.common.lib.exception.ResourceNotFoundException;
 import com.openfinova.banking.exchangerate.api.exception.ExchangeRateValidationException;
 import com.openfinova.banking.exchangerate.api.exception.InvalidCurrencyPairException;
 import com.openfinova.banking.identity.api.exception.PasswordPolicyViolationException;
+import com.openfinova.banking.tan.exception.TanCodeAlreadyUsedException;
+import com.openfinova.banking.tan.exception.TanDeviceLimitExceededException;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.OptimisticLockException;
@@ -32,22 +34,23 @@ import jakarta.persistence.OptimisticLockException;
 /**
  * Application-wide exception → HTTP response mapper.
  *
- * <p>
  * Produces RFC 7807 {@link ProblemDetail} responses for all controllers.
  * No stack traces are included in responses; full details are logged
  * server-side only.
  *
- * <p>
  * Extends {@link ResponseEntityExceptionHandler} so that Spring MVC's built-in
  * exception handling (e.g. {@code HttpMessageNotReadableException},
  * {@code HttpRequestMethodNotSupportedException}) also returns
  * {@code ProblemDetail}
  * rather than the default Whitelabel error page.
  *
- * <p>
  * Error type URIs follow the pattern {@code /errors/<slug>} — these are
  * identifiers, not necessarily resolvable URLs.
+ *
+ * Handler methods appear unused to static analysis; Spring MVC invokes them via
+ * {@link ExceptionHandler} at runtime.
  */
+@SuppressWarnings("unused") // @ExceptionHandler methods are called by Spring MVC, not directly
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
@@ -121,6 +124,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "The record was modified by another request. Please re-fetch the current state and retry.");
         pd.setTitle("Concurrent Modification");
         pd.setType(URI.create("/errors/concurrent-modification"));
+        return pd;
+    }
+
+    @ExceptionHandler(TanDeviceLimitExceededException.class)
+    ProblemDetail handleTanDeviceLimit(TanDeviceLimitExceededException ex) {
+        log.warn("TAN device limit exceeded: {}", ex.getMessage());
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        pd.setTitle("TAN Device Limit Exceeded");
+        pd.setType(URI.create("/errors/tan-device-limit"));
+        return pd;
+    }
+
+    @ExceptionHandler(TanCodeAlreadyUsedException.class)
+    ProblemDetail handleTanCodeReplay(TanCodeAlreadyUsedException ex) {
+        log.warn("TAN code replay rejected: {}", ex.getMessage());
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        pd.setTitle("TAN Code Already Used");
+        pd.setType(URI.create("/errors/tan-code-replay"));
         return pd;
     }
 

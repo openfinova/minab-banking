@@ -4,4 +4,7 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <include file="identity-oauth2-registered-client.changelog.xml" relativeToChangelogFile="true"/>
+    <include file="identity-tan-generate-permission.changelog.sql" relativeToChangelogFile="true"/>
 </databaseChangeLog>

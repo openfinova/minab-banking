@@ -82,6 +82,7 @@ public class UserManagementService {
     private final WorkflowEnforcementProperties enforcementProperties;
     private final ObjectProvider<CustomerInfoService> customerInfoServiceProvider;
     private final DateTimeService dateTimeService;
+    private final KeycloakUserProvisioningService keycloakProvisioning;
 
     /** Resource type used when creating an approval workflow for a user role assignment. */
     public static final String RESOURCE_TYPE_USER_ROLE_ASSIGNMENT = "USER_ROLE_ASSIGNMENT";
@@ -91,7 +92,8 @@ public class UserManagementService {
             SecurityAuditService auditService, RoleAssignmentValidationService roleAssignmentValidationService,
             AccountLifecycleProperties lifecycleProperties, ApplicationEventPublisher eventPublisher,
             ApprovalWorkflowInstanceRepository workflowRepository, WorkflowEnforcementProperties enforcementProperties,
-            ObjectProvider<CustomerInfoService> customerInfoServiceProvider, DateTimeService dateTimeService) {
+            ObjectProvider<CustomerInfoService> customerInfoServiceProvider, DateTimeService dateTimeService,
+            KeycloakUserProvisioningService keycloakProvisioning) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
@@ -104,6 +106,7 @@ public class UserManagementService {
         this.enforcementProperties = enforcementProperties;
         this.customerInfoServiceProvider = customerInfoServiceProvider;
         this.dateTimeService = dateTimeService;
+        this.keycloakProvisioning = keycloakProvisioning;
     }
 
     /**
@@ -175,6 +178,9 @@ public class UserManagementService {
         }
 
         BankingUser saved = userRepository.save(user);
+
+        // Keycloak owns credentials/MFA/lockout: mirror the account so the user can authenticate.
+        keycloakProvisioning.ensureUser(saved, request.getPassword(), saved.isForcePasswordChange());
 
         String createDetails = lifecycleProperties.isRequireProvisioningApproval()
                 ? "User created (pending provisioning approval); roles: " + request.getRoleNames()
@@ -510,6 +516,7 @@ public class UserManagementService {
         }
 
         BankingUser saved = userRepository.save(user);
+        keycloakProvisioning.setEnabled(user.getUsername(), enabled);
         auditService.recordParticipating(
                 enabled ? SecurityAuditEventType.ACCOUNT_ENABLED : SecurityAuditEventType.ACCOUNT_DISABLED,
                 userId,
@@ -785,6 +792,9 @@ public class UserManagementService {
 
         userRepository.save(user);
 
+        // Disable in Keycloak so existing sessions cannot refresh and new logins are rejected.
+        keycloakProvisioning.setEnabled(username, false);
+
         // Remove the link stored on the customer party record so the customer can be re-onboarded
         if (customerPartyId != null) {
             CustomerInfoService customerInfoService = customerInfoServiceProvider.getIfAvailable();
@@ -844,6 +854,7 @@ public class UserManagementService {
         addToPasswordHistory(user, encoded);
 
         userRepository.save(user);
+        keycloakProvisioning.setPassword(user.getUsername(), newPassword, false);
         auditService.recordParticipating(
                 SecurityAuditEventType.PASSWORD_CHANGED,
                 userId,
@@ -879,6 +890,7 @@ public class UserManagementService {
         user.setForcePasswordChange(true);
         user.setPasswordExpiresAt(dateTimeService.now());
         userRepository.save(user);
+        keycloakProvisioning.requirePasswordChange(user.getUsername());
         auditService.recordParticipating(
                 SecurityAuditEventType.PASSWORD_FORCE_CHANGE_SET,
                 userId,
@@ -936,6 +948,7 @@ public class UserManagementService {
         addToPasswordHistory(user, encoded);
 
         userRepository.save(user);
+        keycloakProvisioning.setPassword(user.getUsername(), newPassword, false);
         auditService.recordParticipating(
                 SecurityAuditEventType.PASSWORD_CHANGED,
                 userId,
