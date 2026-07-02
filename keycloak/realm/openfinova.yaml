@@ -282,8 +282,9 @@ users:
 authenticatorConfig:
   - alias: banking-loa-gold
     config:
-      level: "2"
-      max.age: "36000"
+      # Keycloak 26.x Conditional LoA authenticator keys (not "level"/"max.age").
+      loa-condition-level: "2"
+      loa-max-age: "36000"
 
 authenticationFlows:
   - alias: "banking browser conditional otp"
