@@ -154,7 +154,17 @@ public class KeycloakUserProvisioningService {
         }
         HttpRequest request = HttpRequest.newBuilder(totpSyncUri(username)).timeout(Duration.ofSeconds(10))
                 .header(INTERNAL_TOKEN_HEADER, properties.getInternalToken()).DELETE().build();
-        send(request, 204, "remove TOTP credentials");
+        HttpResponse<String> response = sendRaw(request, "remove TOTP credentials");
+        int status = response.statusCode();
+        if (status == 204) {
+            log.info("Removed TOTP credentials from Keycloak for username={}", username);
+            return;
+        }
+        if (status == 404) {
+            log.warn("Keycloak user not found for username={}; no OTP credentials to remove", username);
+            return;
+        }
+        throw new KeycloakProvisioningException("Keycloak remove TOTP credentials failed: HTTP " + status);
     }
 
     private URI totpSyncUri(String username) {

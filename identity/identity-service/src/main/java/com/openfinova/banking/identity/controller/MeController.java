@@ -2,7 +2,6 @@ package com.openfinova.banking.identity.controller;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -200,9 +199,13 @@ public class MeController {
 
         user.setMfaEnabled(false);
         user.setMfaSecret(null);
-        user.setMfaRecoveryCodes(Set.of());
+        user.getMfaRecoveryCodes().clear();
         userRepository.save(user);
-        keycloakProvisioning.removeTotpCredentials(user.getUsername());
+        try {
+            keycloakProvisioning.removeTotpCredentials(user.getUsername());
+        } catch (KeycloakUserProvisioningService.KeycloakProvisioningException ex) {
+            log.warn("MFA disabled in banking DB but Keycloak OTP removal failed (userId={})", user.getId(), ex);
+        }
         AuditActor actor = AuditActor.fromPrincipal(BankingPrincipal.from(auth));
         auditService.recordParticipating(
                 SecurityAuditEventType.MFA_DISABLED,
