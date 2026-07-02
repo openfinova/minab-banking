@@ -282,8 +282,8 @@ users:
 authenticatorConfig:
   - alias: banking-loa-gold
     config:
-      loa: "2"
-      maxAge: "36000"
+      level: "2"
+      max.age: "36000"
 
 authenticationFlows:
   - alias: "banking browser conditional otp"
