@@ -157,7 +157,7 @@
 				<activeByDefault>true</activeByDefault>
 			</activation>
 			<properties>
-				<jib.maven.version>3.5.1</jib.maven.version>
+				<jib.maven.version>3.5.2</jib.maven.version>
 				<jib.skip>false</jib.skip>
 				<docker.image.repo>openfinova/banking-app</docker.image.repo>
 				<docker.image.tag>local</docker.image.tag>
